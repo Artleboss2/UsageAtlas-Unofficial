@@ -1,3 +1,4 @@
+import { Toast } from "@heroui/react";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import "@fontsource-variable/inter";
@@ -22,4 +23,5 @@ systemDark.addEventListener("change", applySystemTheme);
 
 const root = document.getElementById("root");
 if (!root) throw new Error("Missing renderer root");
-createRoot(root).render(<StrictMode><App /></StrictMode>);
+// Toasts sit outside the shell, whose glass panels would otherwise anchor them.
+createRoot(root).render(<StrictMode><App /><Toast.Provider placement="bottom end" /></StrictMode>);

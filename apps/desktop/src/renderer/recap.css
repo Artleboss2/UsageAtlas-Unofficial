@@ -1,0 +1,323 @@
+/*
+ * The shareable recap image and the controls around it. The card is laid out in real
+ * image pixels (1200 x 675) and scaled down for the preview; every color is its own so
+ * the PNG doesn't follow the app's theme.
+ */
+.atlas-recap {
+  --recap-bg: #0b0f0c;
+  --recap-fg: #f3f6f3;
+  --recap-muted: #94a399;
+  --recap-faint: rgb(255 255 255 / 0.08);
+  --recap-accent: #28d26e;
+  --recap-up: #5ee396;
+  --recap-down: #ff8f73;
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+  gap: 36px;
+  box-sizing: border-box;
+  width: 1200px;
+  height: 675px;
+  overflow: hidden;
+  padding: 52px 64px 48px;
+  background:
+    radial-gradient(760px 420px at 88% -8%, color-mix(in oklch, var(--recap-accent) 22%, transparent), transparent),
+    radial-gradient(520px 360px at -6% 108%, color-mix(in oklch, var(--recap-accent) 10%, transparent), transparent),
+    var(--recap-bg);
+  color: var(--recap-fg);
+  font-family: "Inter Variable", Inter, "Segoe UI", sans-serif;
+  letter-spacing: -0.01em;
+  line-height: 1.15;
+}
+
+.atlas-recap[data-theme="light"] {
+  --recap-bg: #f7f9f7;
+  --recap-fg: #111612;
+  --recap-muted: #5b6960;
+  --recap-faint: rgb(17 22 18 / 0.08);
+  --recap-accent: #1fbf60;
+  --recap-up: #138a42;
+  --recap-down: #c4472b;
+}
+
+/* Tabular figures only where numbers line up; in Inter they also widen hyphens. */
+.atlas-recap__total,
+.atlas-recap__stats dd,
+.atlas-recap__share {
+  font-variant-numeric: tabular-nums;
+}
+
+.atlas-recap__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+}
+
+.atlas-recap__brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 14px;
+  font-size: 26px;
+  font-weight: 650;
+}
+
+.atlas-recap__brand img {
+  border-radius: 10px;
+}
+
+.atlas-recap__link {
+  padding: 10px 20px;
+  border-radius: 999px;
+  background: color-mix(in oklch, var(--recap-accent) 16%, transparent);
+  color: var(--recap-fg);
+  font-size: 22px;
+  font-weight: 600;
+}
+
+.atlas-recap__main {
+  display: grid;
+  grid-template-columns: 1fr 500px;
+  gap: 64px;
+  min-height: 0;
+}
+
+.atlas-recap__summary {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.atlas-recap__title {
+  font-size: 34px;
+  font-weight: 650;
+}
+
+.atlas-recap__dates {
+  margin-top: 10px;
+  color: var(--recap-muted);
+  font-size: 22px;
+}
+
+.atlas-recap__total {
+  margin-top: 30px;
+  color: var(--recap-muted);
+  font-size: 38px;
+  font-weight: 600;
+}
+
+.atlas-recap__total strong {
+  color: var(--recap-fg);
+  font-size: 124px;
+  font-weight: 750;
+  letter-spacing: -0.045em;
+  line-height: 1;
+}
+
+.atlas-recap__change {
+  width: fit-content;
+  margin-top: 18px;
+  padding: 7px 14px;
+  border-radius: 999px;
+  background: var(--recap-faint);
+  color: var(--recap-muted);
+  font-size: 20px;
+  font-weight: 600;
+}
+
+.atlas-recap__change[data-direction="up"] {
+  background: color-mix(in oklch, var(--recap-up) 16%, transparent);
+  color: var(--recap-up);
+}
+
+.atlas-recap__change[data-direction="down"] {
+  background: color-mix(in oklch, var(--recap-down) 16%, transparent);
+  color: var(--recap-down);
+}
+
+.atlas-recap__stats {
+  display: grid;
+  grid-template-columns: repeat(3, auto);
+  justify-content: start;
+  gap: 44px;
+  margin-top: auto;
+}
+
+.atlas-recap__stats dt {
+  color: var(--recap-muted);
+  font-size: 18px;
+  font-weight: 550;
+}
+
+.atlas-recap__stats dd {
+  margin-top: 8px;
+  font-size: 30px;
+  font-weight: 650;
+  white-space: nowrap;
+}
+
+.atlas-recap__detail {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.atlas-recap__chart {
+  display: flex;
+  align-items: flex-end;
+  gap: 14px;
+  height: 196px;
+}
+
+.atlas-recap[data-period="month"] .atlas-recap__chart {
+  gap: 5px;
+}
+
+.atlas-recap__chart span {
+  flex: 1;
+  height: max(6px, calc(var(--size) * 100%));
+  border-radius: 8px;
+  background: linear-gradient(180deg, var(--recap-accent), color-mix(in oklch, var(--recap-accent) 62%, var(--recap-bg)));
+}
+
+.atlas-recap[data-period="month"] .atlas-recap__chart span {
+  border-radius: 4px;
+}
+
+.atlas-recap__chart span[data-empty] {
+  background: var(--recap-faint);
+}
+
+.atlas-recap__axis {
+  display: flex;
+  justify-content: space-between;
+  gap: 14px;
+  margin-top: 12px;
+  color: var(--recap-muted);
+  font-size: 17px;
+}
+
+.atlas-recap[data-period="week"] .atlas-recap__axis span {
+  flex: 1;
+  text-align: center;
+}
+
+.atlas-recap__models {
+  display: grid;
+  gap: 14px;
+  margin-top: 34px;
+  list-style: none;
+}
+
+.atlas-recap__models li {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 7px 16px;
+  font-size: 20px;
+  font-weight: 550;
+}
+
+.atlas-recap__model {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.atlas-recap__share {
+  color: var(--recap-muted);
+}
+
+.atlas-recap__bar {
+  grid-column: 1 / -1;
+  height: 8px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--recap-accent) calc(var(--share) * 100%), var(--recap-faint) 0);
+}
+
+.atlas-recap__tools {
+  display: flex;
+  align-items: center;
+  gap: 26px;
+  overflow: hidden;
+  padding-top: 26px;
+  border-top: 1px solid var(--recap-faint);
+  color: var(--recap-muted);
+  font-size: 20px;
+  font-weight: 550;
+  white-space: nowrap;
+}
+
+.atlas-recap__tool {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--recap-fg);
+}
+
+.atlas-recap__tool .atlas-provider-logo {
+  width: 30px;
+  height: 30px;
+  color: inherit;
+}
+
+.atlas-recap__tool .atlas-provider-logo svg,
+.atlas-recap__tool .atlas-provider-logo img {
+  width: 26px;
+  height: 26px;
+}
+
+/* The controls and the scaled preview. */
+.atlas-recap-share {
+  display: grid;
+  grid-template-columns: minmax(250px, 320px) minmax(0, 1fr);
+  gap: 28px;
+  align-items: start;
+}
+
+.atlas-recap-share__controls {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  min-width: 0;
+}
+
+.atlas-recap-share__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.atlas-recap-share__stage {
+  position: relative;
+  overflow: hidden;
+  border-radius: 14px;
+  box-shadow:
+    0 0 0 0.5px var(--border),
+    0 18px 40px -24px rgb(0 0 0 / 0.45);
+}
+
+.atlas-recap-share__stage > div {
+  position: absolute;
+  top: 0;
+  left: 0;
+  transform-origin: 0 0;
+}
+
+.atlas-recap-share__empty {
+  display: grid;
+  place-items: center;
+  aspect-ratio: 1200 / 675;
+  border: 1px dashed var(--border);
+  border-radius: 14px;
+  color: var(--muted);
+  font-size: 0.875rem;
+}
+
+.atlas-recap-modal.modal__dialog {
+  max-width: min(1040px, calc(100vw - 48px));
+}
+
+@media (max-width: 860px) {
+  .atlas-recap-share {
+    grid-template-columns: 1fr;
+  }
+}

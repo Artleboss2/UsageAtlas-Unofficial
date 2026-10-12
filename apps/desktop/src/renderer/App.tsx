@@ -9,6 +9,7 @@ import type {
   EngineStatus
 } from "../shared/desktop-api";
 import { applyWallpaper } from "./wallpapers";
+import { useAchievementNudge } from "./achievement-nudge";
 import { snapshotHasCachedUsage } from "../shared/cached-snapshot";
 import { dashboardFailure, dashboardIsLoading, initialDashboardState, latestDashboardState } from "./dashboard-state";
 import { useDesktopUpdates } from "./update-state";
@@ -19,6 +20,9 @@ import type { HealthNotice } from "./components/Diagnostics";
 import { Diagnostics } from "./components/Diagnostics";
 import { InsightsDashboard } from "./components/InsightsDashboard";
 import { LimitsDashboard } from "./components/LimitsDashboard";
+import { ProfilePage } from "./components/ProfilePage";
+import { ProfilePromptModal } from "./components/ProfilePromptModal";
+import { RecapShareModal } from "./components/RecapShare";
 import { Settings } from "./components/Settings";
 import { TrendsDashboard } from "./components/TrendsDashboard";
 import { UsageAlertsPage } from "./components/UsageAlertsPage";
@@ -26,6 +30,9 @@ import { isSnapshotStale } from "./dashboard-model";
 import type { AnalyticsRange, ProviderScope } from "./personal-analytics";
 import { analyticsIssue, enabledProviders, todayDay } from "./personal-analytics";
 import { providerConnection, reconnectSentence } from "./provider-connection";
+import { wantsProfilePrompt } from "./profile-promotion";
+import { useCloudAccount, useLeaderboard, useProfilePageVisited, useProfilePrompt } from "./profile-state";
+import { useWrappedNudge } from "./wrapped-nudge";
 
 export function App(): React.JSX.Element {
   const updates = useDesktopUpdates();
@@ -50,6 +57,9 @@ export function App(): React.JSX.Element {
   const [trendEndDay, setTrendEndDay] = useState(() => todayDay());
   const [trendRange, setTrendRange] = useState<AnalyticsRange>(30);
   const [providerScope, setProviderScope] = useState<ProviderScope>("all");
+  const [recapOpen, setRecapOpen] = useState(false);
+  const cloud = useCloudAccount();
+  const profileVisited = useProfilePageVisited(route);
 
   const loadDiagnostics = useCallback(async (): Promise<void> => {
     setDiagnosticsLoading(true);
@@ -172,6 +182,21 @@ export function App(): React.JSX.Element {
   const today = todayDay();
   const usageRoute = route === "day" || route === "trends" || route === "insights" || route === "limits";
   const providerAnalyticsIssue = snapshot ? analyticsIssue(snapshot, providerScope) : null;
+  const usageShown = usageRoute && !usageLoading && !usageError && snapshot !== null && enabledProviders(snapshot).length > 0;
+  const profilePrompt = useProfilePrompt({ enabled: usageShown, profile: cloud.profile, snapshot, today });
+  const openProfile = useCallback(() => navigate("profile"), [navigate]);
+  const wrappedDue = useWrappedNudge({ enabled: usageShown, onOpenExternal: openExternal, preview: profilePrompt.preview, profile: cloud.profile });
+  useAchievementNudge({
+    automatic: cloud.status?.automatic ?? false,
+    enabled: usageShown,
+    onOpen: openProfile,
+    profile: cloud.profile,
+    prompting: profilePrompt.prompt !== null,
+    snapshot,
+    today,
+    waiting: wrappedDue
+  });
+  const leaderboard = useLeaderboard(route === "profile" || profilePrompt.prompt !== null);
   // Usage pages stay uninterrupted; everything worth knowing about the numbers is
   // collected here for Engine health, with the rail dot as the only nudge. Dismissal is
   // keyed on the wording, so a different problem always breaks through.
@@ -247,6 +272,7 @@ export function App(): React.JSX.Element {
           onProviderScopeChange={setProviderScope}
           onRangeChange={(range) => { setTrendRange(range); setTrendEndDay(today); }}
           onRefresh={refreshAll}
+          onShare={() => setRecapOpen(true)}
           providerScope={providerScope}
           range={trendRange}
           refreshing={refreshing}
@@ -286,7 +312,8 @@ export function App(): React.JSX.Element {
   }
 
   return (
-    <AppShell activityControl={!usageRoute ? activity : null} engineStatus={engineStatus} noticeCount={notices.length} onNavigate={navigate} route={route}
+    <AppShell activityControl={!usageRoute ? activity : null} engineStatus={engineStatus} noticeCount={notices.length} onNavigate={navigate}
+      profileBadge={!profileVisited && cloud.status !== null && wantsProfilePrompt(cloud.status.profile)} route={route}
       updateControl={<UpdateTag state={updates.state} onCheck={updates.check} onInstall={updates.install} />}>
       {renderUsageRoute()}
       {route === "alerts" && (
@@ -295,6 +322,38 @@ export function App(): React.JSX.Element {
           preferences={preferences}
           providers={snapshot?.providers ?? []}
           saving={saving}
+        />
+      )}
+      {route === "profile" && (
+        <ProfilePage
+          cloud={cloud}
+          leaderboard={leaderboard}
+          onOpenExternal={openExternal}
+          onOpenSettings={() => navigate("settings")}
+          snapshot={snapshot}
+          today={today}
+        />
+      )}
+      {recapOpen && route === "trends" && snapshot && (
+        <RecapShareModal
+          initialPeriod={trendRange === 7 ? "week" : "month"}
+          onClose={() => setRecapOpen(false)}
+          onGetProfile={() => { setRecapOpen(false); navigate("profile"); }}
+          onOpenExternal={openExternal}
+          profileHandle={cloud.status?.profile.state === "public" ? cloud.status.profile.handle : null}
+          snapshot={snapshot}
+          today={today}
+        />
+      )}
+      {profilePrompt.prompt && cloud.status && (
+        <ProfilePromptModal
+          leaderboard={leaderboard}
+          onClose={profilePrompt.close}
+          onDismiss={profilePrompt.dismiss}
+          onOpenExternal={openExternal}
+          onOpenProfile={() => navigate("profile")}
+          profile={cloud.status.profile}
+          prompt={profilePrompt.prompt}
         />
       )}
       {route === "settings" && (
@@ -364,7 +423,7 @@ function backgroundImageErrorMessage(caught: unknown): string {
 
 function routeFromHash(hash: string): AppRoute {
   const candidate = hash.replace(/^#/, "");
-  if (candidate === "trends" || candidate === "insights" || candidate === "limits" || candidate === "alerts" || candidate === "settings" || candidate === "diagnostics") {
+  if (candidate === "trends" || candidate === "insights" || candidate === "limits" || candidate === "alerts" || candidate === "profile" || candidate === "settings" || candidate === "diagnostics") {
     return candidate;
   }
   return "day";

@@ -2,7 +2,7 @@ import type { DashboardSnapshot } from "@usageatlas/contracts";
 import { Button, Card, Tooltip } from "@heroui/react";
 import { useState } from "react";
 import { buildActivitySeries } from "../activity-buckets";
-import { RefreshIcon } from "../icons";
+import { RefreshIcon, ShareIcon } from "../icons";
 import { formatCompactNumber, formatCost, formatTokens } from "../number-format";
 import type { AnalyticsRange, ProviderScope } from "../personal-analytics";
 import {
@@ -14,6 +14,7 @@ import {
   percentageChange,
   periodBounds,
   previousPeriod,
+  tokenAverages,
   tokenComposition
 } from "../personal-analytics";
 import { buildModelMix } from "../usage-insights";
@@ -34,6 +35,7 @@ interface TrendsDashboardProps {
   onOpenDay(day: string): void;
   onProviderScopeChange(scope: ProviderScope): void;
   onRefresh(): Promise<void>;
+  onShare(): void;
 }
 
 export function TrendsDashboard({
@@ -48,7 +50,8 @@ export function TrendsDashboard({
   onEndDayChange,
   onOpenDay,
   onProviderScopeChange,
-  onRefresh
+  onRefresh,
+  onShare
 }: TrendsDashboardProps): React.JSX.Element {
   const [showComparison, setShowComparison] = useState(true);
   const bounds = periodBounds(snapshot, providerScope, endDay, range);
@@ -59,6 +62,7 @@ export function TrendsDashboard({
   const prior = buildPeriodUsage(snapshot, providerScope, priorBounds.startDay, priorBounds.endDay);
   const peak = peakUsageDay(period.days);
   const activeDays = period.days.filter((day) => day.totalTokens > 0).length;
+  const averages = tokenAverages(period);
   const divisor = Math.max(1, period.coveredDays);
   const tokenChange = percentageChange(period.totals.totalTokens, prior.totals.totalTokens);
   const costChange = period.totals.estimatedCostUSD !== null && prior.totals.estimatedCostUSD !== null
@@ -91,6 +95,10 @@ export function TrendsDashboard({
             providers={enabledProviders(snapshot)}
             value={providerScope}
           />
+          <Tooltip>
+            <Button className="atlas-toolbar-icon" aria-label="Share a recap" isIconOnly onPress={onShare} variant="secondary"><ShareIcon /></Button>
+            <Tooltip.Content>Share a recap</Tooltip.Content>
+          </Tooltip>
           <Tooltip>
             <Button className="atlas-toolbar-icon" aria-label="Refresh usage" isIconOnly isPending={refreshing} onPress={() => void onRefresh()} variant="secondary"><RefreshIcon /></Button>
             <Tooltip.Content>Refresh usage</Tooltip.Content>
@@ -133,6 +141,24 @@ export function TrendsDashboard({
         />
       </section>
 
+      <section className="atlas-metric-strip atlas-metric-strip--thirds" aria-label="Token averages">
+        <StatTile
+          detail={averages ? `Across ${period.coveredDays} covered ${period.coveredDays === 1 ? "day" : "days"}` : "No covered days yet"}
+          label="Daily average"
+          value={averages ? formatTokens(averages.daily) : "—"}
+        />
+        <StatTile
+          detail="Daily average × 7 days"
+          label="Weekly average"
+          value={averages ? formatTokens(averages.weekly) : "—"}
+        />
+        <StatTile
+          detail="Daily average × 30.4 days"
+          label="Monthly average"
+          value={averages ? formatTokens(averages.monthly) : "—"}
+        />
+      </section>
+
       <section className="atlas-section" aria-labelledby="trend-lines-heading">
         <div className="atlas-section-heading">
           <div><p className="atlas-kicker">Over time</p><h2 id="trend-lines-heading">Load and spend</h2></div>
@@ -158,10 +184,7 @@ export function TrendsDashboard({
           <Card.Header><Card.Title>How tokens were used</Card.Title><Card.Description>Composition across the selected period</Card.Description></Card.Header>
           <Card.Content className="space-y-6">
             <TokenMixChart composition={tokenComposition(period.totals)} providers={period.providerRows} />
-            <div className="grid gap-3 sm:grid-cols-2">
-              <Card variant="secondary"><Card.Content className="p-4"><span className="text-xs text-muted">Average per covered day</span><strong className="mt-2 block text-xl">{formatTokens(period.totals.totalTokens / divisor)}</strong></Card.Content></Card>
-              <Card variant="secondary"><Card.Content className="p-4"><span className="text-xs text-muted">Requests per covered day</span><strong className="mt-2 block text-xl">{formatCompactNumber(period.totals.requests / divisor)}</strong></Card.Content></Card>
-            </div>
+            <Card variant="secondary"><Card.Content className="p-4"><span className="text-xs text-muted">Requests per covered day</span><strong className="mt-2 block text-xl">{formatCompactNumber(period.totals.requests / divisor)}</strong></Card.Content></Card>
           </Card.Content>
         </Card>
       </section>

@@ -1,6 +1,6 @@
 import type { AppRoute, EngineStatus } from "../../shared/desktop-api";
 import { useLayoutEffect, useRef } from "react";
-import { BellIcon, DayIcon, InsightsIcon, PulseIcon, SettingsIcon, TrendsIcon } from "../icons";
+import { BellIcon, DayIcon, InsightsIcon, ProfileIcon, PulseIcon, SettingsIcon, TrendsIcon } from "../icons";
 
 interface AppShellProps {
   route: AppRoute;
@@ -8,6 +8,8 @@ interface AppShellProps {
   /** Open health notices — the rail dot is the only place they interrupt anything. */
   noticeCount: number;
   onNavigate(route: AppRoute): void;
+  /** A quiet dot on Profile until the page has been opened once. */
+  profileBadge?: boolean;
   activityControl?: React.ReactNode;
   updateControl?: React.ReactNode;
   children: React.ReactNode;
@@ -21,7 +23,8 @@ const primaryNavigation: Array<{
   { route: "day", label: "Today", icon: DayIcon },
   { route: "trends", label: "History", icon: TrendsIcon },
   { route: "insights", label: "Insights", icon: InsightsIcon },
-  { route: "alerts", label: "Usage alerts", icon: BellIcon }
+  { route: "alerts", label: "Usage alerts", icon: BellIcon },
+  { route: "profile", label: "Public profile", icon: ProfileIcon }
 ];
 
 const routeTitles: Record<AppRoute, string> = {
@@ -30,11 +33,12 @@ const routeTitles: Record<AppRoute, string> = {
   insights: "Insights",
   limits: "Limits",
   alerts: "Usage alerts",
+  profile: "Public profile",
   diagnostics: "Diagnostics",
   settings: "Settings"
 };
 
-export function AppShell({ route, engineStatus, noticeCount, onNavigate, activityControl, updateControl, children }: AppShellProps): React.JSX.Element {
+export function AppShell({ route, engineStatus, noticeCount, onNavigate, profileBadge = false, activityControl, updateControl, children }: AppShellProps): React.JSX.Element {
   const workspaceRef = useRef<HTMLElement>(null);
 
   useLayoutEffect(() => {
@@ -65,6 +69,7 @@ export function AppShell({ route, engineStatus, noticeCount, onNavigate, activit
           {primaryNavigation.map((item) => (
             <RailButton
               icon={item.icon}
+              badge={item.route === "profile" && profileBadge}
               isCurrent={route === item.route}
               key={item.route}
               label={item.label}
@@ -103,6 +108,7 @@ function handleWorkspaceScroll(event: React.UIEvent<HTMLElement>): void {
 }
 
 function RailButton({
+  badge = false,
   icon: Icon,
   isCurrent,
   label,
@@ -110,6 +116,7 @@ function RailButton({
   onPress,
   status
 }: {
+  badge?: boolean;
   icon: (props: React.SVGProps<SVGSVGElement>) => React.JSX.Element;
   isCurrent: boolean;
   label: string;
@@ -117,7 +124,7 @@ function RailButton({
   onPress(): void;
   status?: EngineStatus;
 }): React.JSX.Element {
-  const description = status ? `${label}: ${engineLabel(status)}${noticeLabel(noticeCount)}` : label;
+  const description = status ? `${label}: ${engineLabel(status)}${noticeLabel(noticeCount)}` : badge ? `${label} · New` : label;
   return (
     <button
       aria-current={isCurrent ? "page" : undefined}
@@ -130,6 +137,7 @@ function RailButton({
       <span className="atlas-app-shell__rail-icon">
         <Icon aria-hidden="true" />
         {status ? <StatusDot hasNotices={noticeCount > 0} status={status} /> : null}
+        {badge ? <span aria-hidden="true" className="atlas-app-shell__status-dot" data-badge="true" /> : null}
       </span>
       <span className="sr-only">{description}</span>
     </button>

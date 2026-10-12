@@ -412,6 +412,11 @@
   background: var(--danger);
 }
 
+/* Marks the Profile page until it has been opened once. */
+.atlas-app-shell__status-dot[data-badge="true"] {
+  background: #28d26e;
+}
+
 .atlas-app-shell__status-dot[data-status="ready"] {
   background: var(--success);
 }
@@ -992,6 +997,10 @@
 
 .atlas-metric-strip--compact {
   grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.atlas-metric-strip--thirds {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
 .atlas-content-grid {
@@ -2860,7 +2869,6 @@
 }
 
 @container atlas-page (max-width: 860px) {
-  .atlas-metric-strip,
   .atlas-skeleton-summary {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }

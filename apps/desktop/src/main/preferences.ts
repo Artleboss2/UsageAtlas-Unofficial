@@ -13,9 +13,13 @@ import {
 } from "../shared/desktop-api";
 import { cloneUsageAlertPreferences, sanitizeUsageAlertPreferences } from "../shared/usage-alerts";
 
+type ProfileState = "missing" | "private" | "public";
+
 interface StoredPreferences extends DesktopPreferences {
   analyticsInstallationId: string;
   backgroundDefaultGeneration: string;
+  /** The last profile state seen for the signed-in account, to notice it being published. */
+  lastProfile: { accountId: string; state: ProfileState } | null;
 }
 
 function defaultPreferences(): StoredPreferences {
@@ -30,7 +34,8 @@ function defaultPreferences(): StoredPreferences {
     usageAlerts: {},
     anonymousAnalytics: true,
     analyticsInstallationId: randomUUID(),
-    backgroundDefaultGeneration: BACKGROUND_DEFAULT_GENERATION
+    backgroundDefaultGeneration: BACKGROUND_DEFAULT_GENERATION,
+    lastProfile: null
   };
 }
 
@@ -62,6 +67,16 @@ export class PreferenceStore {
 
   getAnalyticsInstallationId(): string {
     return this.values.analyticsInstallationId;
+  }
+
+  /** Saves the account's current profile state and returns the one it replaces, if known. */
+  recordProfileState(accountId: string, state: ProfileState): ProfileState | null {
+    const previous = this.values.lastProfile?.accountId === accountId ? this.values.lastProfile.state : null;
+    if (previous !== state) {
+      this.values = { ...this.values, lastProfile: { accountId, state } };
+      this.persist();
+    }
+    return previous;
   }
 
   update(patch: Partial<DesktopPreferences>): DesktopPreferences {
@@ -129,7 +144,8 @@ export class PreferenceStore {
           limitOrder: sanitizeLimitOrder(parsed.limitOrder),
           trayLimits: sanitizeTrayLimits(parsed.trayLimits),
           usageAlerts: sanitizeUsageAlertPreferences(parsed.usageAlerts),
-          backgroundDefaultGeneration: rolled.appliedGeneration
+          backgroundDefaultGeneration: rolled.appliedGeneration,
+          lastProfile: isLastProfile(parsed.lastProfile) ? parsed.lastProfile : null
         },
         persist: rolled.changed
       };
@@ -149,4 +165,10 @@ export class PreferenceStore {
     }
     app.setLoginItemSettings({ openAtLogin });
   }
+}
+
+function isLastProfile(value: unknown): value is StoredPreferences["lastProfile"] & object {
+  return Boolean(value) && typeof value === "object"
+    && typeof (value as { accountId?: unknown }).accountId === "string"
+    && ["missing", "private", "public"].includes((value as { state?: unknown }).state as string);
 }

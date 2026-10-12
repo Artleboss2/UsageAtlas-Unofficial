@@ -11,6 +11,7 @@ import {
   periodBounds,
   previousPeriod,
   shiftDay,
+  tokenAverages,
   tokenComposition
 } from "./personal-analytics";
 
@@ -51,6 +52,18 @@ describe("personal analytics", () => {
     expect(previousPeriod(period)).toEqual({ startDay: "2026-07-04", endDay: "2026-07-10" });
     expect(shiftDay("2026-07-01", -1)).toBe("2026-06-30");
     expect(percentageChange(120, 100)).toBe(20);
+  });
+
+  it("averages tokens over covered days and scales the daily rate to weeks and months", () => {
+    const period = buildPeriodUsage(snapshot, "codex", "2026-07-15", "2026-07-17");
+    const averages = tokenAverages(period);
+    expect(averages?.daily).toBe(600);
+    expect(averages?.weekly).toBe(4_200);
+    expect(averages?.monthly).toBeCloseTo(600 * 30.4375, 6);
+  });
+
+  it("has no token averages without covered days", () => {
+    expect(tokenAverages(buildPeriodUsage(snapshot, "codex", "2020-01-01", "2020-01-07"))).toBeNull();
   });
 
   it("keeps token composition mutually exclusive", () => {

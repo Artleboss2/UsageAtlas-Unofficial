@@ -1,4 +1,4 @@
-import { CloudAccount } from "./cloud-account";
+import { CloudAccount, type KnownProfileStatus } from "./cloud-account";
 import { ProviderCredentialStore, configureProviderCredentials } from "./provider-credentials";
 import { isQuotaProvider, validateProviderCredential } from "../shared/quota-providers";
 import type { DashboardSnapshot } from "@usageatlas/contracts";
@@ -6,6 +6,7 @@ import { existsSync, mkdtempSync, statSync, writeFileSync } from "node:fs";
 import {
   app,
   BrowserWindow,
+  clipboard,
   dialog,
   ipcMain,
   Menu,
@@ -30,8 +31,10 @@ import { DashboardSession } from "./dashboard-session";
 import type { AppRoute, DesktopPreferences } from "../shared/desktop-api";
 import { IPC, isBackgroundImagePreference } from "../shared/desktop-api";
 import { isUsageAlertPreferences } from "../shared/usage-alerts";
+import { isGrowthEvent } from "../shared/growth-events";
 import { EngineManager } from "./engine-manager";
 import { PreferenceStore } from "./preferences";
+import { PublicLeaderboard } from "./public-leaderboard";
 import { DesktopTelemetry } from "./telemetry";
 import { trayLimitLabels } from "./tray-limits";
 import { configureAutoUpdates, type DesktopUpdater } from "./updates";
@@ -76,10 +79,13 @@ let mainWindow: BrowserWindow | null = null;
 let tray: Tray | null = null;
 let lastTraySnapshot: DashboardSnapshot | null = null;
 let usageCheckTimer: NodeJS.Timeout | null = null;
+let profileCheckTimer: NodeJS.Timeout | null = null;
+let profileStatusReported = false;
 let isQuitting = false;
 let installPendingUpdate: (() => void) | null = null;
 let engine: EngineManager;
 let cloudAccount: CloudAccount;
+const leaderboard = new PublicLeaderboard();
 let providerCredentials: ProviderCredentialStore;
 let preferences: PreferenceStore;
 let telemetry: DesktopTelemetry;
@@ -89,7 +95,10 @@ let updates: DesktopUpdater;
 const activeUsageNotifications = new Set<Notification>();
 let usageAlertEvaluator = new UsageAlertEvaluator();
 const usageAlertDeliveryLog = new UsageAlertDeliveryLog();
-const allowedExternalHosts = new Set(["usageatlas.com", "github.com"]);
+/** Includes the X and Bluesky composers for sharing a recap. */
+const allowedExternalHosts = new Set(["usageatlas.com", "github.com", "x.com", "bsky.app"]);
+const MAX_SHARE_IMAGE_LENGTH = 16 * 1024 * 1024;
+const PNG_DATA_URL = "data:image/png;base64,";
 const MAX_BACKGROUND_FILE_SIZE = 25 * 1024 * 1024;
 const runtimeIconDirectory = app.isPackaged
   ? path.join(process.resourcesPath, "icons")
@@ -347,12 +356,52 @@ function registerIPC(): void {
     if (action === "sign-in") await cloudAccount.signIn();
     else if (action === "sign-out") await cloudAccount.signOut();
     else if (action === "save" || action === "restore") await cloudAccount.operation(action);
+    else if (action === "refresh-profile") await cloudAccount.refreshProfile();
     else if (action === "automatic" && options && typeof options === "object" && "enabled" in options && typeof options.enabled === "boolean") {
       await cloudAccount.operation(action, { enabled: options.enabled });
     } else if (action === "resolve" && options && typeof options === "object" && "recordId" in options && typeof options.recordId === "string" && "choice" in options && (options.choice === "local" || options.choice === "cloud")) {
       await cloudAccount.operation(action, { recordId: options.recordId, choice: options.choice });
     } else throw new Error("Invalid cloud action.");
     return cloudAccount.status();
+  });
+  ipcMain.handle(IPC.checkHandle, (event, handle: unknown) => {
+    assertTrustedSender(event);
+    if (typeof handle !== "string") throw new Error("Invalid handle.");
+    return cloudAccount.handleAvailable(handle);
+  });
+  ipcMain.handle(IPC.getLeaderboard, (event) => {
+    assertTrustedSender(event);
+    return leaderboard.glance();
+  });
+  // The window refuses every permission, including the web clipboard.
+  ipcMain.handle(IPC.copyText, (event, text: unknown) => {
+    assertTrustedSender(event);
+    if (typeof text !== "string" || !text || text.length > 4096) throw new Error("Invalid text.");
+    clipboard.writeText(text);
+  });
+  ipcMain.handle(IPC.copyImage, (event, png: unknown) => {
+    assertTrustedSender(event);
+    clipboard.writeImage(sharedImage(png));
+  });
+  ipcMain.handle(IPC.saveImage, async (event, png: unknown, fileName: unknown) => {
+    assertTrustedSender(event);
+    const image = sharedImage(png);
+    if (typeof fileName !== "string" || !/^[a-z0-9-]{1,80}\.png$/u.test(fileName)) throw new Error("Invalid file name.");
+    const owner = BrowserWindow.fromWebContents(event.sender);
+    const options: Electron.SaveDialogOptions = {
+      title: "Save image",
+      defaultPath: path.join(app.getPath("downloads"), fileName),
+      filters: [{ name: "PNG image", extensions: ["png"] }]
+    };
+    const result = owner ? await dialog.showSaveDialog(owner, options) : await dialog.showSaveDialog(options);
+    if (result.canceled || !result.filePath) return false;
+    writeFileSync(result.filePath, image.toPNG());
+    return true;
+  });
+  ipcMain.handle(IPC.trackGrowthEvent, (event, name: unknown, properties: unknown) => {
+    assertTrustedSender(event);
+    if (!isGrowthEvent(name, properties)) throw new Error("Invalid analytics event.");
+    telemetry.capture(name, properties as Record<string, string>);
   });
   ipcMain.handle(IPC.snapshot, (event) => {
     assertTrustedSender(event);
@@ -432,6 +481,17 @@ function registerIPC(): void {
   });
 }
 
+/** Reports the share of installs with a public profile once per launch, and each publish seen. */
+function reportProfile(accountId: string, profile: KnownProfileStatus): void {
+  const previous = preferences.recordProfileState(accountId, profile.state);
+  if (!profileStatusReported) {
+    profileStatusReported = true;
+    telemetry.capture("profile_status_checked", { state: profile.state });
+  }
+  if (profile.state === "public" && previous !== null && previous !== "public")
+    telemetry.capture("profile_published", { previous_state: previous });
+}
+
 function assertTrustedSender(event: IpcMainInvokeEvent): void {
   const frame = event.senderFrame;
   if (!frame || frame !== frame.top || !isTrustedRendererURL(frame.url)) {
@@ -449,6 +509,14 @@ function isTrustedRendererURL(value: string): boolean {
   } catch {
     return false;
   }
+}
+
+/** A PNG the renderer drew, decoded and re-encoded before it reaches the clipboard or disk. */
+function sharedImage(value: unknown): Electron.NativeImage {
+  if (typeof value !== "string" || !value.startsWith(PNG_DATA_URL) || value.length > MAX_SHARE_IMAGE_LENGTH) throw new Error("Invalid image.");
+  const image = nativeImage.createFromBuffer(Buffer.from(value.slice(PNG_DATA_URL.length), "base64"));
+  if (image.isEmpty()) throw new Error("Invalid image.");
+  return image;
 }
 
 function isAllowedExternal(value: string): boolean {
@@ -537,7 +605,7 @@ if (squirrelStartup) {
   engine.onProgress(progress => dashboard.progress(progress));
   engine.onImportProgress(message => dashboard.importProgress(message.accountId, message.progress));
   cloudAccount = new CloudAccount(engine, (accountId, configure, reconnect) =>
-    dashboard.configure(accountId, configure, reconnect));
+    dashboard.configure(accountId, configure, reconnect), reportProfile);
   engine.onHistoryChanged(() => dashboard.historyChanged());
   await cloudAccount.initialize().catch(() => undefined);
   await configureProviderCredentials(providerCredentials, engine);
@@ -551,6 +619,14 @@ if (squirrelStartup) {
   createTray();
   mainWindow = createWindow();
   telemetry.capture("desktop_app_opened");
+  if (cloudAccount.profileStatus().state === "signed-out") {
+    profileStatusReported = true;
+    telemetry.capture("profile_status_checked", { state: "signed-out" });
+  }
+  void cloudAccount.refreshProfile();
+  // A profile published on the website shows up here within ten minutes.
+  profileCheckTimer = setInterval(() => void cloudAccount.refreshProfile(), 10 * 60_000);
+  profileCheckTimer.unref();
   updates = configureAutoUpdates({
     capture: (event) => telemetry.capture(event),
     onStateChange: (state) => {
@@ -581,6 +657,8 @@ app.on("before-quit", () => {
   isQuitting = true;
   if (usageCheckTimer) clearTimeout(usageCheckTimer);
   usageCheckTimer = null;
+  if (profileCheckTimer) clearInterval(profileCheckTimer);
+  profileCheckTimer = null;
   cloudAccount?.close();
   dashboard?.close();
   void engine?.shutdown();

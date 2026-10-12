@@ -62,6 +62,15 @@ export interface TokenComposition {
   output: number;
 }
 
+export interface TokenAverages {
+  daily: number;
+  weekly: number;
+  monthly: number;
+}
+
+/** Mean Gregorian month, so twelve monthly averages add up to a year. */
+const DAYS_PER_MONTH = 365.25 / 12;
+
 export function enabledProviders(snapshot: DashboardSnapshot): DashboardProvider[] {
   return snapshot.providers.filter((provider) => provider.enabled);
 }
@@ -201,6 +210,17 @@ export function buildBaseline(
   };
 }
 
+
+/**
+ * Token rates over the period's covered days. Weeks and months scale the daily rate
+ * rather than averaging calendar buckets, so a partial first or current week does
+ * not drag the average down.
+ */
+export function tokenAverages(period: PeriodUsage): TokenAverages | null {
+  if (period.coveredDays === 0) return null;
+  const daily = period.totals.totalTokens / period.coveredDays;
+  return { daily, weekly: daily * 7, monthly: daily * DAYS_PER_MONTH };
+}
 
 export function baselinePercent(totalTokens: number, averageTokens: number): number | null {
   if (averageTokens <= 0) return null;

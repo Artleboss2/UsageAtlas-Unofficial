@@ -8,13 +8,12 @@ import {
 } from "node:fs";
 import path from "node:path";
 import type { EngineManager } from "./engine-manager";
-import type { CloudStatus, UsageCloudState } from "../shared/desktop-api";
+import type { CloudProfileStatus, CloudStatus, UsageCloudState } from "../shared/desktop-api";
+import { CLOUD_URL as BASE_URL } from "./cloud-url";
 
-declare const USAGEATLAS_CLOUD_URL: string;
-const BASE_URL =
-  typeof USAGEATLAS_CLOUD_URL === "string"
-    ? USAGEATLAS_CLOUD_URL
-    : "https://usageatlas.com";
+export type KnownProfileStatus = Extract<CloudProfileStatus, { state: "missing" | "private" | "public" }>;
+
+const PROFILE_HANDLE = /^[a-z0-9][a-z0-9_]{2,29}$/u;
 interface Session {
   token: string;
   user: { id: string; email: string };
@@ -32,6 +31,8 @@ export class CloudAccount {
   private loginAttempt: object | null = null;
   private timer: NodeJS.Timeout | null = null;
   private error: string | null = null;
+  private profile: { accountId: string; status: KnownProfileStatus } | null = null;
+  private profileCheck: { session: Session; done: Promise<void> } | null = null;
   private readonly filename = path.join(
     app.getPath("userData"),
     "cloud-session.enc",
@@ -41,6 +42,7 @@ export class CloudAccount {
     private readonly configureEngine: (
       accountId: string, operation: () => Promise<unknown>, reconnect: boolean
     ) => Promise<unknown> = (_accountId, operation) => operation(),
+    private readonly onProfile: (accountId: string, profile: KnownProfileStatus) => void = () => undefined,
   ) {}
   async initialize(): Promise<void> {
     try {
@@ -69,7 +71,8 @@ export class CloudAccount {
       return {
         accountId: null, account: null, automatic: false, pending: 0,
         busy: this.error === null, progress: null, lastCompleted: null,
-        conflicts: [], loginCode: this.login?.userCode ?? null, error: this.error
+        conflicts: [], loginCode: this.login?.userCode ?? null, error: this.error,
+        profile: { state: "unknown" },
       };
     }
     return {
@@ -77,7 +80,40 @@ export class CloudAccount {
       account,
       loginCode: this.login?.userCode ?? null,
       error: this.error ?? state.error,
+      profile: this.profileStatus(),
     };
+  }
+  profileStatus(): CloudProfileStatus {
+    if (!this.session) return { state: "signed-out" };
+    return this.profile?.accountId === this.session.user.id ? this.profile.status : { state: "unknown" };
+  }
+  /** Asks the website whether the signed-in account has a profile. Failures keep the last answer. */
+  refreshProfile(): Promise<void> {
+    const session = this.session;
+    if (!session) return Promise.resolve();
+    if (this.profileCheck?.session !== session) {
+      const done = (async () => {
+        try {
+          const value = await this.request("/api/desktop/profile", undefined, session.token);
+          const profile = parseProfile(value.profile);
+          if (this.session !== session) return;
+          this.profile = { accountId: session.user.id, status: profile };
+          this.onProfile(session.user.id, profile);
+        } catch { /* An unknown profile never counts as missing. */ }
+      })().finally(() => { if (this.profileCheck?.done === done) this.profileCheck = null; });
+      this.profileCheck = { session, done };
+    }
+    return this.profileCheck.done;
+  }
+  /**
+   * Whether the handle looks free. Needs no account, so a signed-out user can choose first,
+   * but then only public profiles count; signed in, private ones count too, as saving would.
+   */
+  async handleAvailable(handle: string): Promise<boolean> {
+    if (!PROFILE_HANDLE.test(handle)) throw new Error("Invalid handle.");
+    const value = await this.request(`/api/handles/${handle}`, undefined, this.session?.token);
+    if (typeof value.available !== "boolean") throw new Error("Invalid handle response.");
+    return value.available;
   }
   async signIn(): Promise<void> {
     if (this.login || this.loginAttempt) return;
@@ -248,6 +284,7 @@ export class CloudAccount {
       await this.configure();
       if (this.login !== login) return;
       this.cancelLogin();
+      void this.refreshProfile();
     } catch (error) {
       if (this.login !== login) return;
       this.error = error instanceof Error ? error.message : "Sign-in failed.";
@@ -316,4 +353,13 @@ export class CloudAccount {
       );
     return value;
   }
+}
+
+function parseProfile(value: unknown): KnownProfileStatus {
+  if (value === null) return { state: "missing" };
+  if (value && typeof value === "object" && "handle" in value && "isPublic" in value
+    && typeof value.handle === "string" && PROFILE_HANDLE.test(value.handle)
+    && typeof value.isPublic === "boolean")
+    return { state: value.isPublic ? "public" : "private", handle: value.handle };
+  throw new Error("Invalid profile response.");
 }

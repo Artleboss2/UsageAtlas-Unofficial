@@ -235,3 +235,122 @@ describe("desktop cloud sign-in", () => {
     expect(electron.encryptString).not.toHaveBeenCalled();
   });
 });
+
+describe("desktop profile status", () => {
+  function routes(profile: () => Response | Promise<Response>, userId = "user-a") {
+    fetchMock.mockImplementation(async (url: string) => {
+      if (url.endsWith("/api/auth/device/code")) return response(code);
+      if (url.endsWith("/api/auth/device/token")) return response({ access_token: `token-${userId}` });
+      if (url.endsWith("/api/auth/get-session")) return response({ user: { id: userId, email: `${userId}@example.com` } });
+      if (url.endsWith("/api/desktop/profile")) return profile();
+      if (url.includes("/api/handles/")) return response({ available: false });
+      if (url.endsWith("/api/auth/sign-out")) return response({ success: true });
+      throw new Error(`Unexpected request ${url}`);
+    });
+  }
+  async function signIn() {
+    await account.signIn();
+    await vi.advanceTimersByTimeAsync(5000);
+  }
+  const profileCalls = () => fetchMock.mock.calls.filter(([url]) => String(url).endsWith("/api/desktop/profile"));
+
+  it("checks handles with the bearer token once signed in, so private profiles count", async () => {
+    routes(() => response({ profile: null }));
+    await signIn();
+    await expect(account.handleAvailable("alice")).resolves.toBe(false);
+    const [, init] = fetchMock.mock.calls.find(([url]) => String(url).includes("/api/handles/"))!;
+    expect(init).toMatchObject({ method: "GET", headers: { Authorization: "Bearer token-user-a" } });
+  });
+
+  it("reports signed-out without asking the website", async () => {
+    await account.refreshProfile();
+    expect((await account.status()).profile).toEqual({ state: "signed-out" });
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("checks with the bearer token after sign-in and reports each answer", async () => {
+    const onProfile = vi.fn();
+    account = new CloudAccount({ cloud } as unknown as EngineManager, undefined, onProfile);
+    let profile: unknown = null;
+    routes(() => response({ profile }));
+    await signIn();
+    expect((await account.status()).profile).toEqual({ state: "missing" });
+    const [, init] = profileCalls()[0];
+    expect(init).toMatchObject({ method: "GET", headers: { Authorization: "Bearer token-user-a" } });
+    profile = { handle: "alice", isPublic: false };
+    await account.refreshProfile();
+    expect((await account.status()).profile).toEqual({ state: "private", handle: "alice" });
+    profile = { handle: "alice", isPublic: true };
+    await account.refreshProfile();
+    expect((await account.status()).profile).toEqual({ state: "public", handle: "alice" });
+    expect(onProfile.mock.calls).toEqual([
+      ["user-a", { state: "missing" }],
+      ["user-a", { state: "private", handle: "alice" }],
+      ["user-a", { state: "public", handle: "alice" }],
+    ]);
+  });
+
+  it("stays unknown on failures and invalid answers, and keeps the last good answer", async () => {
+    let reply: () => Response = () => response({ error: "Not found." }, 404);
+    routes(() => reply());
+    await signIn();
+    expect((await account.status()).profile).toEqual({ state: "unknown" });
+    reply = () => new Response("<html>old website</html>");
+    await account.refreshProfile();
+    reply = () => response({ profile: { handle: "Not A Handle", isPublic: true } });
+    await account.refreshProfile();
+    reply = () => response({});
+    await account.refreshProfile();
+    expect((await account.status()).profile).toEqual({ state: "unknown" });
+    reply = () => response({ profile: { handle: "alice", isPublic: true } });
+    await account.refreshProfile();
+    reply = () => response({ error: "Cloud request failed. Try again." }, 500);
+    await account.refreshProfile();
+    expect((await account.status()).profile).toEqual({ state: "public", handle: "alice" });
+  });
+
+  it("shares one check at a time and drops an answer that arrives after sign-out", async () => {
+    let finish!: (value: Response) => void;
+    let pending = false;
+    routes(() => pending ? new Promise<Response>(resolve => { finish = resolve; }) : response({ profile: null }));
+    await signIn();
+    pending = true;
+    const first = account.refreshProfile();
+    const second = account.refreshProfile();
+    expect(profileCalls()).toHaveLength(2);
+    await account.signOut();
+    finish(response({ profile: { handle: "alice", isPublic: true } }));
+    await Promise.all([first, second]);
+    expect((await account.status()).profile).toEqual({ state: "signed-out" });
+  });
+
+  it("does not show one account's profile to the next account", async () => {
+    routes(() => response({ profile: { handle: "alice", isPublic: true } }));
+    await signIn();
+    expect((await account.status()).profile).toEqual({ state: "public", handle: "alice" });
+    await account.signOut();
+    routes(() => new Response("unavailable", { status: 503 }), "user-b");
+    await signIn();
+    expect((await account.status()).profile).toEqual({ state: "unknown" });
+  });
+});
+
+describe("handle availability", () => {
+  it("asks the website without a token, even when signed out", async () => {
+    fetchMock.mockResolvedValueOnce(response({ available: true })).mockResolvedValueOnce(response({ available: false }));
+    await expect(account.handleAvailable("ada_l")).resolves.toBe(true);
+    await expect(account.handleAvailable("alice")).resolves.toBe(false);
+    const [url, init] = fetchMock.mock.calls[0];
+    expect(url).toMatch(/\/api\/handles\/ada_l$/u);
+    expect(init).toMatchObject({ method: "GET" });
+    expect(init.headers).not.toHaveProperty("Authorization");
+  });
+
+  it("never sends a handle the website would refuse, and rejects odd answers", async () => {
+    for (const handle of ["Ada", "a", "../profile", "ada/../../x"])
+      await expect(account.handleAvailable(handle)).rejects.toThrow("Invalid handle.");
+    expect(fetchMock).not.toHaveBeenCalled();
+    fetchMock.mockResolvedValueOnce(response({ available: "yes" }));
+    await expect(account.handleAvailable("ada_l")).rejects.toThrow("Invalid handle response.");
+  });
+});
