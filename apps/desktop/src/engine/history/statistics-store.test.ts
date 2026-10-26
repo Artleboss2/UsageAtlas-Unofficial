@@ -7,7 +7,7 @@ import { identifyFact } from "./statistics-store";
 import { canReplaceSealed, extractDayPayload } from "./payload";
 import { toUsageDay } from "./usage-payload";
 import { validateUsageRecord } from "@usageatlas/contracts/usage";
-import type { UsageFact } from "@usageatlas/contracts/statistics";
+import type { UsageEventFact, UsageFact } from "@usageatlas/contracts/statistics";
 
 const resources: Array<() => void> = [];
 afterEach(() => { for (const close of resources.splice(0).reverse()) close(); });
@@ -20,6 +20,15 @@ function event(overrides: Partial<UsageRecord> = {}): UsageRecord {
 }
 function analytics(records = [event()]) { return buildAnalytics(records, now, 90, 1, false, "local_sessions", undefined, undefined, "Asia/Calcutta"); }
 function store() { const db = openWritableSqlite(":memory:"); resources.push(() => db.close()); const local = new UsageStore(db); local.selectAccount("a"); return local; }
+function observe(local: UsageStore, overrides: Partial<UsageRecord>, observedAt?: string): UsageEventFact {
+  const a = analytics([event(overrides)]);
+  return [...local.statistics.observations("codex", "local", "replica", observedAt ? { ...a, updatedAt: observedAt } : a)][0] as UsageEventFact;
+}
+/** Stores an event the way rows were stored before content ids existed. */
+function insertLegacy(local: UsageStore, value: UsageEventFact) {
+  local.db.run("INSERT INTO usage_fact (owner,id,source_id,kind,provider,occurred_at,event_id,payload) VALUES ('a',?,?,?,?,?,?,?)",
+    [value.id, value.sourceId, value.kind, value.providerId, value.occurredAt, value.eventId, JSON.stringify(value)]);
+}
 function day() {
   const a = analytics();
   const payload = extractDayPayload(a, "2026-09-23", { accountKey: "local", windows: [], identity: null, credits: null, source: "local", capturedAt: now.toISOString(), includeCoverageWideBreakdowns: true, timeZone: "Asia/Calcutta" });
@@ -42,6 +51,90 @@ describe("durable usage observations", () => {
     expect(rows).toHaveLength(2);
     expect(rows[0].event_id).toBe(rows[1].event_id);
     expect(() => local.statistics.put({ ...fact, totalTokens: 999 })).toThrow();
+  });
+  it("adds an event version when its numbers change, not when only the pricing catalog revision does", () => {
+    const local = store();
+    const scan = (overrides: Partial<UsageRecord>) => local.statistics.collect("codex", "local", "replica", analytics([event(overrides)]));
+    const versions = () => local.db.all("SELECT payload FROM usage_fact WHERE kind = 'usage_event' ORDER BY rowid")
+      .map(row => JSON.parse(String(row.payload)) as UsageEventFact).map(fact => [fact.pricingVersion, fact.estimatedCostUSD]);
+    scan({ pricingVersion: "catalog-a" });
+    scan({ pricingVersion: "catalog-b" });
+    expect(versions()).toEqual([["catalog-a", 0.000123456]]);
+    scan({ pricingVersion: "catalog-c", estimatedCostUSD: 0.0002 });
+    scan({ pricingVersion: "catalog-d", estimatedCostUSD: 0.0002 });
+    scan({ pricingVersion: "catalog-e" });
+    expect(versions()).toEqual([["catalog-a", 0.000123456], ["catalog-c", 0.0002], ["catalog-e", 0.000123456]]);
+  });
+  it("adds content ids to an existing ledger and still compares its earlier rows as text", () => {
+    const local = store();
+    local.statistics.collect("codex", "local", "replica", analytics([event({ pricingVersion: "catalog-a" })]));
+    local.db.exec("ALTER TABLE usage_fact DROP COLUMN content_id");
+    const reopened = new UsageStore(local.db);
+    reopened.statistics.collect("codex", "local", "replica", { ...analytics([event({ pricingVersion: "catalog-b" })]), updatedAt: "2026-09-23T13:00:00Z" });
+    expect(local.db.all("SELECT content_id FROM usage_fact WHERE kind = 'usage_event'").map(row => row.content_id)).toEqual([null]);
+  });
+  it("drops pending catalog-only copies left by earlier versions and keeps changed numbers", async () => {
+    const local = store();
+    const fact = (overrides: Partial<UsageRecord>) => observe(local, overrides);
+    const saved = fact({ pricingVersion: "catalog-a" }); local.statistics.put(saved); local.statistics.acknowledge([saved.id]);
+    const changed = fact({ pricingVersion: "catalog-c", estimatedCostUSD: 0.0002 });
+    for (const value of [fact({ pricingVersion: "catalog-b" }), changed, fact({ pricingVersion: "catalog-d", estimatedCostUSD: 0.0002 })]) insertLegacy(local, value);
+    expect(local.statistics.pendingCount()).toBe(3);
+    await local.statistics.dropRepricedCopies(() => false);
+    expect(local.statistics.pending().map(value => value.id)).toEqual([changed.id]);
+    expect(local.db.all("SELECT 1 FROM usage_fact WHERE saved = 1")).toHaveLength(1);
+  });
+  it("compares restored facts by their numbers, not by the key order the cloud returns", () => {
+    const local = store();
+    // Postgres jsonb returns object keys shortest first.
+    const jsonb = (value: unknown): unknown => value && typeof value === "object" && !Array.isArray(value)
+      ? Object.fromEntries(Object.entries(value).sort(([a], [b]) => a.length - b.length || (a < b ? -1 : 1)).map(([key, item]) => [key, jsonb(item)]))
+      : value;
+    local.statistics.put(jsonb(observe(local, { pricingVersion: "catalog-a" }, "2026-09-23T12:00:00Z")) as UsageFact, true);
+    local.statistics.put(jsonb(observe(local, { pricingVersion: "catalog-b" }, "2026-09-23T12:30:00Z")) as UsageFact, true);
+    local.statistics.collect("codex", "local", "replica", { ...analytics([event({ pricingVersion: "catalog-c" })]), updatedAt: "2026-09-23T13:00:00Z" });
+    const rows = local.db.all("SELECT payload FROM usage_fact WHERE kind = 'usage_event'");
+    expect(rows).toHaveLength(1);
+    expect(String(rows[0].payload)).toMatch(/^\{"id":/);
+    expect(local.statistics.pending().filter(fact => fact.kind === "usage_event")).toEqual([]);
+  });
+  it("compares a rescan with the newest observation after a restore adds an older one", () => {
+    const local = store();
+    const scan = (observedAt: string, overrides: Partial<UsageRecord>) =>
+      local.statistics.collect("codex", "local", "replica", { ...analytics([event(overrides)]), updatedAt: observedAt });
+    scan("2026-09-23T13:00:00Z", { pricingVersion: "catalog-b", estimatedCostUSD: 0.0002 });
+    local.statistics.put(observe(local, { pricingVersion: "catalog-a" }, "2026-09-23T12:00:00Z"), true);
+    scan("2026-09-23T14:00:00Z", { pricingVersion: "catalog-c" });
+    expect(local.db.all("SELECT json_extract(payload, '$.observedAt') AS observedAt FROM usage_fact WHERE kind = 'usage_event' ORDER BY rowid")
+      .map(row => row.observedAt)).toEqual(["2026-09-23T12:00:00Z", "2026-09-23T13:00:00Z", "2026-09-23T14:00:00Z"]);
+    expect(JSON.parse(String(local.db.get("SELECT payload FROM usage_event_latest")?.payload)).estimatedCostUSD).toBe(0.000123456);
+  });
+  it("drops catalog-only copies before a save uploads them, and still uploads when the history writer has stopped", async () => {
+    const uploads: string[][] = [];
+    const cloud: UsageCloud = {
+      async read() { return { records: [], next: null }; }, async save() { return []; },
+      async readFacts() { return { facts: [], cursor: "0", more: false }; },
+      async saveFacts(facts) { uploads.push(facts.map(fact => fact.id)); return facts.map(fact => fact.id); }
+    };
+    const backlog = () => {
+      const local = store();
+      const saved = observe(local, { pricingVersion: "catalog-a" }); local.statistics.put(saved); local.statistics.acknowledge([saved.id]);
+      const copy = observe(local, { pricingVersion: "catalog-b" }, "2026-09-23T13:00:00Z");
+      const changed = observe(local, { pricingVersion: "catalog-c", estimatedCostUSD: 0.0002 }, "2026-09-23T14:00:00Z");
+      for (const value of [copy, changed]) insertLegacy(local, value);
+      return { local, copy, changed };
+    };
+    const save = async (local: UsageStore) => {
+      const sync = new UsageSync(local); resources.push(() => sync.close());
+      await sync.configure("a", cloud); sync.setAutomatic(false); await sync.save();
+    };
+    const pruned = backlog(); await save(pruned.local);
+    expect(uploads.pop()).toEqual([pruned.changed.id]);
+    const stopped = backlog();
+    stopped.local.db.commit = async () => { throw new Error("History writer stopped. Refresh usage to retry."); };
+    await save(stopped.local);
+    expect(uploads.pop()).toEqual([stopped.copy.id, stopped.changed.id].sort());
+    expect(stopped.local.statistics.pendingCount()).toBe(0);
   });
   it("keeps unknown measurements as null and exposes no invented zero usage", () => {
     const local = store(); const a = analytics([event({ measurement: "unknown" })]);

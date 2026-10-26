@@ -243,10 +243,13 @@ describe("usage cloud storage", () => {
     local.put(day());
     const cloud = remoteCloud();
     let fail!: () => void;
-    cloud.read = () => new Promise((_resolve, reject) => { fail = () => reject(new Error("offline")); });
+    const reading = new Promise<void>((started) => {
+      cloud.read = () => new Promise((_resolve, reject) => { fail = () => reject(new Error("offline")); started(); });
+    });
     const service = sync(local);
     await service.configure("a", cloud);
     const saving = service.save().catch(() => undefined);
+    await reading;
     const nextCloud = remoteCloud();
     const switching = service.configure("b", nextCloud);
     fail();

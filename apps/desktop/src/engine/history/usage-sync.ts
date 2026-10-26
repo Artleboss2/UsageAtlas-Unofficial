@@ -137,6 +137,9 @@ export class UsageSync {
           if (this.closed || this.stopping) return;
         }
         this.store.claimLocal();
+        // Pruning only shrinks the upload. A stopped history writer must not keep pending facts from saving.
+        await this.store.statistics.dropRepricedCopies(() => this.closed || this.stopping).catch(() => undefined);
+        if (this.closed || this.stopping) return;
       }
       if (cloud.readFacts) {
         const key = `statistics-cursor:${this.store.owner}`;
