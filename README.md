@@ -54,7 +54,7 @@ UsageAtlas reads local activity and reuses supported tool sign-ins. Providers th
 - **Antigravity** reads local CLI conversation databases for timestamped tokens, requests, models, sessions, and API-price estimates.
 - **Pi / OMP** reads local JSONL sessions for Anthropic and OpenAI Codex backend usage, including cache tokens, projects, and API-price estimates.
 - **Muse Code** reads local inference and automated-review events for token, request, model, and session history. Monetary costs remain unknown.
-- **Freebuff** reads the Desktop app's `desktop-v2.db` for provider-reported input/output token usage per turn, shown as today's token counters. The CLI fallback shows per-message credits; the Freebucks balance is unavailable.
+- **Freebuff** reads the Desktop app's `desktop-v2.db` for provider-reported input/output token usage per turn, shown as today's token counters. Its location is re-planned automatically when Freebuff moves it, and the working route is cached. The CLI fallback shows per-message credits; the Freebucks balance is unavailable.
 
 Antigravity, Pi / OMP, and Muse Code collect local history without credentials. Freebuff reads local Desktop/CLI data without credentials or the Freebucks balance. They do not collect subscription quotas.
 See [Freebuff usage](docs/FREEBUFF.md) for its data locations and limits.

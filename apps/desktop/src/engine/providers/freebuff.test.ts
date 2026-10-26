@@ -1,4 +1,4 @@
-import { mkdtemp, mkdir, utimes, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, readFile, stat, utimes, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
@@ -25,6 +25,13 @@ async function desktopFixture(home: string, rows: Array<{ ts: number; metrics: u
   for (const row of rows) insert.run("thread-1", "assistant", JSON.stringify(row.metrics), row.ts);
   database.close();
   return file;
+}
+
+async function writeRoute(cacheFile: string, database: string): Promise<void> {
+  const info = await stat(database);
+  await mkdir(path.dirname(cacheFile), { recursive: true });
+  await writeFile(cacheFile, JSON.stringify({ version: 1, resolvedAt: Date.now(), roots: [],
+    databases: [{ path: database, size: info.size, mtimeMs: info.mtimeMs }], chats: [] }));
 }
 
 async function chatFixture(home: string, messages: unknown[], name = "chat"): Promise<string> {
@@ -109,6 +116,36 @@ describe("Freebuff local usage", () => {
     ]);
     const adapter = createFreebuffAdapter({ homeDirectory: "/tmp", environment: { FREEBUFF_CONFIG_DIR: path.join(root, ".config", "freebuff-desktop") } });
     expect((await adapter.refresh(context)).quotaMetrics?.[0]).toMatchObject({ id: "tokens_today", used: 10 });
+  });
+
+  it("reuses a saved route so a store outside the known folders is still read", async () => {
+    const home = await mkdtemp(path.join(tmpdir(), "usageatlas-freebuff-route-hit-"));
+    const file = path.join(home, "recorded", "desktop-v2.db");
+    await mkdir(path.dirname(file), { recursive: true });
+    const database = new DatabaseSync(file);
+    database.exec("CREATE TABLE messages (role TEXT NOT NULL, metrics_json TEXT NOT NULL, ts INTEGER NOT NULL)");
+    database.prepare("INSERT INTO messages (role, metrics_json, ts) VALUES (?,?,?)")
+      .run("assistant", JSON.stringify({ usage: { inputTokens: 30, outputTokens: 10 } }), Date.parse("2026-10-26T09:00:00Z"));
+    database.close();
+    const cacheFile = path.join(home, "user-data", "freebuff-sources.json");
+    await writeRoute(cacheFile, file);
+    const result = await createFreebuffAdapter({ homeDirectory: home, cacheFile }).refresh(context);
+    expect(result.quotaMetrics?.[0]).toMatchObject({ id: "tokens_today", used: 40 });
+  });
+
+  it("re-plans and saves a new route when the saved store disappears", async () => {
+    const home = await mkdtemp(path.join(tmpdir(), "usageatlas-freebuff-route-miss-"));
+    const cacheFile = path.join(home, "user-data", "freebuff-sources.json");
+    await mkdir(path.dirname(cacheFile), { recursive: true });
+    await writeFile(cacheFile, JSON.stringify({ version: 1, resolvedAt: Date.now(), roots: [], chats: [],
+      databases: [{ path: path.join(home, "gone", "desktop-v2.db"), size: 10, mtimeMs: Date.now() }] }));
+    const database = await desktopFixture(home, [
+      { ts: Date.parse("2026-10-26T09:00:00Z"), metrics: { usage: { inputTokens: 4, outputTokens: 6 } } }
+    ]);
+    const result = await createFreebuffAdapter({ homeDirectory: home, cacheFile }).refresh(context);
+    expect(result.quotaMetrics?.[0]).toMatchObject({ id: "tokens_today", used: 10 });
+    const saved = JSON.parse(await readFile(cacheFile, "utf8")) as { databases: Array<{ path: string }> };
+    expect(saved.databases.map(entry => entry.path)).toEqual([database]);
   });
 
   it("rejects a relative config override instead of scanning the working directory", async () => {
