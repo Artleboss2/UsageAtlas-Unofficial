@@ -66,7 +66,7 @@ if (process.env.USAGEATLAS_SMOKE_TEST === "1") {
     launchAtLogin: false,
     anonymousAnalytics: false,
     providerEnabled: { codex: false, claude: false, cursor: false, opencode: false, antigravity: false, pi: false, muse: false,
-      warp: false, kimi: false, kilo: false, copilot: false, factory: false, amp: false, qoder: false }
+      freebuff: false, warp: false, kimi: false, kilo: false, copilot: false, factory: false, amp: false, qoder: false, zai: false }
   }));
 }
 if (process.platform === "win32") {

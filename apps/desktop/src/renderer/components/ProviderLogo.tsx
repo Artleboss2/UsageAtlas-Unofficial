@@ -9,6 +9,7 @@ import KiloCode from "@lobehub/icons/es/KiloCode/components/Mono.js";
 import GithubCopilot from "@lobehub/icons/es/GithubCopilot/components/Mono.js";
 import Amp from "@lobehub/icons/es/Amp/components/Color.js";
 import Qoder from "@lobehub/icons/es/Qoder/components/Color.js";
+import ZAI from "@lobehub/icons/es/ZAI/components/Mono.js";
 
 const warpLogo = new URL("../assets/providers/warp.svg", import.meta.url).href;
 const factoryLogo = new URL("../assets/providers/factory.svg", import.meta.url).href;
@@ -47,7 +48,8 @@ export function ProviderLogo({
             : providerID === "muse"
               ? Meta
               : providerID === "kimi" ? Kimi : providerID === "kilo" ? KiloCode
-                : providerID === "copilot" ? GithubCopilot : providerID === "amp" ? Amp : providerID === "qoder" ? Qoder : null;
+                : providerID === "copilot" ? GithubCopilot : providerID === "amp" ? Amp
+                  : providerID === "qoder" ? Qoder : providerID === "zai" ? ZAI : null;
   const avatarClassName = mark
     ? "size-[18px] text-[10px]"
     : mini

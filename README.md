@@ -6,7 +6,7 @@
 
 <p align="center">
   One desktop dashboard for your AI coding usage.<br>
-  Track AI coding history, allowances, and balances across 14 tools. No UsageAtlas account required.
+  Track AI coding history, allowances, and balances across 16 tools. No UsageAtlas account required.
 </p>
 
 <p align="center">
@@ -54,11 +54,13 @@ UsageAtlas reads local activity and reuses supported tool sign-ins. Providers th
 - **Antigravity** reads local CLI conversation databases for timestamped tokens, requests, models, sessions, and API-price estimates.
 - **Pi / OMP** reads local JSONL sessions for Anthropic and OpenAI Codex backend usage, including cache tokens, projects, and API-price estimates.
 - **Muse Code** reads local inference and automated-review events for token, request, model, and session history. Monetary costs remain unknown.
+- **Freebuff** reads the Desktop app's `desktop-v2.db` for provider-reported input/output token usage per turn, shown as today's token counters. The CLI fallback shows per-message credits; the Freebucks balance is unavailable.
 
-Antigravity, Pi / OMP, and Muse Code collect local history without credentials. They do not collect subscription quotas.
+Antigravity, Pi / OMP, and Muse Code collect local history without credentials. Freebuff reads local Desktop/CLI data without credentials or the Freebucks balance. They do not collect subscription quotas.
+See [Freebuff usage](docs/FREEBUFF.md) for its data locations and limits.
 See [provider setup and field mappings](docs/LOCAL_PROVIDERS.md) for supported locations and limitations.
 
-Seven more integrations read current provider allowances and balances:
+Eight more integrations read current provider allowances and balances:
 
 - **Warp** reads monthly and add-on credits, with workspace pools kept separate.
 - **Kimi Code** reads five-hour, weekly, and monthly allowances for the selected region.
@@ -67,8 +69,9 @@ Seven more integrations read current provider allowances and balances:
 - **Factory / Droid** reads Standard and Core limits, extra usage balances, and supported legacy billing counters.
 - **Amp** reads Free and Agent allowances, Orb hours, and personal and workspace balances.
 - **Qoder** reads personal and shared credits for the selected region.
+- **z.ai / GLM** reads the Coding Plan's five-hour and weekly token or credit windows, reset times, and plan level for the selected region.
 
-These seven do not provide token, request, project, or cost history through these integrations. Missing allowances stay unknown. Credentials saved in Settings use the operating system's encrypted storage and never enter cloud saves. See [quota provider setup](docs/QUOTA_PROVIDERS.md) for credentials, supported formats, and limitations.
+These eight do not provide token, request, project, or cost history through these integrations. Missing allowances stay unknown. Credentials saved in Settings use the operating system's encrypted storage and never enter cloud saves. See [quota provider setup](docs/QUOTA_PROVIDERS.md) for credentials, supported formats, and limitations.
 
 ## Highlights
 

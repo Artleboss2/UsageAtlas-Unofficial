@@ -13,6 +13,8 @@ import { createCopilotAdapter } from "./copilot";
 import { createFactoryAdapter } from "./factory";
 import { createAmpAdapter } from "./amp";
 import { createQoderAdapter } from "./qoder";
+import { createZaiAdapter } from "./zai";
+import { createFreebuffAdapter } from "./freebuff";
 
 export function createProviderAdapters(): ProviderAdapter[] {
   const pricingCatalogLoader = createPricingCatalogLoader({ homeDirectory: homedir() });
@@ -24,7 +26,8 @@ export function createProviderAdapters(): ProviderAdapter[] {
     createLocalToolAdapter("antigravity", { pricingCatalogLoader }),
     createLocalToolAdapter("pi", { pricingCatalogLoader }),
     createLocalToolAdapter("muse"),
+    createFreebuffAdapter(),
     createWarpAdapter(), createKimiAdapter(), createKiloAdapter(), createCopilotAdapter(),
-    createFactoryAdapter(), createAmpAdapter(), createQoderAdapter()
+    createFactoryAdapter(), createAmpAdapter(), createQoderAdapter(), createZaiAdapter()
   ];
 }
