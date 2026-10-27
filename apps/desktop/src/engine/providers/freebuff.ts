@@ -18,14 +18,20 @@ export interface FreebuffOptions extends FreebuffPathOptions {
   maxBytes?: number;
 }
 
+/**
+ * Disjoint token categories: `input` excludes `cached`, so the three of them add
+ * up to the turn's total. Freebuff reports cached tokens inside its input count,
+ * so both are translated at the edge and never stored overlapping — the history
+ * contract requires the categories to reconcile with the day's total.
+ */
 interface TokenTotals {
   input: number;
+  cached: number;
   output: number;
   total: number;
 }
 
 interface ParsedUsage extends TokenTotals {
-  cached: number;
   cost: number | null;
 }
 
@@ -62,7 +68,9 @@ interface DesktopScan {
  *             "reasoningOutputTokens":0,"totalTokens":120},"costUsd":0}
  *
  * `cachedInputTokens` is a subset of `inputTokens`; `reasoningOutputTokens` is a
- * subset of `outputTokens`. The row's thread adds the model, the project it ran
+ * subset of `outputTokens`. Cached tokens are counted inside input here, so a
+ * turn is stored with its non-cached input, its cached input, and its output —
+ * the categories the rest of the app sums. The row's thread adds the model, the project it ran
  * in, and whether the turn was sponsored, so the same rows feed both today's
  * counters and the daily history the dashboard charts. The CLI has no such
  * database: it only records `credits`, so tokens are reported when the Desktop
@@ -155,7 +163,7 @@ async function readDesktopUsage(
   let opened = 0;
   let unreadable = 0;
   let truncated = false;
-  const totals: TokenTotals = { input: 0, output: 0, total: 0 };
+  const totals: TokenTotals = { input: 0, cached: 0, output: 0, total: 0 };
   const records: UsageRecord[] = [];
 
   for (const file of databases) {
@@ -178,6 +186,7 @@ async function readDesktopUsage(
           if (!usage || typeof row.ts !== "number") continue;
           if (localDay(new Date(row.ts).toISOString(), timeZone) !== today) continue;
           totals.input = safeAdd(totals.input, usage.input);
+          totals.cached = safeAdd(totals.cached, usage.cached);
           totals.output = safeAdd(totals.output, usage.output);
           totals.total = safeAdd(totals.total, usage.total);
         }
@@ -308,12 +317,15 @@ function parseUsage(json: string): ParsedUsage | null {
   const usage = record.usage;
   if (!usage || typeof usage !== "object" || Array.isArray(usage)) return null;
   const values = usage as Record<string, unknown>;
-  const input = tokenCount(values.inputTokens);
+  const reported = tokenCount(values.inputTokens);
+  const cached = Math.min(tokenCount(values.cachedInputTokens), reported);
+  const input = reported - cached;
   const output = tokenCount(values.outputTokens);
-  const reported = tokenCount(values.totalTokens);
-  const total = reported > 0 ? reported : Math.min(input + output, Number.MAX_SAFE_INTEGER);
-  if (input === 0 && output === 0 && total === 0) return null;
-  return { input, output, total, cached: tokenCount(values.cachedInputTokens), cost: costValue(record.costUsd) };
+  // Derived rather than trusted: the stored total must equal the categories it
+  // is split into, and a reported total that disagrees would be rejected later.
+  const total = Math.min(input + cached + output, Number.MAX_SAFE_INTEGER);
+  if (total === 0) return null;
+  return { input, cached, output, total, cost: costValue(record.costUsd) };
 }
 
 function tokenCount(value: unknown): number {

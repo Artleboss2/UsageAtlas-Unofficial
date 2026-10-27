@@ -256,7 +256,13 @@ export function Settings({
             </Card.Content>
           </Card>
 
-          <UpdateSettings state={updateState} onCheck={onCheckForUpdates} onInstall={onInstallUpdate} />
+          <UpdateSettings
+            channel={preferences.updateChannel}
+            onChangeChannel={(updateChannel) => onUpdate({ updateChannel })}
+            onCheck={onCheckForUpdates}
+            onInstall={onInstallUpdate}
+            state={updateState}
+          />
 
           <footer className="flex flex-col items-start gap-4 px-1 py-3 sm:flex-row sm:items-center">
             <div>

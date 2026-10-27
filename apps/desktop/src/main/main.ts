@@ -39,7 +39,6 @@ import { PublicLeaderboard } from "./public-leaderboard";
 import { DesktopTelemetry } from "./telemetry";
 import { trayLimitLabels } from "./tray-limits";
 import { configureAutoUpdates, type DesktopUpdater } from "./updates";
-import { DOWNLOAD_PAGE_URL } from "./update-feed";
 import {
   createUsageAlertNotification,
   UsageAlertDeliveryLog,
@@ -345,7 +344,7 @@ function registerIPC(): void {
   ipcMain.handle(IPC.installUpdate, async (event) => {
     assertTrustedSender(event);
     if (updates.getState().status === "ready" && installPendingUpdate) installPendingUpdate();
-    else if (updates.getState().status === "available") await shell.openExternal(DOWNLOAD_PAGE_URL);
+    else if (updates.getState().status === "available") await shell.openExternal(updates.downloadPageURL());
     else throw new Error("No update is ready to install.");
   });
   ipcMain.handle(IPC.cloudStatus, (event) => {
@@ -435,11 +434,13 @@ function registerIPC(): void {
   ipcMain.handle(IPC.updatePreferences, (event, patch: unknown) => {
     assertTrustedSender(event);
     if (!isPreferencePatch(patch)) throw new Error("Invalid preferences update");
-    const previousAnalytics = preferences.get().anonymousAnalytics;
+    const previous = preferences.get();
     const nextPreferences = preferences.update(patch);
-    if (previousAnalytics !== nextPreferences.anonymousAnalytics) {
+    if (previous.anonymousAnalytics !== nextPreferences.anonymousAnalytics) {
       telemetry.setEnabled(nextPreferences.anonymousAnalytics);
     }
+    // A different publisher is checked against the new feed right away.
+    if (previous.updateChannel !== nextPreferences.updateChannel) void updates.check().catch(() => undefined);
     updateTrayMenu();
     return nextPreferences;
   });
@@ -638,6 +639,8 @@ if (squirrelStartup) {
   profileCheckTimer.unref();
   updates = configureAutoUpdates({
     capture: (event) => telemetry.capture(event),
+    // Read per check, so switching publisher takes effect on the next one.
+    channel: () => preferences.get().updateChannel,
     onStateChange: (state) => {
       if (state.status === "error") {
         if (installPendingUpdate) isQuitting = false;

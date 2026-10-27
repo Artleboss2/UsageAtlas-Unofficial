@@ -35,6 +35,17 @@ describe("Settings sources", () => {
   });
 });
 
+describe("Settings updates", () => {
+  it("offers both publishers to update from and names the selected one", () => {
+    const html = render([]);
+
+    expect(html).toContain("Updates from");
+    expect(html).toContain("My fork");
+    expect(html).toContain("Upstream");
+    expect(html).toContain("github.com/Artleboss2/UsageAtlas");
+  });
+});
+
 describe("Settings appearance", () => {
   it("offers Mist, Valley, Night, Monterey, and Big Sur as background choices", () => {
     const html = render([]);
@@ -93,6 +104,7 @@ function provider(overrides: Partial<DashboardProvider> = {}): DashboardProvider
 function preferences(): DesktopPreferences {
   return {
     reportAliases: [],
+    updateChannel: "fork",
     backgroundImage: "mist",
     customBackgroundName: null,
     launchAtLogin: false,

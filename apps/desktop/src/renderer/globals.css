@@ -1283,6 +1283,19 @@
 
 .atlas-update-settings__status svg { flex-shrink: 0; }
 
+.atlas-update-settings__channel {
+  display: grid;
+  gap: 4px;
+  flex: 1 1 100%;
+}
+
+.atlas-update-settings__channel .radio-group {
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.atlas-update-settings__hint { max-width: 62ch; }
+
 @media (max-width: 800px) {
   .atlas-update-tag__description { display: none; }
 }

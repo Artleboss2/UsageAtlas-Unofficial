@@ -1,24 +1,65 @@
 import { describe, expect, it } from "vitest";
 import {
   compareVersions,
+  downloadPageURL,
   isNewerVersion,
   latestPublishedVersion,
   redactUpdateError,
-  squirrelFeedURL
+  squirrelFeedURL,
+  updateCheckURL,
+  versionFromReleaseTag
 } from "./update-feed";
 
 describe("squirrelFeedURL", () => {
   it("puts the installed version in the macOS feed path so the edge can answer 204", () => {
-    expect(squirrelFeedURL("darwin", "arm64", "0.2.2"))
+    expect(squirrelFeedURL("darwin", "arm64", "0.2.2", "upstream"))
       .toBe("https://updates.usageatlas.com/darwin/arm64/0.2.2");
   });
 
   it("keeps the Windows feed a bare directory for the RELEASES lookup", () => {
+    expect(squirrelFeedURL("win32", "x64", "0.2.2", "upstream"))
+      .toBe("https://updates.usageatlas.com/win32/x64");
+  });
+
+  it("defaults to the mirror, so an updater without a channel is unchanged", () => {
     expect(squirrelFeedURL("win32", "x64", "0.2.2")).toBe("https://updates.usageatlas.com/win32/x64");
+  });
+
+  it("feeds Windows from the fork's GitHub releases, where Squirrel finds RELEASES", () => {
+    expect(squirrelFeedURL("win32", "x64", "0.3.1", "fork"))
+      .toBe("https://github.com/Artleboss2/UsageAtlas/releases/latest/download");
   });
 
   it("has no Squirrel feed for platforms without an installer", () => {
     expect(squirrelFeedURL("linux", "x64", "0.2.2")).toBeNull();
+    // GitHub cannot express the versioned macOS path the mirror uses.
+    expect(squirrelFeedURL("darwin", "arm64", "0.2.2", "fork")).toBeNull();
+  });
+});
+
+describe("update channels", () => {
+  it("polls GitHub on the fork and the project mirror upstream", () => {
+    expect(updateCheckURL("upstream")).toBe("https://updates.usageatlas.com/latest.json");
+    expect(updateCheckURL("fork"))
+      .toBe("https://api.github.com/repos/Artleboss2/UsageAtlas/releases/latest");
+  });
+
+  it("sends a manual download to the publisher that offers it", () => {
+    expect(downloadPageURL("upstream")).toBe("https://usageatlas.com/#download");
+    expect(downloadPageURL("fork"))
+      .toBe("https://github.com/Artleboss2/UsageAtlas/releases/latest");
+  });
+});
+
+describe("versionFromReleaseTag", () => {
+  it("reads the version out of the tags both publishers use", () => {
+    expect(versionFromReleaseTag("desktop-v0.3.1")).toBe("0.3.1");
+    expect(versionFromReleaseTag("v0.2.17")).toBe("0.2.17");
+    expect(versionFromReleaseTag("0.3.0-rc.1")).toBe("0.3.0-rc.1");
+  });
+
+  it("rejects a tag without a version", () => {
+    expect(versionFromReleaseTag("nightly")).toBeNull();
   });
 });
 
@@ -45,6 +86,10 @@ describe("compareVersions", () => {
 describe("latestPublishedVersion", () => {
   it("reads the version from the published release summary", () => {
     expect(latestPublishedVersion({ version: "0.3.0", downloads: [] })).toBe("0.3.0");
+  });
+
+  it("reads the GitHub release tag a fork publishes", () => {
+    expect(latestPublishedVersion({ tag_name: "desktop-v0.3.1" })).toBe("0.3.1");
   });
 
   it("rejects payloads that are not a release summary", () => {

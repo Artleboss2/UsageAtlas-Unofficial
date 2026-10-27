@@ -42,6 +42,41 @@ describe("Attribution rules", () => {
     expect(html).toContain('disabled=""');
   });
 
+  it("offers the models the reported provider runs instead of a blank field", () => {
+    const html = render(
+      [provider({ id: "freebuff", name: "Freebuff" }), provider()],
+      [{ source: "freebuff", reportAs: "codex", model: "gpt-5.3-codex" }]
+    );
+
+    expect(html).toContain('aria-label="Reported model"');
+    for (const model of ["gpt-5.6-sol", "gpt-5.5", "gpt-5.3-codex", "codex-auto-review"]) {
+      expect(html).toContain(`value="${model}"`);
+    }
+    // Another provider's catalog is not offered under Codex.
+    expect(html).not.toContain('value="claude-opus-5"');
+    expect(html).not.toContain("placeholder=\"gpt-5.3-codex\"");
+  });
+
+  it("offers the reported provider's catalog for the model each rule names", () => {
+    const html = render(
+      [provider({ id: "freebuff", name: "Freebuff" }), provider({ id: "zai", name: "z.ai" })],
+      [{ source: "zai", reportAs: "claude", model: "claude-sonnet-4-5" }]
+    );
+
+    expect(html).toContain('value="claude-opus-5"');
+    expect(html).toContain('value="claude-haiku-4-5"');
+    expect(html).not.toContain('value="gpt-5.3-codex"');
+  });
+
+  it("keeps a model saved before the catalog existed selectable", () => {
+    const html = render(
+      [provider({ id: "freebuff", name: "Freebuff" }), provider()],
+      [{ source: "freebuff", reportAs: "codex", model: "gpt-private-2026" }]
+    );
+
+    expect(html).toContain('value="gpt-private-2026"');
+  });
+
   it("explains the round trip the rule makes", () => {
     const html = render([]);
 
@@ -80,6 +115,7 @@ function provider(overrides: Partial<DashboardProvider> = {}): DashboardProvider
 function preferences(reportAliases: ReportAlias[]): DesktopPreferences {
   return {
     reportAliases,
+    updateChannel: "fork",
     backgroundImage: "mist",
     customBackgroundName: null,
     launchAtLogin: false,

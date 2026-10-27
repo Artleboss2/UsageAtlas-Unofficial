@@ -6,9 +6,11 @@ import { sanitizeLimitOrder, sanitizeTrayLimits } from "../shared/capacity-model
 import {
   BACKGROUND_DEFAULT_GENERATION,
   DEFAULT_BACKGROUND_IMAGE,
+  DEFAULT_UPDATE_CHANNEL,
   isBackgroundImagePreference,
   rollForwardBackgroundDefault,
   sanitizeBackgroundImage,
+  sanitizeUpdateChannel,
   type DesktopPreferences
 } from "../shared/desktop-api";
 import { cloneUsageAlertPreferences, sanitizeUsageAlertPreferences } from "../shared/usage-alerts";
@@ -26,6 +28,7 @@ interface StoredPreferences extends DesktopPreferences {
 function defaultPreferences(): StoredPreferences {
   return {
     backgroundImage: DEFAULT_BACKGROUND_IMAGE,
+    updateChannel: DEFAULT_UPDATE_CHANNEL,
     customBackgroundName: null,
     launchAtLogin: true,
     minimizeToTray: true,
@@ -56,6 +59,7 @@ export class PreferenceStore {
   get(): DesktopPreferences {
     return {
       backgroundImage: this.values.backgroundImage,
+      updateChannel: this.values.updateChannel,
       customBackgroundName: this.values.customBackgroundName,
       launchAtLogin: this.values.launchAtLogin,
       minimizeToTray: this.values.minimizeToTray,
@@ -93,6 +97,7 @@ export class PreferenceStore {
     if (typeof patch.launchAtLogin === "boolean") next.launchAtLogin = patch.launchAtLogin;
     if (typeof patch.minimizeToTray === "boolean") next.minimizeToTray = patch.minimizeToTray;
     if (typeof patch.anonymousAnalytics === "boolean") next.anonymousAnalytics = patch.anonymousAnalytics;
+    if (patch.updateChannel !== undefined) next.updateChannel = sanitizeUpdateChannel(patch.updateChannel);
     if (patch.providerEnabled && typeof patch.providerEnabled === "object") {
       next.providerEnabled = Object.fromEntries(Object.entries(patch.providerEnabled).filter(
         ([providerID, enabled]) => /^[a-z0-9-]{1,64}$/u.test(providerID) && typeof enabled === "boolean"
@@ -137,6 +142,7 @@ export class PreferenceStore {
       return {
         values: {
           backgroundImage: rolled.backgroundImage,
+          updateChannel: sanitizeUpdateChannel(parsed.updateChannel),
           customBackgroundName: typeof parsed.customBackgroundName === "string" ? parsed.customBackgroundName : null,
           launchAtLogin: typeof parsed.launchAtLogin === "boolean" ? parsed.launchAtLogin : defaults.launchAtLogin,
           minimizeToTray: typeof parsed.minimizeToTray === "boolean" ? parsed.minimizeToTray : defaults.minimizeToTray,

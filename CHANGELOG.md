@@ -2,6 +2,24 @@
 
 All notable UsageAtlas desktop changes are recorded here.
 
+## 0.3.1 — 2026-10-27
+
+### Fixed
+
+- Freebuff history can be stored again. Freebuff reports cached tokens inside its input count, and the stored day payloads kept them overlapping, so every generated record and observation failed the usage contract: local history reported that it could not be stored, Freebuff days were missing from the dashboard, and a cloud save hid the rows it could not read. Cached tokens are now moved out of input at the edge, so the categories add up to the day's total, and a regression test feeds the collector's own facts through the store that rejected them.
+
+### Added
+
+- **Publisher choice for updates.** Settings → App updates now switches between *My fork* (this build's GitHub releases) and *Upstream* (the official UsageAtlas update mirror). GitHub-hosted releases carry the Squirrel `RELEASES` feed and `.nupkg`, so Windows installs update in place from either publisher; the choice applies to the next check without a restart.
+- **Model picker in Attribution.** A reporting rule now offers the models the reported provider runs (filtered against the server's reviewed public catalog) instead of a free-text field, keeps a rule's own model selectable, and picks a valid model when the provider changes.
+
+## 0.3.0 — 2026-10-26
+
+### Added
+
+- Local provider readers for Freebuff and z.ai, including the dynamic path planner that finds Freebuff's `desktop-v2.db` wherever it lives.
+- Cloud attribution: a source the server does not model yet can be saved under an official provider with a model of your choice, without rewriting local history.
+
 ## 0.2.2 — 2026-07-19
 
 ### Fixed

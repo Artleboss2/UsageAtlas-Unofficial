@@ -4,6 +4,8 @@ import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { describe, it, expect } from "vitest";
 import { createFreebuffAdapter } from "./freebuff";
+import { UsageStore } from "../history/usage-store";
+import { openWritableSqlite } from "../platform/sqlite";
 
 const now = new Date("2026-10-26T18:00:00Z");
 const context = { now, signal: new AbortController().signal, historyDays: 30,
@@ -81,7 +83,7 @@ describe("Freebuff local usage", () => {
     const result = await adapter.refresh(context);
     expect(result.quotaMetrics).toEqual([
       { id: "tokens_today", label: "Tokens used today", unit: "tokens", used: 135, limit: null, remaining: null, resetAt: null },
-      { id: "input_tokens_today", label: "Input tokens today", unit: "tokens", used: 110, limit: null, remaining: null, resetAt: null },
+      { id: "input_tokens_today", label: "Input tokens today", unit: "tokens", used: 70, limit: null, remaining: null, resetAt: null },
       { id: "output_tokens_today", label: "Output tokens today", unit: "tokens", used: 25, limit: null, remaining: null, resetAt: null }
     ]);
     expect(result.windows).toEqual([]);
@@ -89,7 +91,39 @@ describe("Freebuff local usage", () => {
     // instead of an unread source.
     expect(result.analytics?.status).toBe("available");
     expect(result.analytics?.today).toMatchObject({ totalTokens: 135 });
-    expect(result.analytics?.totals).toMatchObject({ inputTokens: 1010, outputTokens: 124, totalTokens: 1134, requests: 3 });
+    expect(result.analytics?.totals).toMatchObject({ inputTokens: 970, cachedInputTokens: 40, outputTokens: 124, totalTokens: 1134, requests: 3 });
+  });
+
+  it("reports token categories that reconcile, so local history and the cloud save accept them", async () => {
+    const home = await mkdtemp(path.join(tmpdir(), "usageatlas-freebuff-contract-"));
+    // Freebuff reports cached tokens inside its input count and a total of its own.
+    await desktopFixture(home, [
+      { ts: Date.parse("2026-10-26T10:00:00Z"), metrics: {
+        usage: { inputTokens: 100, cachedInputTokens: 40, reasoningOutputTokens: 5, outputTokens: 20, totalTokens: 120 }, costUsd: 0 }
+      }
+    ]);
+    const result = await createFreebuffAdapter({ homeDirectory: home }).refresh(context);
+    const events = result.analytics?.collection?.events ?? [];
+    expect(events).toHaveLength(1);
+    // Cached tokens move out of input, so the categories add up to the reported total.
+    expect(events[0]).toMatchObject({ inputTokens: 60, cachedInputTokens: 40, outputTokens: 20, totalTokens: 120 });
+    const daily = result.analytics!.daily.find((row) => row.date === "2026-10-26")!;
+    for (const totals of [events[0], daily]) {
+      expect(totals.totalTokens).toBe(
+        totals.inputTokens + totals.cachedInputTokens + totals.cacheCreationInputTokens + totals.outputTokens
+      );
+    }
+    // The importer fingerprints every fact before storing it, so the same
+    // observation must survive the store that writes local history.
+    const db = openWritableSqlite(":memory:");
+    try {
+      const store = new UsageStore(db);
+      store.selectAccount("account");
+      expect(() => store.statistics.collect("freebuff", "local", "replica", result.analytics!)).not.toThrow();
+      expect(store.statistics.pendingCount()).toBeGreaterThan(0);
+    } finally {
+      db.close();
+    }
   });
 
   it("attributes a turn to its thread's model, project and sponsored tier", async () => {
@@ -102,7 +136,7 @@ describe("Freebuff local usage", () => {
     expect(result.analytics?.sessions[0]).toMatchObject({ id: "thread-1" });
     expect(result.analytics?.serviceTiers[0]).toMatchObject({ id: "sponsored" });
     expect(result.analytics?.totals).toMatchObject({
-      inputTokens: 50, cachedInputTokens: 10, outputTokens: 25, totalTokens: 75, requests: 1, estimatedCostUSD: 0.002
+      inputTokens: 40, cachedInputTokens: 10, outputTokens: 25, totalTokens: 75, requests: 1, estimatedCostUSD: 0.002
     });
   });
 

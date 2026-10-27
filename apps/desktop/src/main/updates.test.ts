@@ -134,4 +134,34 @@ describe("desktop updates", () => {
     vi.mocked(net.fetch).mockResolvedValue(response);
     expect((await configureAutoUpdates().check()).status).toBe("error");
   });
+
+  it("reads the fork's GitHub releases when that channel is selected", async () => {
+    const updater = configureAutoUpdates({ channel: () => "fork" });
+    await updater.check();
+    expect(autoUpdater.setFeedURL).toHaveBeenCalledWith({ url: "https://github.com/Artleboss2/UsageAtlas/releases/latest/download" });
+    expect(updater.downloadPageURL()).toBe("https://github.com/Artleboss2/UsageAtlas/releases/latest");
+  });
+
+  it("follows the channel without a restart", async () => {
+    let channel: "fork" | "upstream" = "fork";
+    const updater = configureAutoUpdates({ channel: () => channel });
+    await updater.check();
+    autoUpdater.emit("update-not-available");
+    channel = "upstream";
+    await updater.check();
+    expect(vi.mocked(autoUpdater.setFeedURL).mock.calls.map((call) => call[0])).toEqual([
+      { url: "https://github.com/Artleboss2/UsageAtlas/releases/latest/download" },
+      { url: "https://updates.usageatlas.com/win32/x64" }
+    ]);
+  });
+
+  it("compares versions from the GitHub tag on platforms it cannot install in place", async () => {
+    Object.defineProperty(process, "platform", { value: "linux" });
+    vi.mocked(net.fetch).mockResolvedValue(new Response(JSON.stringify({ tag_name: "desktop-v0.2.12" })));
+    const updater = configureAutoUpdates({ channel: () => "fork" });
+    expect(await updater.check()).toMatchObject({ status: "available", availableVersion: "0.2.12" });
+    expect(vi.mocked(net.fetch).mock.calls[0][0])
+      .toBe("https://api.github.com/repos/Artleboss2/UsageAtlas/releases/latest");
+    expect(autoUpdater.checkForUpdates).not.toHaveBeenCalled();
+  });
 });

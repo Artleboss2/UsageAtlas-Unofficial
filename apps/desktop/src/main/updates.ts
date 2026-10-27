@@ -1,11 +1,12 @@
 import { app, autoUpdater, net } from "electron";
-import type { DesktopUpdateState } from "../shared/desktop-api";
+import type { DesktopUpdateState, UpdateChannel } from "../shared/desktop-api";
 import {
   compareVersions,
-  LATEST_RELEASE_URL,
+  downloadPageURL,
   latestPublishedVersion,
   redactUpdateError,
-  squirrelFeedURL
+  squirrelFeedURL,
+  updateCheckURL
 } from "./update-feed";
 
 const CHECK_INTERVAL_MS = 6 * 60 * 60 * 1_000;
@@ -13,6 +14,8 @@ const FIRST_CHECK_DELAY_MS = 10_000;
 
 export interface AutoUpdateHooks {
   capture?: (event: string) => void;
+  /** Read on every check, so switching channel takes effect without a restart. */
+  channel?: () => UpdateChannel;
   onStateChange?: (state: DesktopUpdateState) => void;
   onUpdateReady?: (install: () => void) => void;
 }
@@ -20,12 +23,14 @@ export interface AutoUpdateHooks {
 export interface DesktopUpdater {
   getState(): DesktopUpdateState;
   check(): Promise<DesktopUpdateState>;
+  /** Where a version this build cannot install in place is downloaded from. */
+  downloadPageURL(): string;
 }
 
 export function configureAutoUpdates(hooks: AutoUpdateHooks = {}): DesktopUpdater {
   const enabled = app.isPackaged && process.env.USAGEATLAS_SMOKE_TEST !== "1";
   const currentVersion = app.getVersion();
-  const feedURL = squirrelFeedURL(process.platform, process.arch, currentVersion);
+  const channel = (): UpdateChannel => hooks.channel?.() ?? "upstream";
   const firstRunUntil = process.argv.includes("--squirrel-firstrun") ? Date.now() + FIRST_CHECK_DELAY_MS : 0;
   let state: DesktopUpdateState = {
     status: enabled ? "idle" : "unavailable",
@@ -61,13 +66,16 @@ export function configureAutoUpdates(hooks: AutoUpdateHooks = {}): DesktopUpdate
     publish({ status: "checking", availableVersion: null });
     hooks.capture?.("desktop_update_checked");
     try {
+      const feedURL = squirrelFeedURL(process.platform, process.arch, currentVersion, channel());
       if (feedURL) {
         autoUpdater.setFeedURL({ url: feedURL });
         autoUpdater.checkForUpdates();
       } else {
-        // Linux releases are portable; the available state opens the download page.
-        const response = await net.fetch(LATEST_RELEASE_URL, {
+        // Platforms without a Squirrel feed (Linux packages, macOS on the fork)
+        // are downloaded manually; the available state carries the version.
+        const response = await net.fetch(updateCheckURL(channel()), {
           cache: "no-cache",
+          headers: { accept: "application/vnd.github+json", "user-agent": "UsageAtlas-Desktop" },
           signal: AbortSignal.timeout(30_000)
         });
         if (!response.ok) throw new Error(`Release check returned ${response.status}`);
@@ -84,7 +92,7 @@ export function configureAutoUpdates(hooks: AutoUpdateHooks = {}): DesktopUpdate
   }
 
   if (enabled) {
-    if (feedURL) {
+    if (squirrelFeedURL(process.platform, process.arch, currentVersion, channel())) {
       autoUpdater.on("update-available", () => {
         hooks.capture?.("desktop_update_available");
         publish({ status: "downloading" });
@@ -104,5 +112,5 @@ export function configureAutoUpdates(hooks: AutoUpdateHooks = {}): DesktopUpdate
     timer.unref();
     app.once("before-quit", stopChecking);
   }
-  return { getState: () => state, check };
+  return { getState: () => state, check, downloadPageURL: () => downloadPageURL(channel()) };
 }

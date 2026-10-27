@@ -1,15 +1,31 @@
-import { Button, Card, Spinner } from "@heroui/react";
-import type { DesktopUpdateState } from "../../shared/desktop-api";
+import { Button, Card, Label, Radio, RadioGroup, Spinner } from "@heroui/react";
+import type { DesktopUpdateState, UpdateChannel } from "../../shared/desktop-api";
+import { isUpdateChannel } from "../../shared/desktop-api";
 import { DESKTOP_VERSION } from "../../shared/version";
 import { CheckIcon, DownloadIcon, RefreshIcon } from "../icons";
+
+const CHANNELS: { value: UpdateChannel; label: string; description: string }[] = [
+  {
+    value: "fork",
+    label: "My fork",
+    description: "Builds published at github.com/Artleboss2/UsageAtlas, with the local provider readers."
+  },
+  {
+    value: "upstream",
+    label: "Upstream",
+    description: "Official UsageAtlas releases. Switching to it drops this fork's extra providers."
+  }
+];
 
 interface UpdateControlsProps {
   state: DesktopUpdateState | null;
   onCheck(): Promise<void>;
   onInstall(): Promise<void>;
+  channel?: UpdateChannel;
+  onChangeChannel?(channel: UpdateChannel): Promise<void>;
 }
 
-export function UpdateSettings({ state, onCheck, onInstall }: UpdateControlsProps): React.JSX.Element {
+export function UpdateSettings({ state, onCheck, onInstall, channel, onChangeChannel }: UpdateControlsProps): React.JSX.Element {
   const busy = !state || state.status === "checking" || state.status === "downloading";
   const ready = state?.status === "ready";
   const available = state?.status === "available";
@@ -41,6 +57,35 @@ export function UpdateSettings({ state, onCheck, onInstall }: UpdateControlsProp
           {busy ? <Spinner aria-hidden="true" size="sm" /> : ready || available ? <DownloadIcon /> : <RefreshIcon />}
           <span>{label}</span>
         </Button>
+        {channel !== undefined && onChangeChannel ? (
+          <div className="atlas-update-settings__channel">
+            <RadioGroup
+              isDisabled={busy || unavailable}
+              name="update-channel"
+              onChange={(value) => {
+                if (isUpdateChannel(value)) void onChangeChannel(value);
+              }}
+              orientation="horizontal"
+              value={channel}
+              variant="secondary"
+            >
+              <Label>Updates from</Label>
+              {CHANNELS.map((option) => (
+                <Radio key={option.value} value={option.value}>
+                  <Radio.Content>
+                    <Radio.Control className="sr-only">
+                      <Radio.Indicator />
+                    </Radio.Control>
+                    <span>{option.label}</span>
+                  </Radio.Content>
+                </Radio>
+              ))}
+            </RadioGroup>
+            <p className="atlas-update-settings__hint text-xs text-muted">
+              {CHANNELS.find((option) => option.value === channel)?.description}
+            </p>
+          </div>
+        ) : null}
       </Card.Content>
     </Card>
   );

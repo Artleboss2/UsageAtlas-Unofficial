@@ -2,7 +2,8 @@ import { useState } from "react";
 import type { DashboardProvider } from "@usageatlas/contracts";
 import { Button, Card } from "@heroui/react";
 import type { DesktopPreferences } from "../../shared/desktop-api";
-import { OFFICIAL_PROVIDERS, type ReportAlias } from "../../shared/report-aliases";
+import { OFFICIAL_PROVIDERS, isOfficialProvider, type ReportAlias } from "../../shared/report-aliases";
+import { defaultReportedModel, modelOptions } from "../../shared/report-models";
 
 interface AttributionProps {
   providers: DashboardProvider[];
@@ -37,8 +38,29 @@ export function Attribution({ providers, preferences, saving, onSave }: Attribut
   function add(): void {
     const source = available[0];
     if (!source) return;
-    setEdited([...draft, { source: source.id as ReportAlias["source"], reportAs: OFFICIAL_PROVIDERS[0], model: "" }]);
+    setEdited([
+      ...draft,
+      {
+        source: source.id as ReportAlias["source"],
+        reportAs: OFFICIAL_PROVIDERS[0],
+        model: defaultReportedModel(OFFICIAL_PROVIDERS[0])
+      }
+    ]);
     setStatus(null);
+  }
+
+  /** Provider change keeps the current model when the new provider offers it. */
+  function changeProvider(index: number, reportAs: ReportAlias["reportAs"], model: string): void {
+    const offered = isOfficialProvider(reportAs) ? modelOptions(reportAs, "") : [];
+    patch(index, {
+      reportAs,
+      model: offered.includes(model) ? model : (offered[0] ?? defaultReportedModel(OFFICIAL_PROVIDERS[0]))
+    });
+  }
+
+  /** Only an official provider has an offered catalog; anything else keeps its saved model. */
+  function offeredModels(alias: ReportAlias): readonly string[] {
+    return isOfficialProvider(alias.reportAs) ? modelOptions(alias.reportAs, alias.model) : [alias.model];
   }
 
   function remove(index: number): void {
@@ -74,8 +96,8 @@ export function Attribution({ providers, preferences, saving, onSave }: Attribut
         <Card.Header>
           <Card.Title>Report as</Card.Title>
           <Card.Description>
-            A source the server does not know yet can be saved under an official provider, with the
-            model you actually used. Local totals, charts and detection are untouched.
+            A source the server does not know yet can be saved under an official provider, with a
+            model that provider runs. Local totals, charts and detection are untouched.
           </Card.Description>
         </Card.Header>
         <Card.Content className="mt-3 space-y-3">
@@ -100,7 +122,9 @@ export function Attribution({ providers, preferences, saving, onSave }: Attribut
                   <span>Reported as</span>
                   <select
                     aria-label="Reported provider"
-                    onChange={(event) => patch(index, { reportAs: event.target.value as ReportAlias["reportAs"] })}
+                    onChange={(event) =>
+                      changeProvider(index, event.target.value as ReportAlias["reportAs"], alias.model)
+                    }
                     value={alias.reportAs}
                   >
                     {OFFICIAL_PROVIDERS.map(provider => (
@@ -110,14 +134,16 @@ export function Attribution({ providers, preferences, saving, onSave }: Attribut
                 </label>
                 <label className="atlas-alias-field atlas-alias-field--model">
                   <span>Model</span>
-                  <input
+                  <select
                     aria-label="Reported model"
-                    maxLength={80}
                     onChange={(event) => patch(index, { model: event.target.value })}
-                    placeholder="gpt-5.3-codex"
-                    type="text"
                     value={alias.model}
-                  />
+                  >
+                    {alias.model ? null : <option value="">Choose a model…</option>}
+                    {offeredModels(alias).map((model) => (
+                      <option key={model} value={model}>{model}</option>
+                    ))}
+                  </select>
                 </label>
                 <Button
                   aria-label={`Remove the rule for ${alias.source}`}

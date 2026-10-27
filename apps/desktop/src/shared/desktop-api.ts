@@ -51,8 +51,29 @@ export function rollForwardBackgroundDefault(
   };
 }
 
+/**
+ * Which publisher's releases this build updates from: this fork's GitHub
+ * releases, or upstream's own update mirror.
+ */
+export const UPDATE_CHANNELS = ["fork", "upstream"] as const;
+export type UpdateChannel = (typeof UPDATE_CHANNELS)[number];
+/** This build ships with the fork's features, so its releases are the default source. */
+export const DEFAULT_UPDATE_CHANNEL: UpdateChannel = "fork";
+
+const updateChannelSet = new Set<string>(UPDATE_CHANNELS);
+
+export function isUpdateChannel(value: unknown): value is UpdateChannel {
+  return typeof value === "string" && updateChannelSet.has(value);
+}
+
+export function sanitizeUpdateChannel(value: unknown): UpdateChannel {
+  return isUpdateChannel(value) ? value : DEFAULT_UPDATE_CHANNEL;
+}
+
 export interface DesktopPreferences {
   backgroundImage: BackgroundImagePreference;
+  /** Publisher whose releases the app updates from. */
+  updateChannel: UpdateChannel;
   customBackgroundName: string | null;
   launchAtLogin: boolean;
   minimizeToTray: boolean;

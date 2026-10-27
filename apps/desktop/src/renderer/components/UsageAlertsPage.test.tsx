@@ -23,6 +23,7 @@ describe("UsageAlertsPage", () => {
 
 const preferences: DesktopPreferences = {
   reportAliases: [],
+  updateChannel: "fork",
   anonymousAnalytics: true,
     backgroundImage: "mist",
   customBackgroundName: null,
