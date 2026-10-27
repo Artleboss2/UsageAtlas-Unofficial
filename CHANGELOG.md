@@ -1,6 +1,14 @@
 # Changelog
 
-All notable UsageAtlas desktop changes are recorded here.
+All notable UsageAtlas desktop changes are recorded here. This is an unofficial fork; see
+[README.md](README.md) for what it adds and what it is not.
+
+## 0.3.2 — 2026-10-27
+
+### Changed
+
+- The repository is now `Artleboss2/UsageAtlas-Unofficial`, and the app says so: Settings carries an unaffiliated-build notice, the documentation button and the bug-report link open this fork's repository, and the updater reads its releases from the new name. Installing an upstream build still replaces the fork's private providers.
+- Packaging metadata (deb/rpm homepage, installer authors, setup icon URL) points at this fork instead of the original project's site.
 
 ## 0.3.1 — 2026-10-27
 

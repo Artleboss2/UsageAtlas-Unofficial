@@ -1,10 +1,10 @@
 {
   "name": "@usageatlas/desktop",
   "private": true,
-  "version": "0.3.1",
+  "version": "0.3.2",
   "description": "Cross-platform UsageAtlas desktop application",
   "author": "UsageAtlas contributors",
-  "homepage": "https://usageatlas.com",
+  "homepage": "https://github.com/Artleboss2/UsageAtlas-Unofficial",
   "license": "MIT",
   "productName": "UsageAtlas",
   "main": ".vite/build/main.js",

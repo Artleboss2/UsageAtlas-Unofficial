@@ -1,4 +1,5 @@
 import type { UpdateChannel } from "../shared/desktop-api";
+import { FORK_RELEASES_URL, FORK_REPOSITORY, UPSTREAM_REPOSITORY } from "../shared/fork";
 
 /** The project's own update mirror, which serves upstream builds. */
 export const OFFICIAL_FEED_URL = "https://updates.usageatlas.com";
@@ -6,8 +7,7 @@ export const LATEST_RELEASE_URL = `${OFFICIAL_FEED_URL}/latest.json`;
 export const DOWNLOAD_PAGE_URL = "https://usageatlas.com/#download";
 
 /** This build's releases live on the fork; upstream keeps publishing its own. */
-export const FORK_REPOSITORY = "Artleboss2/UsageAtlas";
-export const UPSTREAM_REPOSITORY = "SRX9/UsageAtlas";
+export { FORK_REPOSITORY, UPSTREAM_REPOSITORY };
 
 export function releaseRepository(channel: UpdateChannel): string {
   return channel === "upstream" ? UPSTREAM_REPOSITORY : FORK_REPOSITORY;
@@ -29,7 +29,7 @@ export function latestReleaseAPIURL(channel: UpdateChannel): string {
 
 /** Where a version without an in-place installer is downloaded from. */
 export function downloadPageURL(channel: UpdateChannel): string {
-  return channel === "upstream" ? DOWNLOAD_PAGE_URL : `https://github.com/${FORK_REPOSITORY}/releases/latest`;
+  return channel === "upstream" ? DOWNLOAD_PAGE_URL : `${FORK_RELEASES_URL}/latest`;
 }
 
 /** Release summary to poll on platforms without a Squirrel feed. */

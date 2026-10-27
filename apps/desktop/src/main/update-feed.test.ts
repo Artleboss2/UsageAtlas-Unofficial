@@ -27,7 +27,7 @@ describe("squirrelFeedURL", () => {
 
   it("feeds Windows from the fork's GitHub releases, where Squirrel finds RELEASES", () => {
     expect(squirrelFeedURL("win32", "x64", "0.3.1", "fork"))
-      .toBe("https://github.com/Artleboss2/UsageAtlas/releases/latest/download");
+      .toBe("https://github.com/Artleboss2/UsageAtlas-Unofficial/releases/latest/download");
   });
 
   it("has no Squirrel feed for platforms without an installer", () => {
@@ -41,13 +41,13 @@ describe("update channels", () => {
   it("polls GitHub on the fork and the project mirror upstream", () => {
     expect(updateCheckURL("upstream")).toBe("https://updates.usageatlas.com/latest.json");
     expect(updateCheckURL("fork"))
-      .toBe("https://api.github.com/repos/Artleboss2/UsageAtlas/releases/latest");
+      .toBe("https://api.github.com/repos/Artleboss2/UsageAtlas-Unofficial/releases/latest");
   });
 
   it("sends a manual download to the publisher that offers it", () => {
     expect(downloadPageURL("upstream")).toBe("https://usageatlas.com/#download");
     expect(downloadPageURL("fork"))
-      .toBe("https://github.com/Artleboss2/UsageAtlas/releases/latest");
+      .toBe("https://github.com/Artleboss2/UsageAtlas-Unofficial/releases/latest");
   });
 });
 

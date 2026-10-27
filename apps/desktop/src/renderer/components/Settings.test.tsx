@@ -40,9 +40,9 @@ describe("Settings updates", () => {
     const html = render([]);
 
     expect(html).toContain("Updates from");
-    expect(html).toContain("My fork");
+    expect(html).toContain("This fork");
     expect(html).toContain("Upstream");
-    expect(html).toContain("github.com/Artleboss2/UsageAtlas");
+    expect(html).toContain("github.com/Artleboss2/UsageAtlas-Unofficial");
   });
 });
 

@@ -99,11 +99,14 @@ module.exports = {
   rebuildConfig: {},
   makers: [
     new MakerSquirrel({
+      // The product name stays "UsageAtlas": the installed app, its data folder and
+      // the Squirrel app id are what make updates land on an existing install.
       name: "UsageAtlas",
-      authors: "UsageAtlas contributors",
-      description: "Cross-platform AI provider usage dashboard",
+      authors: "UsageAtlas Unofficial fork contributors",
+      description: "Cross-platform AI provider usage dashboard (unofficial fork)",
       setupIcon: path.join(iconDirectory, "usageatlas.ico"),
-      iconUrl: "https://usageatlas.com/icon.ico",
+      // Served from this fork's own repository rather than the original project's site.
+      iconUrl: "https://raw.githubusercontent.com/Artleboss2/UsageAtlas-Unofficial/main/apps/desktop/resources/icons/usageatlas.ico",
       windowsSign
     }),
     new MakerZIP({}, ["darwin", "win32"]),
@@ -132,7 +135,7 @@ module.exports = {
         bin: "UsageAtlas",
         genericName: "AI usage dashboard",
         categories: ["Utility", "Development"],
-        homepage: "https://usageatlas.com",
+        homepage: "https://github.com/Artleboss2/UsageAtlas-Unofficial",
         license: "MIT",
         icon: path.join(iconDirectory, "usageatlas.png")
       }
@@ -143,8 +146,8 @@ module.exports = {
         bin: "UsageAtlas",
         genericName: "AI usage dashboard",
         categories: ["Utility", "Development"],
-        maintainer: "UsageAtlas contributors",
-        homepage: "https://usageatlas.com",
+        maintainer: "UsageAtlas Unofficial fork contributors",
+        homepage: "https://github.com/Artleboss2/UsageAtlas-Unofficial",
         icon: path.join(iconDirectory, "usageatlas.png")
       }
     })

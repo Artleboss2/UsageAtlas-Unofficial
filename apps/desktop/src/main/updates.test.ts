@@ -138,8 +138,8 @@ describe("desktop updates", () => {
   it("reads the fork's GitHub releases when that channel is selected", async () => {
     const updater = configureAutoUpdates({ channel: () => "fork" });
     await updater.check();
-    expect(autoUpdater.setFeedURL).toHaveBeenCalledWith({ url: "https://github.com/Artleboss2/UsageAtlas/releases/latest/download" });
-    expect(updater.downloadPageURL()).toBe("https://github.com/Artleboss2/UsageAtlas/releases/latest");
+    expect(autoUpdater.setFeedURL).toHaveBeenCalledWith({ url: "https://github.com/Artleboss2/UsageAtlas-Unofficial/releases/latest/download" });
+    expect(updater.downloadPageURL()).toBe("https://github.com/Artleboss2/UsageAtlas-Unofficial/releases/latest");
   });
 
   it("follows the channel without a restart", async () => {
@@ -150,7 +150,7 @@ describe("desktop updates", () => {
     channel = "upstream";
     await updater.check();
     expect(vi.mocked(autoUpdater.setFeedURL).mock.calls.map((call) => call[0])).toEqual([
-      { url: "https://github.com/Artleboss2/UsageAtlas/releases/latest/download" },
+      { url: "https://github.com/Artleboss2/UsageAtlas-Unofficial/releases/latest/download" },
       { url: "https://updates.usageatlas.com/win32/x64" }
     ]);
   });
@@ -161,7 +161,7 @@ describe("desktop updates", () => {
     const updater = configureAutoUpdates({ channel: () => "fork" });
     expect(await updater.check()).toMatchObject({ status: "available", availableVersion: "0.2.12" });
     expect(vi.mocked(net.fetch).mock.calls[0][0])
-      .toBe("https://api.github.com/repos/Artleboss2/UsageAtlas/releases/latest");
+      .toBe("https://api.github.com/repos/Artleboss2/UsageAtlas-Unofficial/releases/latest");
     expect(autoUpdater.checkForUpdates).not.toHaveBeenCalled();
   });
 });

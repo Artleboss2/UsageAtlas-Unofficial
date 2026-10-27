@@ -4,6 +4,7 @@ import type { DashboardProvider } from "@usageatlas/contracts";
 import { Button, Card, Label, Radio, RadioGroup, Skeleton, Spinner, Switch } from "@heroui/react";
 import type { BackgroundImagePreference, BuiltInBackgroundId, DesktopPreferences, DesktopUpdateState } from "../../shared/desktop-api";
 import { DEFAULT_BACKGROUND_IMAGE, isBackgroundImagePreference } from "../../shared/desktop-api";
+import { FORK_HOME_URL } from "../../shared/fork";
 import { DESKTOP_VERSION } from "../../shared/version";
 import { ExternalIcon, RefreshIcon } from "../icons";
 import { providerConnection, type ProviderConnection } from "../provider-connection";
@@ -266,17 +267,18 @@ export function Settings({
 
           <footer className="flex flex-col items-start gap-4 px-1 py-3 sm:flex-row sm:items-center">
             <div>
-              <strong className="text-sm font-medium">UsageAtlas</strong>
+              <strong className="text-sm font-medium">UsageAtlas — unofficial fork</strong>
               <p className="mt-1 text-xs text-muted">
-                Version {DESKTOP_VERSION} · Local-first desktop app
+                Version {DESKTOP_VERSION} · Local-first desktop app · Not affiliated with, endorsed by,
+                or supported by UsageAtlas
               </p>
             </div>
             <Button
               className="sm:ms-auto"
-              onPress={() => void onOpenExternal("https://usageatlas.com")}
+              onPress={() => void onOpenExternal(FORK_HOME_URL)}
               variant="ghost"
             >
-              <span>Open documentation</span>
+              <span>Open fork documentation</span>
               <ExternalIcon className="size-4" />
             </Button>
           </footer>
