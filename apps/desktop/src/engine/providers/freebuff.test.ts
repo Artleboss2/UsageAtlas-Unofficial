@@ -27,6 +27,29 @@ async function desktopFixture(home: string, rows: Array<{ ts: number; metrics: u
   return file;
 }
 
+async function joinedFixture(home: string): Promise<string> {
+  const directory = path.join(home, ".config", "freebuff-desktop", "projects", "app-99999999");
+  await mkdir(directory, { recursive: true });
+  const file = path.join(directory, "desktop-v2.db");
+  const database = new DatabaseSync(file);
+  database.exec(`CREATE TABLE messages (
+    seq INTEGER PRIMARY KEY AUTOINCREMENT,
+    thread_id TEXT NOT NULL,
+    role TEXT NOT NULL,
+    metrics_json TEXT NOT NULL DEFAULT '{}',
+    ts INTEGER NOT NULL
+  )`);
+  database.exec("CREATE TABLE threads (id TEXT PRIMARY KEY, project_path TEXT, model TEXT, sponsored TEXT)");
+  database.prepare("INSERT INTO threads (id, project_path, model, sponsored) VALUES (?,?,?,?)")
+    .run("thread-1", "C:/work/my-project", "m-abc", "run-1");
+  database.prepare("INSERT INTO messages (thread_id, role, metrics_json, ts) VALUES (?,?,?,?)")
+    .run("thread-1", "assistant", JSON.stringify({
+      usage: { inputTokens: 50, cachedInputTokens: 10, outputTokens: 25, totalTokens: 75 }, costUsd: 0.002
+    }), Date.parse("2026-10-26T10:00:00Z"));
+  database.close();
+  return file;
+}
+
 async function writeRoute(cacheFile: string, database: string): Promise<void> {
   const info = await stat(database);
   await mkdir(path.dirname(cacheFile), { recursive: true });
@@ -62,7 +85,25 @@ describe("Freebuff local usage", () => {
       { id: "output_tokens_today", label: "Output tokens today", unit: "tokens", used: 25, limit: null, remaining: null, resetAt: null }
     ]);
     expect(result.windows).toEqual([]);
-    expect(result.analytics).toBeNull();
+    // The same rows feed the daily history, so Diagnostics reports a real scan
+    // instead of an unread source.
+    expect(result.analytics?.status).toBe("available");
+    expect(result.analytics?.today).toMatchObject({ totalTokens: 135 });
+    expect(result.analytics?.totals).toMatchObject({ inputTokens: 1010, outputTokens: 124, totalTokens: 1134, requests: 3 });
+  });
+
+  it("attributes a turn to its thread's model, project and sponsored tier", async () => {
+    const home = await mkdtemp(path.join(tmpdir(), "usageatlas-freebuff-join-"));
+    await joinedFixture(home);
+    const result = await createFreebuffAdapter({ homeDirectory: home }).refresh(context);
+    expect(result.analytics?.status).toBe("available");
+    expect(result.analytics?.models[0]).toMatchObject({ id: "m-abc" });
+    expect(result.analytics?.projects[0]).toMatchObject({ id: "C:/work/my-project", label: "my-project" });
+    expect(result.analytics?.sessions[0]).toMatchObject({ id: "thread-1" });
+    expect(result.analytics?.serviceTiers[0]).toMatchObject({ id: "sponsored" });
+    expect(result.analytics?.totals).toMatchObject({
+      inputTokens: 50, cachedInputTokens: 10, outputTokens: 25, totalTokens: 75, requests: 1, estimatedCostUSD: 0.002
+    });
   });
 
   it("buckets database rows in the account's reporting time zone", async () => {
