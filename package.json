@@ -15,6 +15,7 @@
     "test": "node --test tooling/*.test.mjs && turbo run test",
     "typecheck": "turbo run typecheck",
     "generate:desktop-icons": "bun tooling/generate-desktop-icons.mjs",
+    "discover": "bun build tooling/discover-provider.ts --target=node --outfile=.vite/tools/discover-provider.mjs && node .vite/tools/discover-provider.mjs",
     "desktop:start": "turbo run dev --filter=@usageatlas/desktop --env-mode=loose",
     "desktop:lint": "turbo run lint --filter=@usageatlas/desktop",
     "desktop:typecheck": "turbo run typecheck --filter=@usageatlas/desktop",
