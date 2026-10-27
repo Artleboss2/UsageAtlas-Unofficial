@@ -22,6 +22,7 @@ describe("UsageAlertsPage", () => {
 });
 
 const preferences: DesktopPreferences = {
+  reportAliases: [],
   anonymousAnalytics: true,
     backgroundImage: "mist",
   customBackgroundName: null,

@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { openWritableSqlite } from "../platform/sqlite";
+import { identifyFact } from "./statistics-store";
 import { UsageStore } from "./usage-store";
 import { UsageSync, type UsageCloud } from "./usage-sync";
 import { sameUsage, validateUsageRecord, type UsageDay, type CloudRecord } from "@usageatlas/contracts/usage";
@@ -334,6 +335,63 @@ describe("usage cloud storage", () => {
     local.acknowledge(sent, { record: sent.record, revision: 1 });
     expect(local.pending()[0].record).toMatchObject({ totals: { totalTokens: 200 } });
     expect(local.pending()[0].revision).toBe(1);
+  });
+  it("uploads a relabelled copy while this computer keeps counting the real provider", async () => {
+    const local = store();
+    const own = day();
+    own.providerId = "freebuff";
+    own.models = [{ modelKey: "glm-4.6", totals: own.totals! }];
+    local.put(own);
+    const cloud = remoteCloud();
+    const service = sync(local);
+    await service.configure("a", cloud);
+    service.setAutomatic(false);
+    service.setReportAliases([{ source: "freebuff", reportAs: "codex", model: "gpt-5.3-codex" }]);
+    await service.save();
+    expect(cloud.rows.get(own.recordId)?.record).toMatchObject({
+      providerId: "codex",
+      models: [{ modelKey: "gpt-5.3-codex" }]
+    });
+    expect(local.get(own.recordId)?.record.providerId).toBe("freebuff");
+    expect(local.pending()).toEqual([]);
+    await service.restore();
+    expect(local.get(own.recordId)?.record).toMatchObject({ providerId: "freebuff", models: [{ modelKey: "glm-4.6" }] });
+    expect(local.records()).toHaveLength(1);
+  });
+  it("keeps a relabelled observation from coming back into local history", async () => {
+    const local = store();
+    local.statistics.capacity("freebuff", "local", "replica", {
+      source: "local_sessions",
+      updatedAt: "2026-10-27T09:00:00.000Z",
+      analytics: null,
+      identity: { plan: "pro" },
+      windows: [{ kind: "weekly", label: "Weekly", usedPercent: 10, remainingPercent: 90 }],
+      credits: null
+    });
+    const observed = local.statistics.pending()[0];
+    expect(identifyFact(observed).id).toBe(observed.id);
+    const cloud = remoteCloud();
+    cloud.readFacts = async () => ({ facts: [observed, { ...observed, providerId: "codex" }], cursor: "1", more: false });
+    cloud.saveFacts = async facts => facts.map(fact => fact.id);
+    const service = sync(local);
+    await service.configure("a", cloud);
+    service.setAutomatic(false);
+    await service.save();
+    expect(service.status().error).toBeNull();
+    expect(local.db.get("SELECT COUNT(*) AS facts FROM usage_fact")?.facts).toBe(1);
+  });
+
+  it("inserts a record that only exists in the cloud under the provider it was stored as", async () => {
+    const local = store();
+    const foreign = { ...day(), recordId: "ffffffff-ffff-4fff-8fff-ffffffffffff", localDay: "2026-09-06" };
+    const cloud = remoteCloud();
+    cloud.rows.set(foreign.recordId, { record: foreign, revision: 2 });
+    const service = sync(local);
+    await service.configure("a", cloud);
+    service.setAutomatic(false);
+    service.setReportAliases([{ source: "freebuff", reportAs: "codex", model: "gpt-5.3-codex" }]);
+    await service.restore();
+    expect(local.get(foreign.recordId)?.record.providerId).toBe(foreign.providerId);
   });
   it("restores without generating uploads and accepts downward corrections", () => {
     const local = store();

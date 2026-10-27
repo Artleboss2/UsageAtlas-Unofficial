@@ -234,7 +234,12 @@ export class UsageStore {
       [sent.localVersion, remote.revision, this.owner, sent.record.recordId, remote.revision]
     );
   }
-  merge(remote: CloudRecord): void {
+  /**
+   * `localize` maps a cloud copy back onto the local record it came from. A record
+   * uploaded under another provider (see `report-aliases`) must not rename the row
+   * counted here when it comes back down.
+   */
+  merge(remote: CloudRecord, localize?: (incoming: UsageRecord, local: UsageRecord) => UsageRecord): void {
     validateUsageRecord(remote.record);
     if (!Number.isSafeInteger(remote.revision) || remote.revision < 1)
       throw new Error("Invalid cloud revision.");
@@ -242,21 +247,22 @@ export class UsageStore {
       if (remote.record.kind === "usage_day" && remote.record.timeZone)
         this.setSetting(`timezone:${this.owner}:${remote.record.sourceId}`, remote.record.timeZone);
       const local = this.get(remote.record.recordId);
+      const incoming = local && localize ? localize(remote.record, local.record) : remote.record;
       if (!local) {
-        const inserted = this.put(remote.record, local ? this.compatibleDetails(local, remote.record) : null);
+        const inserted = this.put(incoming, null);
         this.acknowledge(inserted, remote);
       } else if (remote.revision < local.revision) {
         return;
-      } else if (sameUsage(local.record, remote.record)) {
+      } else if (sameUsage(local.record, incoming)) {
         this.acknowledge(local, remote);
       } else if (local.localVersion === local.savedVersion) {
-        const updated = this.put(remote.record, local ? this.compatibleDetails(local, remote.record) : null);
+        const updated = this.put(incoming, this.compatibleDetails(local, incoming));
         this.acknowledge(updated, remote);
       } else if (remote.revision !== local.revision) {
         this.db.run("UPDATE usage_record SET conflict = ? WHERE owner = ? AND id = ?", [
-          JSON.stringify(remote),
+          JSON.stringify({ ...remote, record: incoming }),
           this.owner,
-          remote.record.recordId
+          incoming.recordId
         ]);
       }
     });

@@ -27,6 +27,7 @@ import type { EngineRefreshProgress, EngineRequest, EngineResponse } from "./pro
 import { ProviderError, type ProviderAdapter, type ProviderRefreshResult } from "./provider";
 import { DESKTOP_VERSION } from "../shared/version";
 import { validateProviderCredential } from "../shared/quota-providers";
+import { validateReportAliases } from "../shared/report-aliases";
 
 const STALE_AFTER_SECONDS = 180;
 const PROVIDER_REFRESH_TIMEOUT_MS = 60_000;
@@ -108,6 +109,11 @@ export class EngineService {
         return this.snapshot() as unknown as JsonValue;
       }
       case "config.update": {
+        if (Object.hasOwn(request.params, "reportAliases")) {
+          const aliases = validateReportAliases(request.params.reportAliases);
+          this.sync?.setReportAliases(aliases);
+          return { reportAliases: aliases.length };
+        }
         const providerID = this.providerID(request.params.provider);
         if (Object.hasOwn(request.params, "credential")) {
           const adapter = this.providers.get(providerID)!;

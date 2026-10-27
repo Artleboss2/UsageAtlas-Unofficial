@@ -1,6 +1,7 @@
 import { CloudAccount, type KnownProfileStatus } from "./cloud-account";
 import { ProviderCredentialStore, configureProviderCredentials } from "./provider-credentials";
 import { isQuotaProvider, validateProviderCredential } from "../shared/quota-providers";
+import { validateReportAliases } from "../shared/report-aliases";
 import type { DashboardSnapshot } from "@usageatlas/contracts";
 import { existsSync, mkdtempSync, statSync, writeFileSync } from "node:fs";
 import {
@@ -421,6 +422,12 @@ function registerIPC(): void {
     preferences.update({ providerEnabled: { ...current, [providerID]: enabled } });
     return dashboard.setProviderEnabled(providerID, enabled);
   });
+  ipcMain.handle(IPC.setReportAliases, async (event, value: unknown) => {
+    assertTrustedSender(event);
+    const next = preferences.update({ reportAliases: validateReportAliases(value) });
+    await engine.setReportAliases(next.reportAliases);
+    return next;
+  });
   ipcMain.handle(IPC.getPreferences, (event) => {
     assertTrustedSender(event);
     return preferences.get();
@@ -611,9 +618,11 @@ if (squirrelStartup) {
   await configureProviderCredentials(providerCredentials, engine);
   engine.onStatus(status => {
     if (status === "ready") void configureProviderCredentials(providerCredentials, engine).then(() => engine.applyProviderPreferences(preferences.get().providerEnabled))
+      .then(() => engine.setReportAliases(preferences.get().reportAliases))
       .then(() => cloudAccount.reconnect()).catch(() => undefined);
   });
   await engine.applyProviderPreferences(preferences.get().providerEnabled);
+  await engine.setReportAliases(preferences.get().reportAliases);
   dashboard.activate();
   registerIPC();
   createTray();

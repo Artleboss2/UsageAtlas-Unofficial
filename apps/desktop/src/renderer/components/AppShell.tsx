@@ -1,6 +1,6 @@
 import type { AppRoute, EngineStatus } from "../../shared/desktop-api";
 import { useLayoutEffect, useRef } from "react";
-import { BellIcon, DayIcon, InsightsIcon, ProfileIcon, PulseIcon, SettingsIcon, TrendsIcon } from "../icons";
+import { AttributionIcon, BellIcon, DayIcon, InsightsIcon, ProfileIcon, PulseIcon, SettingsIcon, TrendsIcon } from "../icons";
 
 interface AppShellProps {
   route: AppRoute;
@@ -34,6 +34,7 @@ const routeTitles: Record<AppRoute, string> = {
   limits: "Limits",
   alerts: "Usage alerts",
   profile: "Public profile",
+  attribution: "Attribution",
   diagnostics: "Diagnostics",
   settings: "Settings"
 };
@@ -86,6 +87,12 @@ export function AppShell({ route, engineStatus, noticeCount, onNavigate, profile
             noticeCount={noticeCount}
             onPress={() => onNavigate("diagnostics")}
             status={engineStatus}
+          />
+          <RailButton
+            icon={AttributionIcon}
+            isCurrent={route === "attribution"}
+            label="Attribution"
+            onPress={() => onNavigate("attribution")}
           />
           <RailButton
             icon={SettingsIcon}

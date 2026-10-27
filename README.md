@@ -109,6 +109,12 @@ See the [privacy policy](https://usageatlas.com/privacy) and [terms of use](http
    and use **Save to cloud** whenever you want. A previous automatic-save choice is remembered on this computer.
 4. On another computer, sign in to the same account and choose **Restore from cloud**.
 
+A source UsageAtlas collects here but the hosted account does not model yet is refused by a cloud save. Open
+**Attribution** in the rail to map it to an official provider and the model you actually used: this computer
+keeps counting the source under its real name, while the uploaded copy arrives as that provider's usage. Local
+totals, charts, and detection never change, and a copy that comes back down keeps this computer's own provider
+and model breakdown.
+
 Only successfully saved history can be restored. Check that saving has completed before removing local app data
 or replacing your computer. Signing out stops future saves but does not delete existing cloud history. To request
 account and cloud-history deletion, email [privacy@usageatlas.com](mailto:privacy@usageatlas.com).

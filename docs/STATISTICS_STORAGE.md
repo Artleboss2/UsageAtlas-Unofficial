@@ -40,6 +40,8 @@ An unfinished-source marker survives shutdown or a failed batch. The next refres
 
 Local insertion and projection updates are transactional. Facts form a durable outbox and are acknowledged only after the server confirms their exact IDs. Retrying an interrupted upload is idempotent. A restore validates content hashes and saves its cursor in the same local transaction as its facts.
 
+An account can relabel a source the server does not model yet for cloud save (the desktop app's **Attribution** page, described in the README). A relabelled fact is sent with the id it was fingerprinted under, so the copy that comes back down no longer matches its own content. Such a copy is skipped rather than stored: the ledger keeps only observations whose id matches their content, and the relabel itself still changes nothing locally.
+
 Remote batches are bounded to 250 facts and 512 KiB. All reads and writes use the authenticated account; a payload cannot select a different user. Writes serialize on the account row before sequence allocation, preventing an incremental reader from skipping a later commit with a lower sequence. The remote projection-history trigger also archives direct administrative updates.
 
 The first desktop upgrade creates these tables and repairs recoverable model labels without changing totals. Existing local detail is retained across compatible cloud restores and archived before incompatible replacement. Source rescanning fills the event ledger only from surviving source files or provider history. It cannot reconstruct deleted logs, source fields never reported, or exact event timing from an old daily summary.

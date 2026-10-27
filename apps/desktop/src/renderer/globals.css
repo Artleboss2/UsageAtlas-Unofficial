@@ -2838,6 +2838,48 @@
   min-width: 0;
 }
 
+/* Cloud attribution rules. One row per source, stacked once the window is too
+   narrow to show the three fields side by side. */
+.atlas-alias-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 0.8fr) minmax(0, 1.2fr) auto;
+  align-items: end;
+  gap: 12px;
+}
+
+.atlas-alias-field {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  font-size: 0.75rem;
+  color: var(--muted);
+}
+
+.atlas-alias-field select,
+.atlas-alias-field input {
+  width: 100%;
+  min-width: 0;
+  height: 36px;
+  padding: 0 10px;
+  border: 1px solid var(--separator);
+  border-radius: 10px;
+  background: var(--surface-secondary);
+  color: var(--foreground);
+  font-size: 0.8125rem;
+}
+
+.atlas-alias-field select:focus-visible,
+.atlas-alias-field input:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 1px;
+}
+
+@media (max-width: 760px) {
+  .atlas-alias-row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
 /* The reconnect step reads louder than the state it follows, since it is the part
    the user has to act on. */
 .atlas-source-action {

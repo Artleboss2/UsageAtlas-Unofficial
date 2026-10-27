@@ -26,6 +26,7 @@ const api: UsageAtlasDesktopAPI = {
   getSnapshot: () => ipcRenderer.invoke(IPC.snapshot),
   refreshAll: () => ipcRenderer.invoke(IPC.refreshAll),
   setProviderEnabled: (providerID, enabled) => ipcRenderer.invoke(IPC.setProviderEnabled, providerID, enabled),
+  setReportAliases: (aliases) => ipcRenderer.invoke(IPC.setReportAliases, aliases),
   getPreferences: () => ipcRenderer.invoke(IPC.getPreferences),
   updatePreferences: (patch) => ipcRenderer.invoke(IPC.updatePreferences, patch),
   getDiagnostics: () => ipcRenderer.invoke(IPC.getDiagnostics),

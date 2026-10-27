@@ -1,8 +1,9 @@
 import type { DashboardSnapshot } from "@usageatlas/contracts";
 import type { GrowthEvent, GrowthEventProperties } from "./growth-events";
 import type { ProviderCredential, ProviderCredentialStatus, QuotaProviderId } from "./quota-providers";
+import type { ReportAlias } from "./report-aliases";
 
-export type AppRoute = "day" | "trends" | "insights" | "limits" | "alerts" | "profile" | "settings" | "diagnostics";
+export type AppRoute = "day" | "trends" | "insights" | "limits" | "alerts" | "profile" | "attribution" | "settings" | "diagnostics";
 export type EngineStatus = "starting" | "ready" | "degraded" | "stopped";
 
 export interface DesktopUpdateState {
@@ -62,6 +63,8 @@ export interface DesktopPreferences {
   /** Limit keys switched off for the tray menu. Missing keys stay in the menu. */
   trayLimits: Record<string, boolean>;
   usageAlerts: UsageAlertPreferences;
+  /** Local provider → official provider the cloud save should report it as. */
+  reportAliases: ReportAlias[];
 }
 
 export interface BackgroundImageSelection {
@@ -120,6 +123,7 @@ export interface UsageAtlasDesktopAPI {
   getSnapshot(): Promise<DashboardState>;
   refreshAll(): Promise<DashboardState>;
   setProviderEnabled(providerID: string, enabled: boolean): Promise<DashboardState>;
+  setReportAliases(aliases: ReportAlias[]): Promise<DesktopPreferences>;
   getPreferences(): Promise<DesktopPreferences>;
   updatePreferences(patch: Partial<DesktopPreferences>): Promise<DesktopPreferences>;
   getDiagnostics(): Promise<EngineDiagnostics>;
@@ -149,6 +153,7 @@ export const IPC = {
   snapshot: "dashboard:snapshot",
   refreshAll: "dashboard:refresh-all",
   setProviderEnabled: "dashboard:set-provider-enabled",
+  setReportAliases: "settings:set-report-aliases",
   getPreferences: "preferences:get",
   updatePreferences: "preferences:update",
   getDiagnostics: "engine:diagnostics",

@@ -12,6 +12,18 @@ export function identifyFact<T extends UsageFact>(fact: T): T {
 export function checkFact(fact: unknown): UsageFact {
   return fingerprint(fact).fact;
 }
+/**
+ * False when a fact's content no longer matches its id — an observation that was
+ * relabelled for upload (see `report-aliases`) before it left this computer.
+ */
+export function hasValidFingerprint(value: unknown): boolean {
+  try {
+    checkFact(value);
+    return true;
+  } catch {
+    return false;
+  }
+}
 interface Fingerprinted { fact: UsageFact; contentId: string | null }
 /** Checks a fact's id and fingerprints an event's content apart from its pricing catalog revision. */
 function fingerprint(value: unknown): Fingerprinted {

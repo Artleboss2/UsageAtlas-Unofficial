@@ -12,6 +12,7 @@ import {
   type DesktopPreferences
 } from "../shared/desktop-api";
 import { cloneUsageAlertPreferences, sanitizeUsageAlertPreferences } from "../shared/usage-alerts";
+import { validateReportAliases } from "../shared/report-aliases";
 
 type ProfileState = "missing" | "private" | "public";
 
@@ -32,6 +33,7 @@ function defaultPreferences(): StoredPreferences {
     limitOrder: [],
     trayLimits: {},
     usageAlerts: {},
+    reportAliases: [],
     anonymousAnalytics: true,
     analyticsInstallationId: randomUUID(),
     backgroundDefaultGeneration: BACKGROUND_DEFAULT_GENERATION,
@@ -61,7 +63,8 @@ export class PreferenceStore {
       providerEnabled: { ...this.values.providerEnabled },
       limitOrder: [...this.values.limitOrder],
       trayLimits: { ...this.values.trayLimits },
-      usageAlerts: cloneUsageAlertPreferences(this.values.usageAlerts)
+      usageAlerts: cloneUsageAlertPreferences(this.values.usageAlerts),
+      reportAliases: this.values.reportAliases.map(alias => ({ ...alias }))
     };
   }
 
@@ -104,6 +107,9 @@ export class PreferenceStore {
     if (patch.usageAlerts && typeof patch.usageAlerts === "object") {
       next.usageAlerts = sanitizeUsageAlertPreferences(patch.usageAlerts);
     }
+    if (Array.isArray(patch.reportAliases)) {
+      next.reportAliases = validateReportAliases(patch.reportAliases);
+    }
     this.values = next;
     this.persist();
     this.applyLoginItemSetting(next.launchAtLogin);
@@ -144,6 +150,7 @@ export class PreferenceStore {
           limitOrder: sanitizeLimitOrder(parsed.limitOrder),
           trayLimits: sanitizeTrayLimits(parsed.trayLimits),
           usageAlerts: sanitizeUsageAlertPreferences(parsed.usageAlerts),
+          reportAliases: validateReportAliases(parsed.reportAliases),
           backgroundDefaultGeneration: rolled.appliedGeneration,
           lastProfile: isLastProfile(parsed.lastProfile) ? parsed.lastProfile : null
         },

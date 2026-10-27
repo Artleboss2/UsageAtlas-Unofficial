@@ -9,6 +9,8 @@ import {
   type SaveResult
 } from "@usageatlas/contracts/usage";
 import type { CloudProgress } from "../../shared/desktop-api";
+import { aliasFact, aliasUsageRecord, unaliasUsageRecord, type ReportAlias } from "../../shared/report-aliases";
+import { hasValidFingerprint } from "./statistics-store";
 import { UsageStore } from "./usage-store";
 
 export interface UsageCloud {
@@ -30,6 +32,8 @@ export class UsageSync {
   private stopping = false;
   private controller: AbortController | null = null;
   private preparedAccount: string | null = null;
+  /** Applied to the uploaded copy only; local history keeps its real provider. */
+  private reportAliases: ReportAlias[] = [];
   constructor(
     private readonly store: UsageStore,
     private readonly changed: (reason: "account" | "history") => void = () => {},
@@ -93,6 +97,9 @@ export class UsageSync {
     this.schedule();
     if (switched) this.changed("account");
   }
+  setReportAliases(aliases: ReportAlias[]): void {
+    this.reportAliases = aliases;
+  }
   setAutomatic(enabled: boolean): void {
     if (!this.cloud) throw new Error("Sign in before enabling automatic save.");
     this.store.setSetting(`automatic:${this.store.owner}`, enabled ? "1" : "0");
@@ -150,7 +157,10 @@ export class UsageSync {
           if (!/^\d+$/.test(page.cursor) || BigInt(page.cursor) < BigInt(cursor)
             || (page.more && (page.cursor === cursor || !page.facts.length))) throw new Error("Invalid statistics page.");
           this.store.transaction(() => {
-            for (const fact of page.facts) this.store.statistics.put(fact, true);
+            // A relabelled fact comes back with the id it was uploaded under, so its content
+            // no longer matches that id. This computer already counted the real observation,
+            // and an unverifiable copy must not enter the local store.
+            for (const fact of page.facts) if (hasValidFingerprint(fact)) this.store.statistics.put(fact, true);
             this.store.setSetting(key, page.cursor);
           });
           cursor = page.cursor;
@@ -161,7 +171,7 @@ export class UsageSync {
       if (upload) {
         this.progress = { operation: "save", phase: "saving", completed: 0, total: this.store.statistics.pendingCount() };
         for (;;) {
-          const facts = this.store.statistics.pending();
+          const facts = this.store.statistics.pending().map(fact => aliasFact(fact, this.reportAliases));
           if (!facts.length) break;
           if (!cloud.saveFacts) throw new Error("This server does not support saving usage observations. Update before saving.");
           const saved = await cloud.saveFacts(facts);
@@ -178,7 +188,7 @@ export class UsageSync {
         do {
           const page = await cloud.read(after);
           if (this.closed || this.stopping) return;
-          for (const record of page.records) this.store.merge(record);
+          for (const record of page.records) this.store.merge(record, unaliasUsageRecord);
           if (page.next !== null && ((after !== null && page.next <= after) || page.records.length === 0)) {
             throw new Error("Invalid cloud page.");
           }
@@ -192,7 +202,11 @@ export class UsageSync {
         const counts = this.store.counts();
         this.progress = { operation: "save", phase: "saving", completed: 0, total: counts.pending - counts.conflicts - counts.invalid };
         while (pending.length) {
-          const results = await cloud.save(pending);
+          const outgoing = pending.map((row) => ({
+            ...row,
+            record: aliasUsageRecord(row.record, this.reportAliases)
+          }));
+          const results = await cloud.save(outgoing);
           if (this.closed || this.stopping) return;
           if (
             results.length !== pending.length ||
@@ -200,14 +214,16 @@ export class UsageSync {
           )
             throw new Error("Incomplete cloud save response.");
           for (const result of results) {
-            const sent = pending.find((row) => row.record.recordId === result.record.recordId);
-            if (!sent) throw new Error("Unexpected cloud save response.");
+            const sent = outgoing.find((row) => row.record.recordId === result.record.recordId);
+            const local = pending.find((row) => row.record.recordId === result.record.recordId);
+            if (!sent || !local) throw new Error("Unexpected cloud save response.");
             if (result.status === "saved") {
               if (!sameUsage(sent.record, result.record) || result.revision < sent.revision)
                 throw new Error("Cloud acknowledgement does not match the sent record.");
-              this.store.acknowledge(sent, result);
+              // Acknowledge the local row: the cloud only ever saw the relabelled copy.
+              this.store.acknowledge(local, result);
               this.progress.completed += 1;
-            } else this.store.merge(result);
+            } else this.store.merge(result, unaliasUsageRecord);
           }
           const next = this.store.pending();
           if (next.some((row) => pending.some((sent) =>

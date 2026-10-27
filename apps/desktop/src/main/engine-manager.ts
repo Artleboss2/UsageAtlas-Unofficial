@@ -4,6 +4,7 @@ import { EventEmitter } from "node:events";
 import type { EngineImportMessage, EngineMethod, EngineProgressMessage, EngineResponse } from "../engine/protocol";
 import { redactDiagnostic } from "../engine/platform/redaction";
 import type { EngineDiagnostics, EngineStatus } from "../shared/desktop-api";
+import type { ReportAlias } from "../shared/report-aliases";
 import { validateDashboard } from "./dashboard-validation";
 import type { EngineTransport, EngineTransportFactory } from "./engine-transport";
 
@@ -63,6 +64,10 @@ export class EngineManager {
 
   async updateConfig(values: Record<string, JsonValue>): Promise<JsonValue> {
     return this.request("config.update", values);
+  }
+
+  async setReportAliases(aliases: ReportAlias[]): Promise<void> {
+    await this.updateConfig({ reportAliases: aliases as unknown as JsonValue });
   }
 
   async setProviderEnabled(providerID: string, enabled: boolean): Promise<DashboardSnapshot> {

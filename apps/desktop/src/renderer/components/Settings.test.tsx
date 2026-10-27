@@ -92,6 +92,7 @@ function provider(overrides: Partial<DashboardProvider> = {}): DashboardProvider
 
 function preferences(): DesktopPreferences {
   return {
+    reportAliases: [],
     backgroundImage: "mist",
     customBackgroundName: null,
     launchAtLogin: false,
