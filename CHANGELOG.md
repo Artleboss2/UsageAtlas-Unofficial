@@ -3,6 +3,31 @@
 All notable UsageAtlas desktop changes are recorded here. This is an unofficial fork; see
 [README.md](README.md) for what it adds and what it is not.
 
+## 0.3.8 — 2026-10-28
+
+### Fixed
+
+- **A cloud save now uploads every pending change in one run.** The hosted service stores at most 40
+  observations per request, but the client sent its store's 250-fact page and expected all 250 to be
+  acknowledged: it threw `Incomplete statistics acknowledgement` after the first 40, so the counter
+  came down 40 at a time. Each request is capped at 40 and the loop continues until nothing is left,
+  with a regression test against a server that acknowledges only the first 40.
+- **The Settings tab bar sits on the same column as its cards.** It was an inline-level box, so the
+  auto margins that centre every other page block did nothing and the segmented control started at
+  the page gutter while the cards started 116 px further right.
+- **The chosen app mark reaches the Windows taskbar and the Start Menu shortcut.** Setting the window
+  icon alone left an AppUserModelID app showing the shortcut's artwork; the window now also publishes
+  its icon through `setAppDetails`, rewrites the Start Menu shortcut's icon, and asks Explorer to
+  refresh its icon cache.
+- **Alerts are visible even when Windows hides the toast.** Every system notification is mirrored as
+  an in-app banner with the same message, a link to the right page and a dismiss button, so Focus
+  assist or a per-app notification switch cannot swallow it.
+
+### Added
+
+- **A visual timeline in the README.** `docs/timeline.svg` draws every shipped 0.3 release and the
+  seven 0.4.0 goals in the app's own dark glass language, each goal carrying its acceptance test.
+
 ## 0.3.7 — 2026-10-28
 
 ### Added

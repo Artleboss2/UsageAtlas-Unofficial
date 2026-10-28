@@ -34,15 +34,16 @@
 - **Appearance, in Settings.** A dedicated Appearance tab chooses the font (System, Inter, Manrope,
   Figtree, Jakarta, Geist — all bundled variable fonts), the type scale, the ink colour, the accent
   tint used by buttons and focus rings (theme, ink, cobalt, violet, rose, forest, amber), glass or
-  solid card surfaces, whether the interface animates, the app mark (datamosh, classic or duotone,
-  applied to the title bar, window and taskbar) and the background. Figures print every digit by
+  solid card surfaces, whether the interface animates, the app  mark (datamosh, classic or duotone,
+  applied to the title bar, window, taskbar and Start Menu shortcut) and the background. Figures print every digit by
   default — `1,284,930`, not `1.3M` — and Settings can switch back to short units; chart axes stay
   short either way because labels would otherwise collide. Pages glide in from the side they were
   reached from, the rail highlight slides between pages, and the home selectors grow under the
   pointer.
 - **A daily token alert that works for every source.** Usage alerts now include a token threshold:
   once a source passes it in a local day, a desktop notification says exactly
-  `You used 128,400 tokens on Freebuff today.` A test button sends a real notification.
+  `You used 128,400 tokens on Freebuff today.` A test button sends a real notification, and every
+  alert is mirrored as an in-app banner, so Focus assist or a per-app Windows switch cannot hide it.
 - **Cloud attribution, with a wheel.** The hosted service refuses a provider it does not model, so a
   cloud save containing Freebuff or z.ai usage is rejected. The **Attribution** page maps such a
   source to one or more official providers, each with a share — 30 % Codex, 20 % ChatGPT, 50 %
@@ -65,6 +66,13 @@
   which keeps the branding and web copies untouched and regenerates the same bytes on every run.
   Windows and Linux draw their own minimize, maximize and close buttons in the title bar, the way
   Freebuff does; macOS keeps its traffic lights.
+
+## Timeline
+
+![Timeline: every 0.3 release from the Freebuff reader to the 0.3.8 cloud-save and notification fixes, followed by the seven 0.4.0 goals](docs/timeline.svg)
+
+Each shipped card is detailed in [CHANGELOG.md](CHANGELOG.md); the 0.4.0 cards below carry the
+acceptance test each one has to meet before it counts as done.
 
 ## What 0.4.0 aims for
 
