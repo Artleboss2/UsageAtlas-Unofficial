@@ -2,6 +2,7 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import pngToIco from "png-to-ico";
 import pngjs from "pngjs";
 
 const { PNG } = pngjs;
@@ -10,6 +11,9 @@ const { PNG } = pngjs;
 // icon. They are built from the same two masters the installer uses, so picking
 // one never produces artwork the icon pipeline does not know about.
 const MARK_SIZE = 256;
+// Windows draws the window and taskbar icon from the ICO, so each mark ships one
+// with the sizes the shell asks for instead of a single 256 px bitmap.
+const MARK_ICO_SIZES = [16, 24, 32, 48, 64, 128, 256];
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const iconRoot = path.join(repoRoot, "apps", "desktop", "resources", "icons");
 const markRoot = path.join(iconRoot, "marks");
@@ -25,6 +29,10 @@ for (const [mark, source] of Object.entries(sources)) {
   const image = PNG.sync.read(await readFile(source));
   const small = resample(image, MARK_SIZE);
   await writeFile(path.join(markRoot, `mark-${mark}.png`), PNG.sync.write(small));
+  await writeFile(
+    path.join(markRoot, `mark-${mark}.ico`),
+    await pngToIco(MARK_ICO_SIZES.map((size) => PNG.sync.write(size === MARK_SIZE ? small : resample(small, size))))
+  );
 }
 
 // A cool duotone of the classic mark, for a taskbar that is neither light nor dark.
@@ -37,6 +45,10 @@ for (let pixel = 0; pixel < MARK_SIZE * MARK_SIZE; pixel += 1) {
   classic.data[offset + 2] = Math.round(190 + luminance * 46);
 }
 await writeFile(path.join(markRoot, "mark-duotone.png"), PNG.sync.write(classic));
+await writeFile(
+  path.join(markRoot, "mark-duotone.ico"),
+  await pngToIco(MARK_ICO_SIZES.map((size) => PNG.sync.write(size === MARK_SIZE ? classic : resample(classic, size))))
+);
 
 console.log(`Generated app marks in ${path.relative(repoRoot, markRoot)}`);
 

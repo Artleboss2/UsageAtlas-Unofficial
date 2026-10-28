@@ -123,18 +123,23 @@ const windowChrome = {
   dark: { backgroundColor: "#1c1c1e", symbolColor: "#f5f5f7" }
 } as const;
 /** Which artwork each selectable mark ships as, under the packaged icons directory. */
-const appMarkFiles: Record<AppMark, string> = {
-  datamosh: "usageatlas.png",
-  classic: path.join("marks", "mark-classic.png"),
-  duotone: path.join("marks", "mark-duotone.png")
+const appMarkFiles: Record<AppMark, { png: string; ico: string }> = {
+  datamosh: { png: "usageatlas.png", ico: "usageatlas.ico" },
+  classic: { png: path.join("marks", "mark-classic.png"), ico: path.join("marks", "mark-classic.ico") },
+  duotone: { png: path.join("marks", "mark-duotone.png"), ico: path.join("marks", "mark-duotone.ico") }
 };
 
-function appMarkPath(mark: AppMark): string {
-  return path.join(runtimeIconDirectory, appMarkFiles[mark]);
+/**
+ * Windows draws the window, taskbar and tray artwork from an ICO with the sizes
+ * the shell asks for, so the chosen mark reaches the taskbar as well as the title
+ * bar. The renderer still gets the PNG, which every platform can preview.
+ */
+function appMarkPath(mark: AppMark, format: "png" | "ico" = "png"): string {
+  return path.join(runtimeIconDirectory, appMarkFiles[mark][format]);
 }
 
-function loadAppMark(mark: AppMark): Electron.NativeImage {
-  const image = nativeImage.createFromPath(appMarkPath(mark));
+function loadAppMark(mark: AppMark, format: "png" | "ico" = "png"): Electron.NativeImage {
+  const image = nativeImage.createFromPath(appMarkPath(mark, format));
   if (image.isEmpty()) throw new Error("UsageAtlas application mark could not be loaded");
   return image;
 }
@@ -146,7 +151,7 @@ function trayImage(image: Electron.NativeImage): Electron.NativeImage {
 
 /** Swaps the window, dock and tray artwork without restarting the app. */
 function applyAppMark(mark: AppMark): void {
-  const image = loadAppMark(mark);
+  const image = loadAppMark(mark, process.platform === "win32" ? "ico" : "png");
   if (mainWindow && !mainWindow.isDestroyed()) mainWindow.setIcon(image);
   if (process.platform === "darwin") app.dock?.setIcon(image);
   if (tray && !tray.isDestroyed()) tray.setImage(trayImage(image));
