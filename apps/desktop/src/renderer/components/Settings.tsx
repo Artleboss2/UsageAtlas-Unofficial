@@ -19,6 +19,7 @@ import { FORK_HOME_URL } from "../../shared/fork";
 import { DESKTOP_VERSION } from "../../shared/version";
 import { CheckIcon, ExternalIcon, RefreshIcon } from "../icons";
 import { applyAppearance, FONT_OPTIONS, FONT_STACKS, INK_SWATCHES, MARK_OPTIONS } from "../appearance";
+import type { MessageKey } from "../i18n";
 import { providerConnection, type ProviderConnection } from "../provider-connection";
 import { BUILT_IN_WALLPAPERS } from "../wallpapers";
 import { ProviderLogo } from "./ProviderLogo";
@@ -356,7 +357,9 @@ export function Settings({
                         Aa
                       </span>
                       <span className="atlas-font-tile__label">{option.label}</span>
-                      <span className="atlas-font-tile__note">{option.note}</span>
+                      <span className="atlas-font-tile__note">
+                        {t(`option.font.${option.id}` as MessageKey)}
+                      </span>
                       {appearance.font === option.id ? (
                         <span aria-hidden="true" className="atlas-font-tile__check">
                           <CheckIcon />
@@ -399,21 +402,24 @@ export function Settings({
               </Card.Header>
               <Card.Content className="mt-2">
                 <div className="atlas-ink-swatches">
-                  {INK_SWATCHES.map((swatch) => (
+                  {INK_SWATCHES.map((swatch) => {
+                    const label = t(`option.ink.${swatch.id}` as MessageKey);
+                    return (
                     <button
-                      aria-label={swatch.label}
+                      aria-label={label}
                       aria-pressed={appearance.textColor === swatch.value}
                       className="atlas-ink-swatch"
                       data-theme={swatch.value === null ? "true" : undefined}
-                      key={swatch.label}
+                      key={swatch.id}
                       onClick={() => setAppearance({ textColor: swatch.value })}
                       style={swatch.value ? { background: swatch.value } : undefined}
-                      title={swatch.label}
+                      title={label}
                       type="button"
                     >
                       {appearance.textColor === swatch.value ? <CheckIcon /> : null}
                     </button>
-                  ))}
+                    );
+                  })}
                   <label className="atlas-ink-custom">
                     <span>{t("settings.ink.custom")}</span>
                     <input
@@ -449,7 +455,9 @@ export function Settings({
                         ) : null}
                       </span>
                       <span className="atlas-mark-tile__label">{option.label}</span>
-                      <span className="atlas-mark-tile__note">{option.note}</span>
+                      <span className="atlas-mark-tile__note">
+                        {t(`option.mark.${option.id}` as MessageKey)}
+                      </span>
                     </button>
                   ))}
                 </div>
@@ -491,7 +499,7 @@ export function Settings({
                     ))}
                     {customBackgroundUrl ? (
                       <WallpaperOption
-                        label={preferences.customBackgroundName ?? "Custom"}
+                        label={preferences.customBackgroundName ?? t("option.background.custom")}
                         src={customBackgroundUrl}
                         value="custom"
                       />
