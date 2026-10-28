@@ -91,7 +91,7 @@ describe("usage cloud storage", () => {
     expect(read).toHaveBeenCalledTimes(1);
     expect(service.status()).toMatchObject({ accountId: null, busy: false, automatic: false, lastCompleted: null });
   });
-  it("restores over a corrupt payload and keeps damaged conflicts out of status", async () => {
+  it("restores over a corrupt payload and drops a damaged conflict instead of blocking the record", async () => {
     const local = store();
     local.selectAccount("a");
     local.put(day());
@@ -105,8 +105,9 @@ describe("usage cloud storage", () => {
     expect(local.get(day().recordId)?.record).toMatchObject({ totals: { totalTokens: 200 } });
     local.put(day(300));
     local.db.run("UPDATE usage_record SET conflict = '{not-json' WHERE id = ?", [day().recordId]);
-    expect(service.status()).toMatchObject({ conflicts: [], pending: 1 });
-    expect(service.status().error).toContain("1 invalid local usage record was skipped");
+    // The unreadable cloud copy is dropped: it offered a choice, not usage.
+    expect(service.status()).toMatchObject({ conflicts: [], pending: 1, error: null });
+    expect(local.get(day().recordId)?.conflict).toBeNull();
     const healthy = { ...day(), recordId: "ffffffff-ffff-4fff-8fff-ffffffffffff", localDay: "2026-09-06" };
     local.put(healthy);
     await service.save();

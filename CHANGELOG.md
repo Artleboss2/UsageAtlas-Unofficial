@@ -3,6 +3,14 @@
 All notable UsageAtlas desktop changes are recorded here. This is an unofficial fork; see
 [README.md](README.md) for what it adds and what it is not.
 
+## 0.3.4 — 2026-10-27
+
+### Fixed
+
+- **Cloud save no longer reports an error and leaves the dashboard at zero.** Three separate defects chained together. A day the server already held under another label came back as a conflict, and the local copy stored for comparison mixed the server's totals with this machine's model breakdown, which contradicts itself (`Breakdowns exceed daily usage`); the record then failed to decode, was dropped from analytics — so today's usage read as `0` — and was flagged `Invalid local usage record`, which blocked every later save. A comparison copy now keeps its own numbers, an unreadable copy is dropped instead of blocking the record, and records an earlier build flagged are repaired when the app opens.
+- **A record keeps the label it was first reported under.** Re-weighting an Attribution rule between runs made the wheel land the same day on another provider, and the server refuses a record it already holds under a different one — the save then stopped with `Cloud save made no progress`. Each record and observation now stores its provider and model on first upload and reuses it, and a copy the server already holds supplies that label when the local database has none. Saving proceeds from the revision the server reached instead of stalling.
+- The stored label is separated by `|` rather than a NUL byte: the SQLite binding truncates strings at NUL, which silently dropped the model and made the server answer `400 Invalid usage records`.
+
 ## 0.3.3 — 2026-10-27
 
 ### Added

@@ -153,9 +153,17 @@ export function applyTargetToRecord(record: UsageRecord, target: ReportTarget): 
  */
 export function unaliasUsageRecord(record: UsageRecord, local: UsageRecord): UsageRecord {
   if (record.providerId === local.providerId) return record;
-  if (record.kind === "usage_day" && local.kind === "usage_day")
+  // The local breakdown only belongs on a cloud copy that counts the same usage.
+  // Borrowing it from a different snapshot would make the copy contradict itself
+  // (its models would exceed its daily totals) and no reader could accept it again.
+  if (record.kind === "usage_day" && local.kind === "usage_day" && sameTotals(record.totals, local.totals))
     return { ...record, providerId: local.providerId, models: local.models };
   return { ...record, providerId: local.providerId };
+}
+
+function sameTotals(a: StoredTotals | null, b: StoredTotals | null): boolean {
+  if (a === null || b === null) return a === b;
+  return (Object.keys(a) as (keyof StoredTotals)[]).every(key => a[key] === b[key]);
 }
 
 /** Reads the single-target rules older versions stored, as one-target plans. */

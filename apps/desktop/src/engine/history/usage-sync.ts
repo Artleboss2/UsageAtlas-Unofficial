@@ -13,13 +13,15 @@ import {
   OFFICIAL_PROVIDERS,
   applyTargetToFact,
   applyTargetToRecord,
+  isOfficialProvider,
   planFor,
   unaliasUsageRecord,
-  type ReportPlan
+  type ReportPlan,
+  type ReportTarget
 } from "../../shared/report-plans";
 import { spinTarget } from "./report-wheel";
 import { hasValidFingerprint, identifyFact } from "./statistics-store";
-import { UsageStore } from "./usage-store";
+import { ATTRIBUTION_SEPARATOR, parseAttribution, UsageStore } from "./usage-store";
 
 export interface UsageCloud {
   readFacts?(after: string): Promise<{ facts: UsageFact[]; cursor: string; more: boolean }>;
@@ -142,16 +144,39 @@ export class UsageSync {
    * of one request keeps the same target.
    */
   private renameFact(fact: UsageFact): { fact: UsageFact; localId: string } {
-    const plan = planFor(this.reportPlans, fact.providerId);
-    const target = spinTarget(plan, fact.kind === "usage_event" ? fact.eventId : fact.id);
-    if (!target) return { fact, localId: fact.id };
-    return { fact: identifyFact(applyTargetToFact(fact, target)), localId: fact.id };
+    const target = this.targetFor(`fact:${fact.id}`, fact.providerId, fact.kind === "usage_event" ? fact.eventId : fact.id);
+    return target
+      ? { fact: identifyFact(applyTargetToFact(fact, target)), localId: fact.id }
+      : { fact, localId: fact.id };
   }
   /** Renames one daily record; a day keeps the target it landed on between saves. */
   private renameRecord(row: PendingRecord): PendingRecord {
-    const plan = planFor(this.reportPlans, row.record.providerId);
-    const target = spinTarget(plan, row.record.recordId);
+    const target = this.targetFor(`record:${row.record.recordId}`, row.record.providerId, row.record.recordId);
     return target ? { ...row, record: applyTargetToRecord(row.record, target) } : row;
+  }
+  /**
+   * One unit of usage keeps the target it was first reported as, even after the
+   * plan's weights change: the server holds a record under one provider and
+   * rejects the same record under another. A target that the current plan no
+   * longer offers falls back to a fresh spin.
+   */
+  private targetFor(key: string, source: string, spinKey: string): ReportTarget | null {
+    const plan = planFor(this.reportPlans, source);
+    if (!plan) return null;
+    const stored = this.store.attribution(key);
+    if (stored) {
+      const { reportAs, model } = parseAttribution(stored);
+      // The server bound this record to that label, so the plan's current weights
+      // and models no longer apply to it; a copy stored without a model borrows the
+      // one the plan still offers for that provider.
+      if (isOfficialProvider(reportAs)) {
+        const fallback = plan.targets.find(target => target.reportAs === reportAs)?.model ?? plan.targets[0].model;
+        return { reportAs, model: model || fallback, weight: 0 };
+      }
+    }
+    const target = spinTarget(plan, spinKey);
+    if (target) this.store.setAttribution(key, `${target.reportAs}${ATTRIBUTION_SEPARATOR}${target.model}`);
+    return target;
   }
   setAutomatic(enabled: boolean): void {
     if (!this.cloud) throw new Error("Sign in before enabling automatic save.");
@@ -264,6 +289,7 @@ export class UsageSync {
         this.progress = { operation: "save", phase: "saving", completed: 0, total: counts.pending - counts.conflicts - counts.invalid };
         while (pending.length) {
           const outgoing = pending.map((row) => this.renameRecord(row));
+          const sent = new Map(outgoing.map(row => [row.record.recordId, this.stateOf(row)]));
           const results = await cloud.save(outgoing);
           if (this.closed || this.stopping) return;
           if (
@@ -286,9 +312,11 @@ export class UsageSync {
           // Only the rows this pass sent count as progress: a source the server
           // refuses to accept stays pending and is reported instead of retried.
           const next = this.store.pending(providers);
-          if (next.some((row) => pending.some((sent) =>
-            row.record.recordId === sent.record.recordId && row.localVersion === sent.localVersion && row.revision === sent.revision
-          ))) throw new Error("Cloud save made no progress. Restore from cloud, then try again.");
+          // A row the server keeps answering about must change something — its own
+          // version, its revision, or the provider it is reported as — or the save
+          // would spin forever. Adopting the server's label and revision counts.
+          if (next.some((row) => sent.get(row.record.recordId) === this.stateOf(row)))
+            throw new Error("Cloud save made no progress. Restore from cloud, then try again.");
           pending = next;
           const remaining = this.store.counts();
           this.progress.total = this.progress.completed + remaining.pending - remaining.conflicts - remaining.invalid;
@@ -311,6 +339,10 @@ export class UsageSync {
         this.schedule();
       });
     return this.running;
+  }
+  /** What one pending row looks like to the server, for progress checks. */
+  private stateOf(row: PendingRecord): string {
+    return [row.localVersion, row.revision, this.store.attribution(`record:${row.record.recordId}`)].join("\u0000");
   }
   private schedule(): void {
     if (!this.automatic || !this.cloud || this.closed || this.stopping || this.timer || this.running) return;

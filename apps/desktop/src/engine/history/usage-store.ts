@@ -54,6 +54,7 @@ export class UsageStore {
     this.statistics = new StatisticsStore(db, () => this.owner);
     if (!db.all("PRAGMA table_info(usage_record)").some((column) => column.name === "save_error"))
       db.exec("ALTER TABLE usage_record ADD COLUMN save_error TEXT");
+    this.repair();
   }
   get owner(): string {
     return this.setting("owner") ?? "";
@@ -96,6 +97,57 @@ export class UsageStore {
       }
       this.db.run("DELETE FROM usage_record WHERE owner = '' AND save_error IS NULL");
     });
+  }
+  /**
+   * Clears state that earlier builds left behind: a cloud copy merged with the
+   * local breakdown can contradict itself (`Breakdowns exceed daily usage`), and
+   * the `save_error` it caused then hides a perfectly valid local record from
+   * analytics and from every later save. Neither can ever be applied, so both
+   * are dropped and the local record becomes uploadable again.
+   */
+  private repair(): void {
+    for (const row of this.db.all("SELECT * FROM usage_record WHERE conflict IS NOT NULL OR save_error IS NOT NULL")) {
+      const owner = String(row.owner), id = String(row.id);
+      const conflict = readConflict(row.conflict);
+      let local: UsageRecord | null = null;
+      try {
+        local = validateUsageRecord(JSON.parse(String(row.payload)));
+      } catch {
+        // The local payload itself is unreadable; keep the flags for recovery.
+      }
+      if (row.conflict !== null) {
+        if (!conflict) this.db.run("UPDATE usage_record SET conflict = NULL WHERE owner = ? AND id = ?", [owner, id]);
+        else if (local && conflict.record.providerId !== local.providerId) {
+          // The same record was reported under another provider when the wheel was
+          // weighted differently. This machine's own earlier upload becomes the
+          // label, and the local copy continues from the revision it reached.
+          this.setAttribution(`record:${id}`, attributionOf(conflict.record));
+          this.db.run("UPDATE usage_record SET cloud_revision = ?, conflict = NULL WHERE owner = ? AND id = ?", [
+            conflict.revision,
+            owner,
+            id
+          ]);
+        }
+      }
+      if (row.save_error !== null && local)
+        this.db.run("UPDATE usage_record SET save_error = NULL WHERE owner = ? AND id = ?", [owner, id]);
+    }
+  }
+  /**
+   * The attribution (`provider\0model`) a record was already reported as. The
+   * reporting wheel may be re-weighted between runs, but a record the server
+   * already holds under one provider must keep it: the server refuses the same
+   * record under another provider at the same revision.
+   */
+  attribution(key: string): string | null {
+    return this.setting(`attribution:${key}`);
+  }
+  setAttribution(key: string, value: string): void {
+    this.setSetting(`attribution:${key}`, value);
+  }
+  /** Keeps the first attribution this machine used for a record. */
+  rememberAttribution(key: string, value: string): void {
+    if (this.attribution(key) === null) this.setAttribution(key, value);
   }
   get(id: string, owner = this.owner): LocalRecord | null {
     const row = this.db.get("SELECT * FROM usage_record WHERE owner = ? AND id = ?", [owner, id]);
@@ -218,6 +270,7 @@ export class UsageStore {
     try {
       const local = decode(row);
       if (local.record.recordId !== row.id) throw new Error("Usage record ID does not match its stored key.");
+      this.clearSaveError(row);
       return local;
     } catch {
       // Keep the original payload for recovery; a new collection clears this flag.
@@ -226,6 +279,13 @@ export class UsageStore {
       ]);
       return null;
     }
+  }
+  /** Drops a recovered record's stale flag so the next save sends it again. */
+  private clearSaveError(row: Record<string, unknown>): void {
+    if (row.save_error === null) return;
+    this.db.run("UPDATE usage_record SET save_error = NULL WHERE owner = ? AND id = ?", [
+      String(row.owner), String(row.id)
+    ]);
   }
   /** Providers of the records still waiting to be saved, in stable order. */
   pendingProviders(): string[] {
@@ -261,6 +321,10 @@ export class UsageStore {
         this.setSetting(`timezone:${this.owner}:${remote.record.sourceId}`, remote.record.timeZone);
       const local = this.get(remote.record.recordId);
       const incoming = local && localize ? localize(remote.record, local.record) : remote.record;
+      // The cloud copy carries the label this machine reported the record under, and
+      // the server refuses that record under any other provider from now on.
+      if (local && remote.record.providerId !== local.record.providerId)
+        this.setAttribution(`record:${remote.record.recordId}`, attributionOf(remote.record));
       if (!local) {
         const inserted = this.put(incoming, null);
         this.acknowledge(inserted, remote);
@@ -271,6 +335,15 @@ export class UsageStore {
       } else if (local.localVersion === local.savedVersion) {
         const updated = this.put(incoming, this.compatibleDetails(local, incoming));
         this.acknowledge(updated, remote);
+      } else if (this.reportedAs(remote.record, local.record)) {
+        // Same day, same attribution, newer local usage: this machine is simply
+        // ahead of its own earlier upload. Continue from the revision the server
+        // holds instead of leaving the record pending forever.
+        this.db.run("UPDATE usage_record SET cloud_revision = ? WHERE owner = ? AND id = ?", [
+          remote.revision,
+          this.owner,
+          local.record.recordId
+        ]);
       } else if (remote.revision !== local.revision) {
         this.db.run("UPDATE usage_record SET conflict = ? WHERE owner = ? AND id = ?", [
           JSON.stringify({ ...remote, record: incoming }),
@@ -289,6 +362,8 @@ export class UsageStore {
         const updated = this.put(remote.record, local ? this.compatibleDetails(local, remote.record) : null);
         this.acknowledge(updated, remote);
       } else {
+        if (remote.record.providerId !== local.record.providerId)
+          this.rememberAttribution(`record:${id}`, attributionOf(remote.record));
         this.db.run(
           "UPDATE usage_record SET cloud_revision = ?, conflict = NULL WHERE owner = ? AND id = ?",
           [remote.revision, this.owner, id]
@@ -296,6 +371,9 @@ export class UsageStore {
       }
     });
     this.onChange?.();
+  }
+  private reportedAs(remote: UsageRecord, local: UsageRecord): boolean {
+    return this.attribution(`record:${local.recordId}`) === attributionOf(remote);
   }
   private compatibleDetails(local: LocalRecord, incoming: UsageRecord): string | null {
     if (incoming.kind !== "usage_day" || local.record.kind !== "usage_day") return null;
@@ -322,9 +400,24 @@ export class UsageStore {
     }
   }
 }
+/**
+ * Separates a stored label's provider from its model. A NUL byte cannot be used:
+ * the SQLite binding truncates strings at it, which silently dropped the model.
+ */
+export const ATTRIBUTION_SEPARATOR = "|";
+/** How one uploaded record is labelled: the provider the server sees and its model. */
+export function attributionOf(record: UsageRecord): string {
+  const models = record.kind === "usage_day" ? record.models : null;
+  return `${record.providerId}${ATTRIBUTION_SEPARATOR}${models?.[0]?.modelKey ?? ""}`;
+}
+export function parseAttribution(value: string): { reportAs: string; model: string } {
+  const cut = value.indexOf(ATTRIBUTION_SEPARATOR);
+  return cut === -1
+    ? { reportAs: value, model: "" }
+    : { reportAs: value.slice(0, cut), model: value.slice(cut + 1) };
+}
 function decode(row: Record<string, unknown>): LocalRecord {
-  const conflict = row.conflict ? JSON.parse(String(row.conflict)) as CloudRecord : null;
-  if (conflict) validateUsageRecord(conflict.record);
+  const conflict = readConflict(row.conflict);
   return {
     owner: String(row.owner),
     record: validateUsageRecord(JSON.parse(String(row.payload))),
@@ -335,4 +428,18 @@ function decode(row: Record<string, unknown>): LocalRecord {
     saveError: row.save_error === null ? null : String(row.save_error),
     conflict
   };
+}
+/**
+ * A stored cloud copy only ever offers a choice, so an unreadable one is dropped
+ * instead of blocking the local record it was compared with.
+ */
+function readConflict(value: unknown): CloudRecord | null {
+  if (value === null || value === undefined) return null;
+  try {
+    const conflict = JSON.parse(String(value)) as CloudRecord;
+    validateUsageRecord(conflict.record);
+    return Number.isSafeInteger(conflict.revision) && conflict.revision >= 1 ? conflict : null;
+  } catch {
+    return null;
+  }
 }
