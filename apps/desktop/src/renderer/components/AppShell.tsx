@@ -1,6 +1,8 @@
 import type { AppRoute, EngineStatus } from "../../shared/desktop-api";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { AttributionIcon, BellIcon, DayIcon, InsightsIcon, ProfileIcon, PulseIcon, SettingsIcon, TrendsIcon } from "../icons";
+import { useI18n } from "../i18n";
+import type { MessageKey } from "../i18n";
 
 interface AppShellProps {
   route: AppRoute;
@@ -21,26 +23,26 @@ interface AppShellProps {
 
 const primaryNavigation: Array<{
   route: AppRoute;
-  label: string;
+  labelKey: MessageKey;
   icon: (props: React.SVGProps<SVGSVGElement>) => React.JSX.Element;
 }> = [
-  { route: "day", label: "Today", icon: DayIcon },
-  { route: "trends", label: "History", icon: TrendsIcon },
-  { route: "insights", label: "Insights", icon: InsightsIcon },
-  { route: "alerts", label: "Usage alerts", icon: BellIcon },
-  { route: "profile", label: "Public profile", icon: ProfileIcon }
+  { route: "day", labelKey: "nav.today", icon: DayIcon },
+  { route: "trends", labelKey: "nav.history", icon: TrendsIcon },
+  { route: "insights", labelKey: "nav.insights", icon: InsightsIcon },
+  { route: "alerts", labelKey: "nav.alerts", icon: BellIcon },
+  { route: "profile", labelKey: "nav.profile", icon: ProfileIcon }
 ];
 
-const routeTitles: Record<AppRoute, string> = {
-  day: "Today",
-  trends: "History",
-  insights: "Insights",
-  limits: "Limits",
-  alerts: "Usage alerts",
-  profile: "Public profile",
-  attribution: "Attribution",
-  diagnostics: "Diagnostics",
-  settings: "Settings"
+const routeTitleKeys: Record<AppRoute, MessageKey> = {
+  day: "nav.today",
+  trends: "nav.history",
+  insights: "nav.insights",
+  limits: "nav.history",
+  alerts: "nav.alerts",
+  profile: "nav.profile",
+  attribution: "nav.attribution",
+  diagnostics: "nav.diagnostics",
+  settings: "nav.settings"
 };
 
 /** Reading order of the rail, so a page slides in from the side it comes from. */
@@ -57,6 +59,7 @@ const routeOrder: Record<AppRoute, number> = {
 };
 
 export function AppShell({ route, engineStatus, noticeCount, onNavigate, profileBadge = false, appMarkUrl = null, previousRoute = null, activityControl, updateControl, children }: AppShellProps): React.JSX.Element {
+  const { t } = useI18n();
   const workspaceRef = useRef<HTMLElement>(null);
   // A later page in the rail slides in from the right, an earlier one from the left.
   const direction = previousRoute && routeOrder[route] < routeOrder[previousRoute] ? "back" : "forward";
@@ -79,7 +82,7 @@ export function AppShell({ route, engineStatus, noticeCount, onNavigate, profile
           <span className="atlas-app-shell__brand-name">UsageAtlas</span>
           {updateControl}
           <span aria-hidden="true" className="atlas-app-shell__brand-divider" />
-          <span className="atlas-app-shell__route-name">{routeTitles[route]}</span>
+          <span className="atlas-app-shell__route-name">{t(routeTitleKeys[route])}</span>
           {activityControl}
         </div>
         <WindowControls />
@@ -93,7 +96,7 @@ export function AppShell({ route, engineStatus, noticeCount, onNavigate, profile
               badge={item.route === "profile" && profileBadge}
               isCurrent={route === item.route}
               key={item.route}
-              label={item.label}
+              label={t(item.labelKey)}
               onPress={() => onNavigate(item.route)}
             />
           ))}
@@ -103,7 +106,7 @@ export function AppShell({ route, engineStatus, noticeCount, onNavigate, profile
           <RailButton
             icon={PulseIcon}
             isCurrent={route === "diagnostics"}
-            label="Diagnostics"
+            label={t("nav.diagnostics")}
             noticeCount={noticeCount}
             onPress={() => onNavigate("diagnostics")}
             status={engineStatus}
@@ -111,13 +114,13 @@ export function AppShell({ route, engineStatus, noticeCount, onNavigate, profile
           <RailButton
             icon={AttributionIcon}
             isCurrent={route === "attribution"}
-            label="Attribution"
+            label={t("nav.attribution")}
             onPress={() => onNavigate("attribution")}
           />
           <RailButton
             icon={SettingsIcon}
             isCurrent={route === "settings"}
-            label="Settings"
+            label={t("nav.settings")}
             onPress={() => onNavigate("settings")}
           />
         </nav>
@@ -138,6 +141,7 @@ export function AppShell({ route, engineStatus, noticeCount, onNavigate, profile
  * corner. macOS keeps its traffic lights, so nothing is rendered there.
  */
 function WindowControls(): React.JSX.Element | null {
+  const { t } = useI18n();
   const [maximized, setMaximized] = useState(false);
   // Read once, during the first render: the shell also renders outside a browser
   // (tests, static markup) where there is no bridge and no window to draw for.
@@ -164,7 +168,7 @@ function WindowControls(): React.JSX.Element | null {
   return (
     <div className="atlas-window-controls no-drag">
       <button
-        aria-label="Minimize"
+        aria-label={t("window.minimize")}
         className="atlas-window-controls__button"
         onClick={() => void window.usageAtlas.minimizeWindow()}
         type="button"
@@ -174,7 +178,7 @@ function WindowControls(): React.JSX.Element | null {
         </svg>
       </button>
       <button
-        aria-label={maximized ? "Restore" : "Maximize"}
+        aria-label={t(maximized ? "window.restore" : "window.maximize")}
         className="atlas-window-controls__button"
         onClick={() => void window.usageAtlas.toggleMaximizeWindow().then(setMaximized, () => undefined)}
         type="button"
@@ -191,7 +195,7 @@ function WindowControls(): React.JSX.Element | null {
         )}
       </button>
       <button
-        aria-label="Close"
+        aria-label={t("window.close")}
         className="atlas-window-controls__button atlas-window-controls__button--close"
         onClick={() => void window.usageAtlas.closeWindow()}
         type="button"

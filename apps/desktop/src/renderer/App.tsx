@@ -16,6 +16,7 @@ import { snapshotHasCachedUsage } from "../shared/cached-snapshot";
 import { dashboardFailure, dashboardIsLoading, initialDashboardState, latestDashboardState } from "./dashboard-state";
 import { useDesktopUpdates } from "./update-state";
 import { UpdateTag } from "./components/UpdateControls";
+import { I18nProvider } from "./i18n";
 import { AppShell } from "./components/AppShell";
 import { Attribution } from "./components/Attribution";
 import { DayDashboard } from "./components/DayDashboard";
@@ -337,6 +338,7 @@ export function App(): React.JSX.Element {
   }
 
   return (
+    <I18nProvider language={preferences?.language ?? "system"}>
     <AppShell activityControl={!usageRoute ? activity : null} appMarkUrl={preferences && markUrls ? markUrls[preferences.appearance.mark] : null}
       engineStatus={engineStatus} previousRoute={previousRoute} noticeCount={notices.length} onNavigate={navigate}
       profileBadge={!profileVisited && cloud.status !== null && wantsProfilePrompt(cloud.status.profile)} route={route}
@@ -425,6 +427,7 @@ export function App(): React.JSX.Element {
         />
       )}
     </AppShell>
+    </I18nProvider>
   );
 }
 
