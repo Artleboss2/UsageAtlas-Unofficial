@@ -136,6 +136,8 @@ export const zh: Messages = {
   "alerts.ruleOn": "当剩余容量降到 {percent}% 时提醒我。",
   "alerts.ruleOff": "开启此提醒以监控该窗口。",
   "alerts.capacity": "当前容量",
+  "alertBanner.open": "查看提醒",
+  "alertBanner.dismiss": "关闭",
   "alerts.empty.title": "暂无配额来源",
   "alerts.empty.body": "连接一个带用量限制的来源，然后回到这里创建提醒。"
 };

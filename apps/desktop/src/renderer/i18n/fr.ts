@@ -136,6 +136,8 @@ export const fr: Messages = {
   "alerts.ruleOn": "Préviens-moi quand la capacité restante atteint {percent} %.",
   "alerts.ruleOff": "Active cette alerte pour surveiller cette fenêtre.",
   "alerts.capacity": "Capacité actuelle",
+  "alertBanner.open": "Voir les alertes",
+  "alertBanner.dismiss": "Fermer",
   "alerts.empty.title": "Aucune source à quota",
   "alerts.empty.body": "Connecte une source avec des limites d'usage, puis reviens ici pour créer des alertes."
 };

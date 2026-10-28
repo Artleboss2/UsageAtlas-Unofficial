@@ -5,6 +5,7 @@ import type {
   AppRoute,
   DashboardState,
   DesktopPreferences,
+  DesktopUsageAlert,
   EngineDiagnostics,
   EngineStatus
 } from "../shared/desktop-api";
@@ -16,7 +17,7 @@ import { snapshotHasCachedUsage } from "../shared/cached-snapshot";
 import { dashboardFailure, dashboardIsLoading, initialDashboardState, latestDashboardState } from "./dashboard-state";
 import { useDesktopUpdates } from "./update-state";
 import { UpdateTag } from "./components/UpdateControls";
-import { I18nProvider } from "./i18n";
+import { I18nProvider, useI18n } from "./i18n";
 import { AppShell } from "./components/AppShell";
 import { Attribution } from "./components/Attribution";
 import { DayDashboard } from "./components/DayDashboard";
@@ -62,6 +63,7 @@ export function App(): React.JSX.Element {
   const [aliasSaving, setAliasSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [dismissedNotices, setDismissedNotices] = useState<string[]>([]);
+  const [usageAlert, setUsageAlert] = useState<DesktopUsageAlert | null>(null);
   const [selectedDay, setSelectedDay] = useState(() => todayDay());
   const [trendEndDay, setTrendEndDay] = useState(() => todayDay());
   const [trendRange, setTrendRange] = useState<AnalyticsRange>(30);
@@ -69,6 +71,11 @@ export function App(): React.JSX.Element {
   const [recapOpen, setRecapOpen] = useState(false);
   const cloud = useCloudAccount();
   const profileVisited = useProfilePageVisited(route);
+
+  useEffect(() => {
+    const unsubscribe = window.usageAtlas?.onUsageAlert?.(setUsageAlert);
+    return unsubscribe ?? undefined;
+  }, []);
 
   const loadDiagnostics = useCallback(async (): Promise<void> => {
     setDiagnosticsLoading(true);
@@ -342,7 +349,17 @@ export function App(): React.JSX.Element {
     <AppShell activityControl={!usageRoute ? activity : null} appMarkUrl={preferences && markUrls ? markUrls[preferences.appearance.mark] : null}
       engineStatus={engineStatus} previousRoute={previousRoute} noticeCount={notices.length} onNavigate={navigate}
       profileBadge={!profileVisited && cloud.status !== null && wantsProfilePrompt(cloud.status.profile)} route={route}
-      updateControl={<UpdateTag state={updates.state} onCheck={updates.check} onInstall={updates.install} />}>
+      updateControl={<UpdateTag state={updates.state} onCheck={updates.check} onInstall={updates.install} />}
+      alertBanner={usageAlert ? (
+        <UsageAlertBanner
+          alert={usageAlert}
+          onDismiss={() => setUsageAlert(null)}
+          onOpen={() => {
+            navigate(usageAlert.route);
+            setUsageAlert(null);
+          }}
+        />
+      ) : null}>
       {renderUsageRoute()}
       {route === "alerts" && (
         <UsageAlertsPage
@@ -428,6 +445,41 @@ export function App(): React.JSX.Element {
       )}
     </AppShell>
     </I18nProvider>
+  );
+}
+
+/**
+ * The same alert the toast carries, kept in the window. Windows may accept a toast
+ * and hide it behind Focus assist or a per-app switch, so the message and its link
+ * stay reachable here until dismissed.
+ */
+function UsageAlertBanner({ alert, onDismiss, onOpen }: {
+  alert: DesktopUsageAlert;
+  onDismiss(): void;
+  onOpen(): void;
+}): React.JSX.Element {
+  const { t } = useI18n();
+  return (
+    <aside aria-live="polite" className="atlas-usage-banner">
+      <span aria-hidden="true" className="atlas-usage-banner__mark">
+        <svg fill="none" viewBox="0 0 24 24"><path d="M12 8v5m0 3.5v.5" stroke="currentColor" strokeLinecap="round" strokeWidth="2" /><circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="1.7" /></svg>
+      </span>
+      <div className="atlas-usage-banner__body">
+        <strong>{alert.title}</strong>
+        <span>{alert.body}</span>
+      </div>
+      <button className="atlas-usage-banner__action" onClick={onOpen} type="button">
+        {t("alertBanner.open")}
+      </button>
+      <button
+        aria-label={t("alertBanner.dismiss")}
+        className="atlas-usage-banner__close"
+        onClick={onDismiss}
+        type="button"
+      >
+        <svg aria-hidden="true" viewBox="0 0 12 12"><path d="M3 3l6 6M9 3l-6 6" /></svg>
+      </button>
+    </aside>
   );
 }
 

@@ -138,6 +138,8 @@ export const en = {
   "alerts.ruleOn": "Alert me when remaining capacity reaches {percent}%.",
   "alerts.ruleOff": "Turn on this alert to start monitoring the window.",
   "alerts.capacity": "Current capacity",
+  "alertBanner.open": "Open alerts",
+  "alertBanner.dismiss": "Dismiss",
   "alerts.empty.title": "No metered sources yet",
   "alerts.empty.body": "Connect a source with usage limits, then return here to create alerts."
 } as const;

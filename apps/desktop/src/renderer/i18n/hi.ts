@@ -136,6 +136,8 @@ export const hi: Messages = {
   "alerts.ruleOn": "जब बची क्षमता {percent}% पर पहुँचे तो मुझे बताएँ।",
   "alerts.ruleOff": "इस विंडो की निगरानी के लिए अलर्ट चालू करें।",
   "alerts.capacity": "मौजूदा क्षमता",
+  "alertBanner.open": "अलर्ट देखें",
+  "alertBanner.dismiss": "बंद करें",
   "alerts.empty.title": "कोई कोटा स्रोत नहीं",
   "alerts.empty.body": "उपयोग सीमा वाला स्रोत जोड़ें, फिर अलर्ट बनाने के लिए यहाँ लौटें।"
 };

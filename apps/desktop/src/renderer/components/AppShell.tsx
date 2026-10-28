@@ -18,6 +18,8 @@ interface AppShellProps {
   previousRoute?: AppRoute | null;
   activityControl?: React.ReactNode;
   updateControl?: React.ReactNode;
+  /** An alert raised while the user is somewhere else, mirrored from the toast. */
+  alertBanner?: React.ReactNode;
   children: React.ReactNode;
 }
 
@@ -58,7 +60,11 @@ const routeOrder: Record<AppRoute, number> = {
   settings: 8
 };
 
-export function AppShell({ route, engineStatus, noticeCount, onNavigate, profileBadge = false, appMarkUrl = null, previousRoute = null, activityControl, updateControl, children }: AppShellProps): React.JSX.Element {
+export function AppShell({ route, engineStatus, noticeCount, onNavigate, profileBadge = false, appMarkUrl = null, previousRoute = null,  activityControl,
+  updateControl,
+  alertBanner,
+  children
+}: AppShellProps): React.JSX.Element {
   const { t } = useI18n();
   const workspaceRef = useRef<HTMLElement>(null);
   const railRef = useRef<HTMLElement>(null);
@@ -189,6 +195,8 @@ export function AppShell({ route, engineStatus, noticeCount, onNavigate, profile
           />
         </nav>
       </aside>
+
+      {alertBanner}
 
       <main className="atlas-app-shell__workspace no-drag" onScroll={handleWorkspaceScroll} ref={workspaceRef}>
         <div className="atlas-route-view" data-direction={direction} key={route}>
