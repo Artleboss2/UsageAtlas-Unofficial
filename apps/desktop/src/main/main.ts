@@ -25,6 +25,7 @@ import {
 } from "electron";
 import squirrelStartup from "electron-squirrel-startup";
 import path from "node:path";
+import { spawn } from "node:child_process";
 import { tmpdir } from "node:os";
 import { pathToFileURL } from "node:url";
 import { isLimitKey } from "../shared/capacity-model";
@@ -85,10 +86,11 @@ if (process.env.USAGEATLAS_SMOKE_TEST === "1") {
       freebuff: false, warp: false, kimi: false, kilo: false, copilot: false, factory: false, amp: false, qoder: false, zai: false }
   }));
 }
+/** The id Squirrel registers the Start Menu shortcut and toasts under. */
+const APP_USER_MODEL_ID = "com.squirrel.UsageAtlas.UsageAtlas";
+
 if (process.platform === "win32") {
-  app.setAppUserModelId(app.isPackaged
-    ? "com.squirrel.UsageAtlas.UsageAtlas"
-    : "com.usageatlas.desktop.dev");
+  app.setAppUserModelId(app.isPackaged ? APP_USER_MODEL_ID : "com.usageatlas.desktop.dev");
 }
 
 let mainWindow: BrowserWindow | null = null;
@@ -152,12 +154,65 @@ function trayImage(image: Electron.NativeImage): Electron.NativeImage {
   return image.resize({ width: size, height: size, quality: "best" });
 }
 
-/** Swaps the window, dock and tray artwork without restarting the app. */
+/**
+ * The shortcut Squirrel installs for this app. Windows draws the Start Menu, the
+ * taskbar pin and the toast identity from it, so its icon has to follow the picker
+ * as well as the window's own icon.
+ */
+function startMenuShortcutPath(): string {
+  return path.join(app.getPath("appData"), "Microsoft", "Windows", "Start Menu", "Programs", "UsageAtlas.lnk");
+}
+
+function applyShortcutMark(mark: AppMark): void {
+  if (process.platform !== "win32" || !app.isPackaged) return;
+  const shortcut = startMenuShortcutPath();
+  if (!existsSync(shortcut)) return;
+  const stub = path.resolve(process.execPath, "..", "..", "UsageAtlas.exe");
+  try {
+    shell.writeShortcutLink(shortcut, "update", {
+      target: existsSync(stub) ? stub : process.execPath,
+      cwd: path.dirname(process.execPath),
+      icon: appMarkPath(mark, "ico"),
+      iconIndex: 0,
+      appUserModelId: APP_USER_MODEL_ID,
+      description: "UsageAtlas"
+    });
+  } catch {
+    // A locked Start Menu still leaves the window, taskbar button and tray updated.
+  }
+  // Explorer keeps the old icon in its cache; this asks it to re-read shortcuts.
+  try {
+    spawn("ie4uinit.exe", ["-show"], { detached: true, stdio: "ignore", windowsHide: true }).unref();
+  } catch {
+    // Refreshing is cosmetic; the shortcut itself already carries the new icon.
+  }
+}
+
+/** Swaps the window, taskbar, shortcut, dock and tray artwork without restarting. */
 function applyAppMark(mark: AppMark): void {
   const image = loadAppMark(mark, process.platform === "win32" ? "ico" : "png");
-  if (mainWindow && !mainWindow.isDestroyed()) mainWindow.setIcon(image);
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.setIcon(image);
+    if (process.platform === "win32") {
+      const stub = path.resolve(process.execPath, "..", "..", "UsageAtlas.exe");
+      try {
+        // The taskbar button of an AppUserModelID app follows these details, not
+        // only setIcon; this is what makes the picker visible in the taskbar.
+        mainWindow.setAppDetails({
+          appId: APP_USER_MODEL_ID,
+          appIconPath: appMarkPath(mark, "ico"),
+          appIconIndex: 0,
+          relaunchCommand: `"${existsSync(stub) ? stub : process.execPath}"`,
+          relaunchDisplayName: "UsageAtlas"
+        });
+      } catch {
+        // setIcon above already changed the window artwork.
+      }
+    }
+  }
   if (process.platform === "darwin") app.dock?.setIcon(image);
   if (tray && !tray.isDestroyed()) tray.setImage(trayImage(image));
+  applyShortcutMark(mark);
 }
 
 function customBackgroundPath(): string {
@@ -285,6 +340,9 @@ function showNotification(content: { title: string; body: string }, route: AppRo
   notification.once("click", () => showWindow(route));
   notification.once("close", release);
   activeUsageNotifications.add(notification);
+  // Windows can accept a toast and still hide it (Focus assist, per-app
+  // notifications off). Mirror the alert in the window so it is never lost.
+  mainWindow?.webContents.send(IPC.usageAlert, { ...content, route });
   notification.show();
 }
 

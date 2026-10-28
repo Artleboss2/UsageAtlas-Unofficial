@@ -270,6 +270,17 @@ export interface DashboardState {
   error: string | null;
 }
 
+/**
+ * An alert that was just raised. The system toast can be suppressed (Focus
+ * assist, notification settings), so the renderer shows the same content as an
+ * in-app banner and the click still lands on the right page.
+ */
+export interface DesktopUsageAlert {
+  title: string;
+  body: string;
+  route: AppRoute;
+}
+
 export interface UsageAtlasDesktopAPI {
   /** Renderer-side platform check: macOS keeps its own traffic lights. */
   readonly platform: string;
@@ -277,6 +288,8 @@ export interface UsageAtlasDesktopAPI {
   getAppMarks(): Promise<Record<AppMark, string>>;
   /** Shows a desktop notification now, to check that alerts arrive. */
   sendTestAlert(tokens: number, providerName: string): Promise<boolean>;
+  /** Mirrors every alert in the window, so a blocked toast is still visible. */
+  onUsageAlert(listener: (alert: DesktopUsageAlert) => void): () => void;
   minimizeWindow(): Promise<void>;
   /** Returns the state the window is in after the toggle. */
   toggleMaximizeWindow(): Promise<boolean>;
@@ -317,6 +330,7 @@ export interface UsageAtlasDesktopAPI {
 export const IPC = {
   getAppMarks: "app:marks",
   sendTestAlert: "alerts:test",
+  usageAlert: "alerts:raised",
   getProviderCredentials: "providers:credentials-status",
   setProviderCredential: "providers:set-credential",
   getUpdateState: "updates:get",

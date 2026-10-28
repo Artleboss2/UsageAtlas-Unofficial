@@ -6,6 +6,11 @@ const api: UsageAtlasDesktopAPI = {
   platform: process.platform,
   getAppMarks: () => ipcRenderer.invoke(IPC.getAppMarks),
   sendTestAlert: (tokens, providerName) => ipcRenderer.invoke(IPC.sendTestAlert, tokens, providerName),
+  onUsageAlert: (listener) => {
+    const handler = (_event: Electron.IpcRendererEvent, alert: Parameters<typeof listener>[0]) => listener(alert);
+    ipcRenderer.on(IPC.usageAlert, handler);
+    return () => ipcRenderer.removeListener(IPC.usageAlert, handler);
+  },
   minimizeWindow: () => ipcRenderer.invoke(IPC.minimizeWindow),
   toggleMaximizeWindow: () => ipcRenderer.invoke(IPC.toggleMaximizeWindow),
   closeWindow: () => ipcRenderer.invoke(IPC.closeWindow),
