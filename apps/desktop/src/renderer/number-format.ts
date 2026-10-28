@@ -1,3 +1,11 @@
+/**
+ * Numbers are rendered in English on purpose: every label around them is English
+ * ("48.8M tokens", "1.3M"), and following the operating system's locale instead
+ * would put French or German separators inside English copy. Keeping the locale
+ * explicit also keeps the figures identical on every machine.
+ */
+const NUMBER_LOCALE = "en";
+
 const COMPACT_UNITS = [
   { threshold: 1_000_000_000_000, label: "T" },
   { threshold: 1_000_000_000, label: "B" },
@@ -5,22 +13,22 @@ const COMPACT_UNITS = [
   { threshold: 1_000, label: "K" }
 ] as const;
 
-const decimalFormatter = new Intl.NumberFormat(undefined, {
+const decimalFormatter = new Intl.NumberFormat(NUMBER_LOCALE, {
   maximumFractionDigits: 1
 });
 
-const exactNumberFormatter = new Intl.NumberFormat(undefined, {
+const exactNumberFormatter = new Intl.NumberFormat(NUMBER_LOCALE, {
   maximumFractionDigits: 2
 });
 
-const currencyFormatter = new Intl.NumberFormat(undefined, {
+const currencyFormatter = new Intl.NumberFormat(NUMBER_LOCALE, {
   style: "currency",
   currency: "USD",
   minimumFractionDigits: 2,
   maximumFractionDigits: 2
 });
 
-const preciseCurrencyFormatter = new Intl.NumberFormat(undefined, {
+const preciseCurrencyFormatter = new Intl.NumberFormat(NUMBER_LOCALE, {
   style: "currency",
   currency: "USD",
   minimumFractionDigits: 4,

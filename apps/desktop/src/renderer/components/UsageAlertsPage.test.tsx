@@ -22,8 +22,9 @@ describe("UsageAlertsPage", () => {
 });
 
 const preferences: DesktopPreferences = {
-  reportAliases: [],
+  reportPlans: [],
   updateChannel: "fork",
+    updateRepository: "",
   anonymousAnalytics: true,
     backgroundImage: "mist",
   customBackgroundName: null,

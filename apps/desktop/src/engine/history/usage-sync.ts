@@ -9,8 +9,16 @@ import {
   type SaveResult
 } from "@usageatlas/contracts/usage";
 import type { CloudProgress } from "../../shared/desktop-api";
-import { aliasFact, aliasUsageRecord, unaliasUsageRecord, type ReportAlias } from "../../shared/report-aliases";
-import { hasValidFingerprint } from "./statistics-store";
+import {
+  OFFICIAL_PROVIDERS,
+  applyTargetToFact,
+  applyTargetToRecord,
+  planFor,
+  unaliasUsageRecord,
+  type ReportPlan
+} from "../../shared/report-plans";
+import { spinTarget } from "./report-wheel";
+import { hasValidFingerprint, identifyFact } from "./statistics-store";
 import { UsageStore } from "./usage-store";
 
 export interface UsageCloud {
@@ -33,7 +41,9 @@ export class UsageSync {
   private controller: AbortController | null = null;
   private preparedAccount: string | null = null;
   /** Applied to the uploaded copy only; local history keeps its real provider. */
-  private reportAliases: ReportAlias[] = [];
+  private reportPlans: ReportPlan[] = [];
+  /** Sources the server does not model and no rule renames, kept on this computer. */
+  private heldBack: string[] = [];
   constructor(
     private readonly store: UsageStore,
     private readonly changed: (reason: "account" | "history") => void = () => {},
@@ -51,6 +61,7 @@ export class UsageSync {
       busy: this.running !== null,
       progress: this.progress ? { ...this.progress } : null,
       lastCompleted: this.lastCompleted,
+      heldBack: [...this.heldBack],
       error: this.error ?? (counts.invalid
         ? `${counts.invalid} invalid local usage ${counts.invalid === 1 ? "record was" : "records were"} skipped. Other records can still be saved. Refresh usage to retry.`
         : null),
@@ -97,8 +108,50 @@ export class UsageSync {
     this.schedule();
     if (switched) this.changed("account");
   }
-  setReportAliases(aliases: ReportAlias[]): void {
-    this.reportAliases = aliases;
+  setReportPlans(plans: ReportPlan[]): void {
+    this.reportPlans = plans;
+    // A new rule takes a source out of the held-back notice right away, instead
+    // of waiting for the next save to notice.
+    this.reportHeldBack(this.unsupportedProviders(this.uploadableProviders()));
+  }
+  /**
+   * Providers this server accepts: the ones it models, plus the sources a saved
+   * rule renames. Anything else stays local until the user adds a rule.
+   */
+  private uploadableProviders(): string[] {
+    const providers = new Set<string>(OFFICIAL_PROVIDERS);
+    for (const plan of this.reportPlans) providers.add(plan.source);
+    return [...providers];
+  }
+  /** Sources with pending usage that the server would reject as-is. */
+  private unsupportedProviders(providers: readonly string[]): string[] {
+    const pending = [
+      ...this.store.statistics.pendingProviders(),
+      ...this.store.pendingProviders()
+    ];
+    return [...new Set(pending)].filter(provider => !providers.includes(provider)).sort();
+  }
+  /** Records the local sources with pending usage the server would reject as-is. */
+  private reportHeldBack(providers: readonly string[]): void {
+    this.heldBack = [...providers];
+  }
+  /**
+   * Renames one pending observation for upload. Its id is the hash of its content,
+   * so a renamed copy is renumbered and the id it is stored under here is kept for
+   * the acknowledgement. The wheel is spun on the event's identity: every version
+   * of one request keeps the same target.
+   */
+  private renameFact(fact: UsageFact): { fact: UsageFact; localId: string } {
+    const plan = planFor(this.reportPlans, fact.providerId);
+    const target = spinTarget(plan, fact.kind === "usage_event" ? fact.eventId : fact.id);
+    if (!target) return { fact, localId: fact.id };
+    return { fact: identifyFact(applyTargetToFact(fact, target)), localId: fact.id };
+  }
+  /** Renames one daily record; a day keeps the target it landed on between saves. */
+  private renameRecord(row: PendingRecord): PendingRecord {
+    const plan = planFor(this.reportPlans, row.record.providerId);
+    const target = spinTarget(plan, row.record.recordId);
+    return target ? { ...row, record: applyTargetToRecord(row.record, target) } : row;
   }
   setAutomatic(enabled: boolean): void {
     if (!this.cloud) throw new Error("Sign in before enabling automatic save.");
@@ -134,6 +187,8 @@ export class UsageSync {
     this.lastCompleted = null;
     this.running = (async () => {
       this.error = null;
+      const providers = this.uploadableProviders();
+      if (!upload) this.heldBack = [];
       if (upload) {
         if (this.beforeSave) await this.beforeSave(controller.signal);
         if (this.closed || this.stopping) return;
@@ -171,14 +226,20 @@ export class UsageSync {
       if (upload) {
         this.progress = { operation: "save", phase: "saving", completed: 0, total: this.store.statistics.pendingCount() };
         for (;;) {
-          const facts = this.store.statistics.pending().map(fact => aliasFact(fact, this.reportAliases));
-          if (!facts.length) break;
+          // The server fingerprints an observation's content and only stores a copy
+          // whose id still matches it, so a renamed fact is renumbered here and the
+          // acknowledgement is translated back to the row this computer wrote.
+          const outgoing = this.store.statistics.pending(providers)
+            .map(fact => this.renameFact(fact));
+          if (!outgoing.length) break;
           if (!cloud.saveFacts) throw new Error("This server does not support saving usage observations. Update before saving.");
-          const saved = await cloud.saveFacts(facts);
+          const saved = await cloud.saveFacts(outgoing.map(entry => entry.fact));
           if (this.closed || this.stopping) return;
-          if (saved.length !== facts.length || new Set(saved).size !== facts.length
-            || saved.some(id => !facts.some(fact => fact.id === id))) throw new Error("Incomplete statistics acknowledgement.");
-          this.store.transaction(() => this.store.statistics.acknowledge(saved));
+          if (saved.length !== outgoing.length || new Set(saved).size !== outgoing.length
+            || saved.some(id => !outgoing.some(entry => entry.fact.id === id))) throw new Error("Incomplete statistics acknowledgement.");
+          const local = saved.map(id => outgoing.find(entry => entry.fact.id === id)!.localId);
+          if (new Set(local).size !== local.length) throw new Error("Ambiguous statistics acknowledgement.");
+          this.store.transaction(() => this.store.statistics.acknowledge(local));
           this.progress!.completed += saved.length;
         }
       }
@@ -198,14 +259,11 @@ export class UsageSync {
         this.preparedAccount = this.store.owner;
       }
       if (upload) {
-        let pending = this.store.pending();
+        let pending = this.store.pending(providers);
         const counts = this.store.counts();
         this.progress = { operation: "save", phase: "saving", completed: 0, total: counts.pending - counts.conflicts - counts.invalid };
         while (pending.length) {
-          const outgoing = pending.map((row) => ({
-            ...row,
-            record: aliasUsageRecord(row.record, this.reportAliases)
-          }));
+          const outgoing = pending.map((row) => this.renameRecord(row));
           const results = await cloud.save(outgoing);
           if (this.closed || this.stopping) return;
           if (
@@ -225,7 +283,9 @@ export class UsageSync {
               this.progress.completed += 1;
             } else this.store.merge(result, unaliasUsageRecord);
           }
-          const next = this.store.pending();
+          // Only the rows this pass sent count as progress: a source the server
+          // refuses to accept stays pending and is reported instead of retried.
+          const next = this.store.pending(providers);
           if (next.some((row) => pending.some((sent) =>
             row.record.recordId === sent.record.recordId && row.localVersion === sent.localVersion && row.revision === sent.revision
           ))) throw new Error("Cloud save made no progress. Restore from cloud, then try again.");
@@ -234,6 +294,7 @@ export class UsageSync {
           this.progress.total = this.progress.completed + remaining.pending - remaining.conflicts - remaining.invalid;
         }
       }
+      if (upload) this.reportHeldBack(this.unsupportedProviders(providers));
       this.lastCompleted = upload ? "save" : "restore";
     })()
       .catch((error: unknown) => {

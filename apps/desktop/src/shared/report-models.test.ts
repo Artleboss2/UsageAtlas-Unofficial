@@ -1,6 +1,6 @@
 import { PUBLIC_MODELS } from "@usageatlas/contracts/usage";
 import { describe, expect, it } from "vitest";
-import { OFFICIAL_PROVIDERS } from "./report-aliases";
+import { OFFICIAL_PROVIDERS } from "./report-plans";
 import { defaultReportedModel, modelOptions, reportedModels } from "./report-models";
 
 describe("reported model catalog", () => {

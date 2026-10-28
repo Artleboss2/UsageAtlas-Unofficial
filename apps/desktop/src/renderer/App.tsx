@@ -34,7 +34,7 @@ import { providerConnection, reconnectSentence } from "./provider-connection";
 import { wantsProfilePrompt } from "./profile-promotion";
 import { useCloudAccount, useLeaderboard, useProfilePageVisited, useProfilePrompt } from "./profile-state";
 import { useWrappedNudge } from "./wrapped-nudge";
-import type { ReportAlias } from "../shared/report-aliases";
+import type { ReportPlan } from "../shared/report-plans";
 
 export function App(): React.JSX.Element {
   const updates = useDesktopUpdates();
@@ -180,10 +180,10 @@ export function App(): React.JSX.Element {
     }
   }
 
-  async function saveReportAliases(aliases: ReportAlias[]): Promise<void> {
+  async function saveReportPlans(plans: ReportPlan[]): Promise<void> {
     setAliasSaving(true);
     try {
-      setPreferences(await window.usageAtlas.setReportAliases(aliases));
+      setPreferences(await window.usageAtlas.setReportPlans(plans));
     } finally {
       setAliasSaving(false);
     }
@@ -370,7 +370,7 @@ export function App(): React.JSX.Element {
       )}
       {route === "attribution" && (
         <Attribution
-          onSave={saveReportAliases}
+          onSave={saveReportPlans}
           preferences={preferences}
           providers={snapshot?.providers ?? []}
           saving={aliasSaving}

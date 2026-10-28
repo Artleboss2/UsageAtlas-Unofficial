@@ -22,15 +22,32 @@
 - **Private provider readers.** Freebuff reads the Desktop app's per-project `desktop-v2.db`
   (`messages.metrics_json`) for provider-reported input, cached and output tokens per turn, and the
   CLI's chat transcripts for per-message credits as a fallback. Its location is found by scanning,
-  verified, cached, and re-planned whenever Freebuff moves or replaces it. z.ai / GLM reads the
-  Coding Plan's five-hour and weekly windows from the quota API. Neither is part of the original app.
-  See [docs/FREEBUFF.md](docs/FREEBUFF.md) and [docs/QUOTA_PROVIDERS.md](docs/QUOTA_PROVIDERS.md).
-- **Cloud attribution.** The hosted service refuses a provider it does not model, so a cloud save
-  containing Freebuff or z.ai usage is rejected. The **Attribution** page maps such a source to an
-  official provider and a model that provider runs; the uploaded copy is relabelled, so the tokens
-  land on the account as Codex, Claude, Kimi or whatever you chose, and show up on the dashboard.
+  verified, cached, and re-planned whenever Freebuff moves or replaces it. The model behind its
+  opaque `m-<digest>` id is resolved offline, so Freebuff turns are named and priced at API rates
+  instead of reading as free. z.ai / GLM reads the Coding Plan's five-hour and weekly windows from
+  the quota API. Neither is part of the original app. See [docs/FREEBUFF.md](docs/FREEBUFF.md) and
+  [docs/QUOTA_PROVIDERS.md](docs/QUOTA_PROVIDERS.md).
+- **Cloud attribution, with a wheel.** The hosted service refuses a provider it does not model, so a
+  cloud save containing Freebuff or z.ai usage is rejected. The **Attribution** page maps such a
+  source to one or more official providers, each with a share — 30 % Codex, 20 % ChatGPT, 50 %
+  Claude, say — and every request spins that wheel, so the uploaded traffic arrives as a realistic
+  mix rather than one relabelled tool. The draw is a hash of the request's own identity, so shares
+  hold over time, four Codex requests in a row are possible, and a retried or interrupted save never
+  renames a request. The uploaded copy is relabelled and renumbered, so the tokens land on the
+  account and show up on the dashboard; a source without a rule is kept on this computer and named in
+  Settings rather than failing the whole save. Model keys the server publishes are offered per
+  provider, and Freebuff's opaque `m-<digest>` ids are shown as the real models behind them.
+- **Provider marks.** The unofficial sources carry their own logos — Freebuff's published mark,
+  z.ai's, plus the Warp and Factory marks the app already shipped. Provenance and hashes are in
+  [apps/desktop/src/renderer/assets/providers/README.md](apps/desktop/src/renderer/assets/providers/README.md).
 - **Publisher choice for updates.** Settings → App updates switches between *This fork* (these
-  GitHub releases) and *Upstream* (the original project's mirror), without a restart.
+  GitHub releases), *Upstream* (the original project's mirror) and *Another repository* (any GitHub
+  `owner/name` you name), without a restart.
+- **A glitched icon.** The app icon is the original artwork deliberately datamoshed — channel split,
+  displaced bands, torn scanlines — so an install of this fork is never mistaken for the official
+  build. Regenerate it from the untouched master with
+  `node apps/desktop/scripts/glitch-icon.mjs`. Windows and Linux draw their own minimize, maximize
+  and close buttons in the title bar, the way Freebuff does; macOS keeps its traffic lights.
 
 ## Why the cloud still works, and what that means
 
@@ -46,7 +63,7 @@ one-way — the numbers are yours, the label is for the server — and a copy re
 computer keeps this computer's real provider and model breakdown.
 
 If you do not want a relabelled copy to leave the machine, stay signed out: local tracking works
-without an account, as it always did.
+without an account, as it always did — and a source with no rule never leaves it either.
 
 ## Install
 
@@ -70,6 +87,8 @@ Settings → App updates chooses the publisher:
 - **This fork** reads `github.com/Artleboss2/UsageAtlas-Unofficial/releases/latest/download`. Windows
   installs update in place; on other platforms the release page opens for a manual download.
 - **Upstream** restores the original mirror, which only ever serves the official builds.
+- **Another repository** reads the GitHub releases of any `owner/name` you type, so a build published
+  somewhere else updates in place too. While the field is empty it keeps reading this fork's releases.
 
 Installing an upstream build replaces this fork's renderer, so the private providers disappear until
 you reinstall a fork release.

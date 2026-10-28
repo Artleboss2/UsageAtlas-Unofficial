@@ -53,6 +53,7 @@ export function CloudSettings(): React.JSX.Element {
     }
   }
   const visibleError = error || status?.error || loadError;
+  const heldBack = (status?.heldBack ?? []).map(sourceLabel);
   const busy = working || Boolean(status?.busy);
   const operation = action === "save" || action === "restore" ? action : status?.progress?.operation;
   const saving = busy && operation === "save";
@@ -150,6 +151,13 @@ export function CloudSettings(): React.JSX.Element {
               <p>{message}</p>
               {(saving || restoring) && (
                 <p>This may take a minute or two. You can keep using UsageAtlas.</p>
+              )}
+              {heldBack.length > 0 && (
+                <p>
+                  {heldBack.join(", ")} {heldBack.length === 1 ? "stays" : "stay"} on this
+                  computer: the server does not accept {heldBack.length === 1 ? "that source" : "those sources"} yet.
+                  Add a rule on the Attribution page to report it as an official provider.
+                </p>
               )}
             </div>
             {status.conflicts.map((conflict) => (
@@ -259,6 +267,11 @@ export function CloudSettings(): React.JSX.Element {
       </Card.Content>
     </Card>
   );
+}
+
+/** The engine reports source ids; the settings page shows them as names. */
+function sourceLabel(id: string): string {
+  return id.charAt(0).toUpperCase() + id.slice(1);
 }
 
 function CloudSpinner(): React.JSX.Element {

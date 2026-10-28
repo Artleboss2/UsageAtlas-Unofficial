@@ -4,6 +4,8 @@ import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { describe, it, expect } from "vitest";
 import { createFreebuffAdapter } from "./freebuff";
+import { FREEBBUFF_MODEL_IDS, freebuffLegacyModelId } from "./freebuff-models";
+import { pricingCatalogFromRates } from "../analytics/models-dev";
 import { UsageStore } from "../history/usage-store";
 import { openWritableSqlite } from "../platform/sqlite";
 
@@ -29,7 +31,7 @@ async function desktopFixture(home: string, rows: Array<{ ts: number; metrics: u
   return file;
 }
 
-async function joinedFixture(home: string): Promise<string> {
+async function joinedFixture(home: string, _model = "m-abc"): Promise<string> {
   const directory = path.join(home, ".config", "freebuff-desktop", "projects", "app-99999999");
   await mkdir(directory, { recursive: true });
   const file = path.join(directory, "desktop-v2.db");
@@ -43,7 +45,7 @@ async function joinedFixture(home: string): Promise<string> {
   )`);
   database.exec("CREATE TABLE threads (id TEXT PRIMARY KEY, project_path TEXT, model TEXT, sponsored TEXT)");
   database.prepare("INSERT INTO threads (id, project_path, model, sponsored) VALUES (?,?,?,?)")
-    .run("thread-1", "C:/work/my-project", "m-abc", "run-1");
+    .run("thread-1", "C:/work/my-project", _model, "run-1");
   database.prepare("INSERT INTO messages (thread_id, role, metrics_json, ts) VALUES (?,?,?,?)")
     .run("thread-1", "assistant", JSON.stringify({
       usage: { inputTokens: 50, cachedInputTokens: 10, outputTokens: 25, totalTokens: 75 }, costUsd: 0.002
@@ -135,9 +137,39 @@ describe("Freebuff local usage", () => {
     expect(result.analytics?.projects[0]).toMatchObject({ id: "C:/work/my-project", label: "my-project" });
     expect(result.analytics?.sessions[0]).toMatchObject({ id: "thread-1" });
     expect(result.analytics?.serviceTiers[0]).toMatchObject({ id: "sponsored" });
+    // Freebuff's own `costUsd` is the subscription's, not an API rate, so a turn
+    // without a resolvable price stays unpriced instead of counting as free.
     expect(result.analytics?.totals).toMatchObject({
-      inputTokens: 40, cachedInputTokens: 10, outputTokens: 25, totalTokens: 75, requests: 1, estimatedCostUSD: 0.002
+      inputTokens: 40, cachedInputTokens: 10, outputTokens: 25, totalTokens: 75, requests: 1,
+      estimatedCostUSD: null, unpricedTokens: 75
     });
+  });
+
+  it("prices a turn from the model hidden behind Freebuff's opaque id", async () => {
+    const home = await mkdtemp(path.join(tmpdir(), "usageatlas-freebuff-priced-"));
+    await joinedFixture(home, freebuffLegacyModelId("deepseek/deepseek-v4-flash"));
+    const catalog = pricingCatalogFromRates({
+      // Per token, and the same model is published under another provider key too.
+      deepseek: { "deepseek-v4-flash": { input: 1.5e-7, output: 6e-7, cacheRead: 3e-9 } }
+    });
+    const result = await createFreebuffAdapter({
+      homeDirectory: home,
+      pricingCatalogLoader: async () => catalog
+    }).refresh(context);
+    // The opaque id is resolved before pricing, so the row keeps the real name.
+    expect(result.analytics?.models[0]).toMatchObject({ id: "deepseek-v4-flash" });
+    expect(result.analytics?.collection?.events[0]).toMatchObject({
+      model: "deepseek-v4-flash", modelProvider: "deepseek", reportedModel: "m-096e75164d",
+      reportedCostUSD: 0.002, pricingVersion: "test"
+    });
+    // 40 non-cached input, 10 cached, 25 output at the resolved rates.
+    expect(result.analytics?.totals.estimatedCostUSD).toBeCloseTo(40 * 1.5e-7 + 10 * 3e-9 + 25 * 6e-7, 12);
+    expect(result.analytics?.totals.unpricedTokens).toBe(0);
+  });
+
+  it("keeps every id Freebuff ships resolvable", () => {
+    expect(Object.keys(FREEBBUFF_MODEL_IDS)).toHaveLength(67);
+    expect(freebuffLegacyModelId("deepseek/deepseek-v4-flash")).toBe("m-096e75164d");
   });
 
   it("buckets database rows in the account's reporting time zone", async () => {

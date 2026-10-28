@@ -14,7 +14,7 @@ export function checkFact(fact: unknown): UsageFact {
 }
 /**
  * False when a fact's content no longer matches its id — an observation that was
- * relabelled for upload (see `report-aliases`) before it left this computer.
+ * relabelled for upload (see `report-plans`) before it left this computer.
  */
 export function hasValidFingerprint(value: unknown): boolean {
   try {
@@ -145,8 +145,19 @@ export class StatisticsStore {
       ...(live.quotaMetrics ? { quotaMetrics: live.quotaMetrics } : {}),
       windows: live.windows.map(w => ({ kind: w.kind, label: w.label, usedPercent: w.usedPercent, resetAt: w.resetAt ?? null })) }));
   }
-  pending(): UsageFact[] {
-    const rows = this.db.all("SELECT payload FROM usage_fact WHERE owner = ? AND saved = 0 ORDER BY id LIMIT ?", [this.owner(), STATISTICS_BATCH_SIZE]);
+  /**
+   * Pending observations, optionally limited to providers the server accepts.
+   * Narrowing the query rather than filtering the batch keeps one unsupported
+   * source from hiding the sources that can be saved.
+   */
+  pending(providers?: readonly string[]): UsageFact[] {
+    // An explicitly empty scope means nothing is uploadable, not everything.
+    if (providers && !providers.length) return [];
+    const scope = providers ? ` AND provider IN (${providers.map(() => "?").join(",")})` : "";
+    const rows = this.db.all(
+      `SELECT payload FROM usage_fact WHERE owner = ? AND saved = 0${scope} ORDER BY id LIMIT ?`,
+      [this.owner(), ...(providers ?? []), STATISTICS_BATCH_SIZE]
+    );
     const facts: UsageFact[] = []; let bytes = 0;
     for (const row of rows) {
       const fact = checkFact(JSON.parse(String(row.payload)));
@@ -162,6 +173,12 @@ export class StatisticsStore {
   }
   pendingCount(): number {
     return Number(this.db.get("SELECT COUNT(*) AS count FROM usage_fact WHERE owner IN (?, '') AND saved = 0", [this.owner()])?.count ?? 0);
+  }
+  /** Providers of the observations still waiting to be saved, in stable order. */
+  pendingProviders(): string[] {
+    return this.db
+      .all("SELECT DISTINCT provider FROM usage_fact WHERE owner IN (?, '') AND saved = 0 ORDER BY provider", [this.owner()])
+      .map((row) => String(row.provider));
   }
   /** Deletes pending events that repeat their previous version apart from the pricing catalog revision. */
   async dropRepricedCopies(stopped: () => boolean): Promise<void> {

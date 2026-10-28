@@ -3,7 +3,10 @@ import { dirname } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import type { ProviderAdapter, ProviderContext } from "../provider";
 import { buildAnalytics, type UsageRecord } from "../analytics/local-usage";
+import { emptyPricingCatalog, type PricingCatalog } from "../analytics/models-dev";
+import { estimateSessionCost } from "../analytics/session-source";
 import { metric, reading } from "./quota-shared";
+import { resolveFreebuffModel } from "./freebuff-models";
 import { resolveFreebuffSources, type FreebuffPathOptions, type FreebuffSources } from "./freebuff-paths";
 
 const MAX_FILE_BYTES = 8 * 1024 * 1024;
@@ -16,6 +19,7 @@ const MAX_HISTORY_DAYS = 366;
 
 export interface FreebuffOptions extends FreebuffPathOptions {
   maxBytes?: number;
+  pricingCatalogLoader?: (context: { signal: AbortSignal; now: Date; historyDays?: number }) => Promise<PricingCatalog>;
 }
 
 /**
@@ -75,6 +79,11 @@ interface DesktopScan {
  * counters and the daily history the dashboard charts. The CLI has no such
  * database: it only records `credits`, so tokens are reported when the Desktop
  * database exists and credits otherwise.
+ *
+ * Freebuff is a subscription: `costUsd` is always 0, and the model is stored as
+ * an opaque `m-<digest>` id (`freebuff-models` reverses it). Turns are therefore
+ * priced here, at the resolved model's API rates, the same way the other
+ * subscription tools are, and the tool's own zero is kept as reported cost.
  */
 export function createFreebuffAdapter(options: FreebuffOptions = {}): ProviderAdapter {
   const pathOptions: FreebuffPathOptions = {
@@ -107,6 +116,13 @@ export function createFreebuffAdapter(options: FreebuffOptions = {}): ProviderAd
         scan = await readDesktopUsage(sources.databases, context.signal, today, timeZone, recentCutoff, historyCutoff);
       }
       if (scan) {
+        const catalog = options.pricingCatalogLoader && scan.records.length
+          ? await options.pricingCatalogLoader(context).catch(() => emptyPricingCatalog())
+          : emptyPricingCatalog();
+        for (const record of scan.records) {
+          record.estimatedCostUSD = estimateSessionCost(record, catalog);
+          record.pricingVersion = catalog.revision;
+        }
         const metrics = [
           metric("tokens_today", "Tokens used today", "tokens", scan.totals.total, null, null, null),
           metric("input_tokens_today", "Input tokens today", "tokens", scan.totals.input, null, null, null),
@@ -251,14 +267,16 @@ function usageRecord(row: MessageRow, file: string, timeZone: string | undefined
   if (!day) return null;
   const thread = typeof row.thread_id === "string" && row.thread_id ? row.thread_id : null;
   const projectPath = typeof row.project_path === "string" && row.project_path ? row.project_path : null;
-  const model = typeof row.model === "string" && row.model.trim() ? row.model.trim() : "freebuff";
+  const reported = typeof row.model === "string" && row.model.trim() ? row.model.trim() : "freebuff";
+  const model = resolveFreebuffModel(reported);
   const sponsored = typeof row.sponsored === "string" && row.sponsored ? "sponsored" : "standard";
   const seq = typeof row.seq === "number" ? row.seq : 0;
   return {
     timestamp: timestamp.toISOString(),
     day,
-    model,
-    modelProvider: "freebuff",
+    model: model.model,
+    reportedModel: reported,
+    ...(model.vendor ? { modelProvider: model.vendor } : {}),
     sessionID: thread ?? file,
     projectPath,
     projectLabel: lastSegment(projectPath ?? dirname(file)),
@@ -268,7 +286,8 @@ function usageRecord(row: MessageRow, file: string, timeZone: string | undefined
     cacheCreationInputTokens: 0,
     outputTokens: usage.output,
     totalTokens: usage.total,
-    estimatedCostUSD: usage.cost,
+    estimatedCostUSD: null,
+    reportedCostUSD: usage.cost,
     eventKey: `${file}\u0000${thread ?? ""}\u0000${seq}`,
     measurement: "known",
     granularity: "event"
@@ -334,7 +353,7 @@ function tokenCount(value: unknown): number {
     : 0;
 }
 
-/** Free mode reports `costUsd: 0`; rows written before that field existed stay unpriced. */
+/** Freebuff reports `costUsd: 0` on its subscription; rows written before that field existed stay unpriced. */
 function costValue(value: unknown): number | null {
   return typeof value === "number" && Number.isFinite(value) && value >= 0 ? value : null;
 }

@@ -1,7 +1,7 @@
 import type { DashboardSnapshot } from "@usageatlas/contracts";
 import type { GrowthEvent, GrowthEventProperties } from "./growth-events";
 import type { ProviderCredential, ProviderCredentialStatus, QuotaProviderId } from "./quota-providers";
-import type { ReportAlias } from "./report-aliases";
+import type { ReportPlan } from "./report-plans";
 
 export type AppRoute = "day" | "trends" | "insights" | "limits" | "alerts" | "profile" | "attribution" | "settings" | "diagnostics";
 export type EngineStatus = "starting" | "ready" | "degraded" | "stopped";
@@ -55,7 +55,7 @@ export function rollForwardBackgroundDefault(
  * Which publisher's releases this build updates from: this fork's GitHub
  * releases, or upstream's own update mirror.
  */
-export const UPDATE_CHANNELS = ["fork", "upstream"] as const;
+export const UPDATE_CHANNELS = ["fork", "upstream", "custom"] as const;
 export type UpdateChannel = (typeof UPDATE_CHANNELS)[number];
 /** This build ships with the fork's features, so its releases are the default source. */
 export const DEFAULT_UPDATE_CHANNEL: UpdateChannel = "fork";
@@ -70,10 +70,24 @@ export function sanitizeUpdateChannel(value: unknown): UpdateChannel {
   return isUpdateChannel(value) ? value : DEFAULT_UPDATE_CHANNEL;
 }
 
+/** `owner/name` of a GitHub repository, as typed in Settings. */
+const UPDATE_REPOSITORY = /^[A-Za-z0-9][A-Za-z0-9._-]{0,38}\/[A-Za-z0-9][A-Za-z0-9._-]{0,99}$/u;
+
+export function isUpdateRepository(value: unknown): value is string {
+  return typeof value === "string" && UPDATE_REPOSITORY.test(value.trim());
+}
+
+/** Anything that is not a repository name reads as “not set”. */
+export function sanitizeUpdateRepository(value: unknown): string {
+  return isUpdateRepository(value) ? value.trim() : "";
+}
+
 export interface DesktopPreferences {
   backgroundImage: BackgroundImagePreference;
   /** Publisher whose releases the app updates from. */
   updateChannel: UpdateChannel;
+  /** GitHub repository read on the `custom` channel, as `owner/name`. */
+  updateRepository: string;
   customBackgroundName: string | null;
   launchAtLogin: boolean;
   minimizeToTray: boolean;
@@ -84,8 +98,8 @@ export interface DesktopPreferences {
   /** Limit keys switched off for the tray menu. Missing keys stay in the menu. */
   trayLimits: Record<string, boolean>;
   usageAlerts: UsageAlertPreferences;
-  /** Local provider → official provider the cloud save should report it as. */
-  reportAliases: ReportAlias[];
+  /** Local provider → the official providers and models its cloud save is reported as. */
+  reportPlans: ReportPlan[];
 }
 
 export interface BackgroundImageSelection {
@@ -123,6 +137,14 @@ export interface DashboardState {
 }
 
 export interface UsageAtlasDesktopAPI {
+  /** Renderer-side platform check: macOS keeps its own traffic lights. */
+  readonly platform: string;
+  minimizeWindow(): Promise<void>;
+  /** Returns the state the window is in after the toggle. */
+  toggleMaximizeWindow(): Promise<boolean>;
+  closeWindow(): Promise<void>;
+  getWindowState(): Promise<boolean>;
+  onWindowMaximized(listener: (maximized: boolean) => void): () => void;
   getProviderCredentials(): Promise<Record<string, ProviderCredentialStatus>>;
   setProviderCredential(provider: QuotaProviderId, credential: ProviderCredential | null): Promise<Record<string, ProviderCredentialStatus>>;
   getUpdateState(): Promise<DesktopUpdateState>;
@@ -144,7 +166,7 @@ export interface UsageAtlasDesktopAPI {
   getSnapshot(): Promise<DashboardState>;
   refreshAll(): Promise<DashboardState>;
   setProviderEnabled(providerID: string, enabled: boolean): Promise<DashboardState>;
-  setReportAliases(aliases: ReportAlias[]): Promise<DesktopPreferences>;
+  setReportPlans(plans: ReportPlan[]): Promise<DesktopPreferences>;
   getPreferences(): Promise<DesktopPreferences>;
   updatePreferences(patch: Partial<DesktopPreferences>): Promise<DesktopPreferences>;
   getDiagnostics(): Promise<EngineDiagnostics>;
@@ -174,14 +196,19 @@ export const IPC = {
   snapshot: "dashboard:snapshot",
   refreshAll: "dashboard:refresh-all",
   setProviderEnabled: "dashboard:set-provider-enabled",
-  setReportAliases: "settings:set-report-aliases",
+  setReportPlans: "settings:set-report-plans",
   getPreferences: "preferences:get",
   updatePreferences: "preferences:update",
   getDiagnostics: "engine:diagnostics",
   engineStatus: "engine:status",
   navigate: "shell:navigate",
   snapshotUpdated: "dashboard:updated",
-  openExternal: "shell:open-external"
+  openExternal: "shell:open-external",
+  minimizeWindow: "window:minimize",
+  toggleMaximizeWindow: "window:toggle-maximize",
+  closeWindow: "window:close",
+  getWindowState: "window:state",
+  windowMaximized: "window:maximized"
 } as const;
 
 export interface CloudProgress {
@@ -199,6 +226,11 @@ export interface UsageCloudState {
   progress: CloudProgress | null;
   lastCompleted: "save" | "restore" | null;
   error: string | null;
+  /**
+   * Sources with usage waiting on this computer that the server does not model,
+   * and that no Attribution rule renames. Capitalized display names.
+   */
+  heldBack: string[];
   conflicts: { recordId: string; provider: string; day: string | null; localTokens: number | null; cloudTokens: number | null }[];
 }
 /**

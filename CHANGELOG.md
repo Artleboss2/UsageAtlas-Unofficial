@@ -3,6 +3,28 @@
 All notable UsageAtlas desktop changes are recorded here. This is an unofficial fork; see
 [README.md](README.md) for what it adds and what it is not.
 
+## 0.3.3 — 2026-10-27
+
+### Added
+
+- **Weighted attribution.** An Attribution rule now lists several official targets with a share each (30 % Codex, 20 % ChatGPT, 50 % Claude), and every request draws one of them like a wheel. The draw is a hash of the request's own identity rather than a counter or a random number: the shares hold over time, the same target can come up several times in a row, and a retried or interrupted save keeps the target it already had. Daily records spin on their own id, so one day lands on one target between saves instead of changing label mid-upload. The page shows each target's effective share and explains the round trip.
+- **Update source can be chosen — and it now works.** Settings → App updates accepts *This fork*, *Upstream* and *Another repository* (any GitHub `owner/name`). The previous picker wrote `updateChannel` through `updatePreferences`, which the main process rejected as an unknown key, so the choice silently failed; `updateChannel` and the new `updateRepository` are validated and accepted, and changing either re-checks against the new publisher immediately. An empty repository keeps reading this fork's releases.
+- **Freebuff brand mark.** Freebuff usage now carries Freebuff's published icon (byte-identical to `https://freebuff.com/favicon.svg`, hash recorded in the assets README) instead of a generated letter, and the model names it reports are the resolved ones rather than `m-<digest>`.
+- **A glitched app icon.** The application icon is the original artwork deliberately datamoshed — split channels, displaced bands, torn scanlines — so this fork cannot be mistaken for the official build at a glance. `apps/desktop/scripts/glitch-icon.mjs` regenerates `usageatlas.png` and a PNG-compressed `usageatlas.ico` (16–256 px) from the untouched master in `resources/installer/`.
+- **Freebuff-style window controls.** Windows and Linux draw their own minimize, maximize/restore and close buttons in the title bar (hover highlight, red close) instead of the native title-bar overlay; the maximize glyph reflects the window state. macOS keeps its traffic lights.
+
+### Changed
+
+- Local refreshes are cheaper. A provider's availability probe is trusted for a minute instead of running on every dashboard snapshot, and the Freebuff route verification remembers its schema probe per file identity: on a real installation the cached route check went from 22 ms to 3.6 ms and a warm Freebuff refresh from ~90 ms to ~70 ms. A forced refresh still re-probes everything.
+- Numbers are formatted in English (`48.8M`, `$9.4K`) rather than in the operating system's locale, matching the English copy around them and making the figures identical on every machine. The locale-dependent test failures on a French Windows install are gone with it.
+
+### Fixed
+
+- Cloud saves no longer fail with `Cloud request failed (400)` once an Attribution rule exists. An observation's id is the hash of its content, so the relabelled copy the server received no longer matched the id it was uploaded under and was rejected as tampered with. Renamed observations are now renumbered before they leave the machine and the server's acknowledgement is translated back to the row stored locally, so the save completes and nothing is uploaded twice.
+- A source the server does not model no longer fails the whole save. Freebuff or z.ai usage stays on this computer, the rest of the history still saves, and Settings → Cloud save names the held-back sources with a pointer to the Attribution page.
+- Freebuff usage is priced. Every turn reports `costUsd: 0` because Freebuff is a subscription, so the dashboard's API-rate estimate read `0,00 $` for hundreds of millions of tokens. The tool stores its model as an opaque `m-<digest>` id (`m-096e75164d` is `deepseek/deepseek-v4-flash` for example); that id is now reversed offline for all 67 models Freebuff Desktop 0.0.192 ships, and the turn is priced at the resolved model's API rates through the pricing catalog. A real installation went from `$0.00` to `$3.14` over 394.9M tokens.
+- Vendor prefixes now resolve against the pricing catalog the way the providers publish them (`z-ai` → `zhipuai`, `mistralai` → `mistral`, `x-ai` → `xai`, `qwen` → `alibaba`), so a privately routed model is priced instead of counted as unpriced tokens.
+
 ## 0.3.2 — 2026-10-27
 
 ### Changed

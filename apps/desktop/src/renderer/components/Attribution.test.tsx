@@ -2,14 +2,14 @@ import type { DashboardProvider } from "@usageatlas/contracts";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 import type { DesktopPreferences } from "../../shared/desktop-api";
-import type { ReportAlias } from "../../shared/report-aliases";
+import type { ReportPlan } from "../../shared/report-plans";
 import { Attribution } from "./Attribution";
 
 describe("Attribution rules", () => {
   it("shows a source relabelled under an official provider", () => {
     const html = render(
       [provider({ id: "freebuff", name: "Freebuff" }), provider()],
-      [{ source: "freebuff", reportAs: "codex", model: "gpt-5.3-codex" }]
+      [{ source: "freebuff", targets: [{ reportAs: "codex", model: "gpt-5.3-codex", weight: 100 }] }]
     );
 
     expect(html).toContain("Freebuff");
@@ -32,8 +32,8 @@ describe("Attribution rules", () => {
     const html = render(
       [provider({ id: "freebuff", name: "Freebuff" }), provider({ id: "zai", name: "z.ai" })],
       [
-        { source: "freebuff", reportAs: "codex", model: "gpt-5.3-codex" },
-        { source: "zai", reportAs: "claude", model: "claude-sonnet-4-5" }
+        { source: "freebuff", targets: [{ reportAs: "codex", model: "gpt-5.3-codex", weight: 100 }] },
+        { source: "zai", targets: [{ reportAs: "claude", model: "claude-sonnet-4-5", weight: 100 }] }
       ]
     );
 
@@ -42,10 +42,50 @@ describe("Attribution rules", () => {
     expect(html).toContain('disabled=""');
   });
 
+  it("spreads one source over several targets and shows the shares it will draw", () => {
+    const html = render(
+      [provider({ id: "freebuff", name: "Freebuff" })],
+      [{
+        source: "freebuff",
+        targets: [
+          { reportAs: "codex", model: "gpt-5.3-codex", weight: 30 },
+          { reportAs: "claude", model: "claude-sonnet-4-6", weight: 20 },
+          { reportAs: "cursor", model: "composer-2.5", weight: 50 }
+        ]
+      }]
+    );
+
+    expect(html).toContain('value="30"');
+    expect(html).toContain('value="20"');
+    expect(html).toContain('value="50"');
+    expect(html).toContain("30% of freebuff");
+    expect(html).toContain("20% of freebuff");
+    expect(html).toContain("50% of freebuff");
+    expect(html).toContain('aria-label="Share of requests"');
+    expect(html).toContain("Add target");
+  });
+
+  it("weights shares relative to the plan instead of requiring a hundred percent", () => {
+    const html = render(
+      [provider({ id: "freebuff", name: "Freebuff" })],
+      [{
+        source: "freebuff",
+        targets: [
+          { reportAs: "codex", model: "gpt-5.3-codex", weight: 30 },
+          { reportAs: "claude", model: "claude-sonnet-4-6", weight: 20 },
+          { reportAs: "cursor", model: "composer-2.5", weight: 50 }
+        ]
+      }]
+    );
+
+    expect(html).toContain("100% of this source&#x27;s requests, spread over 3 targets.");
+    expect(html).toContain("The wheel decides per request");
+  });
+
   it("offers the models the reported provider runs instead of a blank field", () => {
     const html = render(
       [provider({ id: "freebuff", name: "Freebuff" }), provider()],
-      [{ source: "freebuff", reportAs: "codex", model: "gpt-5.3-codex" }]
+      [{ source: "freebuff", targets: [{ reportAs: "codex", model: "gpt-5.3-codex", weight: 100 }] }]
     );
 
     expect(html).toContain('aria-label="Reported model"');
@@ -57,10 +97,10 @@ describe("Attribution rules", () => {
     expect(html).not.toContain("placeholder=\"gpt-5.3-codex\"");
   });
 
-  it("offers the reported provider's catalog for the model each rule names", () => {
+  it("offers the reported provider's catalog for the model each target names", () => {
     const html = render(
       [provider({ id: "freebuff", name: "Freebuff" }), provider({ id: "zai", name: "z.ai" })],
-      [{ source: "zai", reportAs: "claude", model: "claude-sonnet-4-5" }]
+      [{ source: "zai", targets: [{ reportAs: "claude", model: "claude-sonnet-4-5", weight: 100 }] }]
     );
 
     expect(html).toContain('value="claude-opus-5"');
@@ -71,25 +111,25 @@ describe("Attribution rules", () => {
   it("keeps a model saved before the catalog existed selectable", () => {
     const html = render(
       [provider({ id: "freebuff", name: "Freebuff" }), provider()],
-      [{ source: "freebuff", reportAs: "codex", model: "gpt-private-2026" }]
+      [{ source: "freebuff", targets: [{ reportAs: "codex", model: "gpt-private-2026", weight: 100 }] }]
     );
 
     expect(html).toContain('value="gpt-private-2026"');
   });
 
-  it("explains the round trip the rule makes", () => {
+  it("explains the round trip the wheel makes", () => {
     const html = render([]);
 
     expect(html).toContain("this computer keeps counting Freebuff tokens");
-    expect(html).toContain("the uploaded usage arrives as Codex");
+    expect(html).toContain("A target is drawn per request, not in turn");
   });
 });
 
-function render(providers: DashboardProvider[], reportAliases: ReportAlias[] = []): string {
+function render(providers: DashboardProvider[], reportPlans: ReportPlan[] = []): string {
   return renderToStaticMarkup(
     <Attribution
       onSave={vi.fn()}
-      preferences={preferences(reportAliases)}
+      preferences={preferences(reportPlans)}
       providers={providers}
       saving={false}
     />
@@ -112,10 +152,11 @@ function provider(overrides: Partial<DashboardProvider> = {}): DashboardProvider
   };
 }
 
-function preferences(reportAliases: ReportAlias[]): DesktopPreferences {
+function preferences(reportPlans: ReportPlan[]): DesktopPreferences {
   return {
-    reportAliases,
+    reportPlans,
     updateChannel: "fork",
+    updateRepository: "",
     backgroundImage: "mist",
     customBackgroundName: null,
     launchAtLogin: false,

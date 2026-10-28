@@ -1,5 +1,5 @@
 import type { UpdateChannel } from "../shared/desktop-api";
-import { FORK_RELEASES_URL, FORK_REPOSITORY, UPSTREAM_REPOSITORY } from "../shared/fork";
+import { FORK_REPOSITORY, UPSTREAM_REPOSITORY } from "../shared/fork";
 
 /** The project's own update mirror, which serves upstream builds. */
 export const OFFICIAL_FEED_URL = "https://updates.usageatlas.com";
@@ -9,8 +9,25 @@ export const DOWNLOAD_PAGE_URL = "https://usageatlas.com/#download";
 /** This build's releases live on the fork; upstream keeps publishing its own. */
 export { FORK_REPOSITORY, UPSTREAM_REPOSITORY };
 
-export function releaseRepository(channel: UpdateChannel): string {
-  return channel === "upstream" ? UPSTREAM_REPOSITORY : FORK_REPOSITORY;
+/**
+ * Where the updater reads releases from. A publisher is either served by its own
+ * mirror (upstream) or by GitHub releases, which is what the fork and a repository
+ * the user types in both are.
+ */
+export interface UpdateSource {
+  channel: UpdateChannel;
+  repository: string;
+}
+
+/**
+ * Turns the saved publisher into the repository its releases come from. A custom
+ * channel without a repository reads this fork's releases, so switching the radio
+ * before typing a name cannot point the updater at an empty path.
+ */
+export function resolveUpdateSource(channel: UpdateChannel, customRepository = ""): UpdateSource {
+  if (channel === "upstream") return { channel, repository: UPSTREAM_REPOSITORY };
+  if (channel === "custom") return { channel, repository: customRepository || FORK_REPOSITORY };
+  return { channel: "fork", repository: FORK_REPOSITORY };
 }
 
 /**
@@ -19,40 +36,41 @@ export function releaseRepository(channel: UpdateChannel): string {
  * is exactly the two requests Squirrel.Windows makes: `<feed>/RELEASES` and then
  * `<feed>/<package>.nupkg`.
  */
-export function githubFeedURL(channel: UpdateChannel): string {
-  return `https://github.com/${releaseRepository(channel)}/releases/latest/download`;
+export function githubFeedURL(source: UpdateSource): string {
+  return `https://github.com/${source.repository}/releases/latest/download`;
 }
 
-export function latestReleaseAPIURL(channel: UpdateChannel): string {
-  return `https://api.github.com/repos/${releaseRepository(channel)}/releases/latest`;
+export function latestReleaseAPIURL(source: UpdateSource): string {
+  return `https://api.github.com/repos/${source.repository}/releases/latest`;
 }
 
 /** Where a version without an in-place installer is downloaded from. */
-export function downloadPageURL(channel: UpdateChannel): string {
-  return channel === "upstream" ? DOWNLOAD_PAGE_URL : `${FORK_RELEASES_URL}/latest`;
+export function downloadPageURL(source: UpdateSource): string {
+  return source.channel === "upstream" ? DOWNLOAD_PAGE_URL : `https://github.com/${source.repository}/releases/latest`;
 }
 
 /** Release summary to poll on platforms without a Squirrel feed. */
-export function updateCheckURL(channel: UpdateChannel): string {
-  return channel === "upstream" ? LATEST_RELEASE_URL : latestReleaseAPIURL(channel);
+export function updateCheckURL(source: UpdateSource): string {
+  return source.channel === "upstream" ? LATEST_RELEASE_URL : latestReleaseAPIURL(source);
 }
 
 /**
  * Squirrel requires a feed it can build both requests from. Windows gets one on
- * either channel; macOS keeps the mirror, whose versioned path lets the edge
- * answer 204 when there is nothing newer — GitHub cannot express that, so the
- * fork falls back to a version check and the releases page.
+ * every channel that publishes releases; macOS keeps the mirror, whose versioned
+ * path lets the edge answer 204 when there is nothing newer — GitHub cannot
+ * express that, so the other channels fall back to a version check and the
+ * releases page.
  */
 export function squirrelFeedURL(
   platform: string,
   architecture: string,
   version: string,
-  channel: UpdateChannel = "upstream"
+  source: UpdateSource = resolveUpdateSource("upstream")
 ): string | null {
   if (platform === "win32") {
-    return channel === "upstream" ? `${OFFICIAL_FEED_URL}/win32/${architecture}` : githubFeedURL(channel);
+    return source.channel === "upstream" ? `${OFFICIAL_FEED_URL}/win32/${architecture}` : githubFeedURL(source);
   }
-  if (platform === "darwin" && channel === "upstream") {
+  if (platform === "darwin" && source.channel === "upstream") {
     return `${OFFICIAL_FEED_URL}/darwin/${architecture}/${encodeURIComponent(version)}`;
   }
   return null;

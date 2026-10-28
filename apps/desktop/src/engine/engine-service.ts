@@ -27,10 +27,16 @@ import type { EngineRefreshProgress, EngineRequest, EngineResponse } from "./pro
 import { ProviderError, type ProviderAdapter, type ProviderRefreshResult } from "./provider";
 import { DESKTOP_VERSION } from "../shared/version";
 import { validateProviderCredential } from "../shared/quota-providers";
-import { validateReportAliases } from "../shared/report-aliases";
+import { validateReportPlans } from "../shared/report-plans";
 
 const STALE_AFTER_SECONDS = 180;
 const PROVIDER_REFRESH_TIMEOUT_MS = 60_000;
+/**
+ * How long an availability probe is trusted. Probing is not free: a provider that
+ * looks for a database on disk opens and queries every candidate on each call, and
+ * the dashboard asks for a snapshot on every page open and every manual refresh.
+ */
+const AVAILABILITY_TTL_MS = 60_000;
 
 export class EngineService {
   private readonly providers = new Map<string, ProviderAdapter>();
@@ -39,6 +45,7 @@ export class EngineService {
   private readonly cached = new Map<string, DashboardProvider>();
   private readonly capacityAccounts = new Map<string, string | null>();
   private readonly refreshedAt = new Map<string, number>();
+  private readonly availabilityCheckedAt = new Map<string, number>();
   private readonly analyticsFailures = new Map<string, ProviderFailure>();
   private readonly history: HistoryStore;
   private readonly sync: UsageSync | null;
@@ -51,11 +58,11 @@ export class EngineService {
     private readonly historyChanged?: () => void,
     private readonly importChanged?: (accountId: string, progress: LocalImportProgress | null) => void
   ) {
-    this.history = history;
-    this.sync = history instanceof SqliteHistoryStore ? new UsageSync(history.usage, (reason) => {
+    this.history = history;      this.sync = history instanceof SqliteHistoryStore ? new UsageSync(history.usage, (reason) => {
       this.cached.clear();
       if (reason === "account") {
         this.refreshedAt.clear();
+        this.availabilityCheckedAt.clear();
         this.analyticsFailures.clear();
       }
       this.historyChanged?.();
@@ -109,10 +116,10 @@ export class EngineService {
         return this.snapshot() as unknown as JsonValue;
       }
       case "config.update": {
-        if (Object.hasOwn(request.params, "reportAliases")) {
-          const aliases = validateReportAliases(request.params.reportAliases);
-          this.sync?.setReportAliases(aliases);
-          return { reportAliases: aliases.length };
+        if (Object.hasOwn(request.params, "reportPlans")) {
+          const plans = validateReportPlans(request.params.reportPlans);
+          this.sync?.setReportPlans(plans);
+          return { reportPlans: plans.length };
         }
         const providerID = this.providerID(request.params.provider);
         if (Object.hasOwn(request.params, "credential")) {
@@ -122,6 +129,8 @@ export class EngineService {
             throw new ProviderError("invalid_params", "credentialUnavailable must be a boolean.");
           adapter.configureCredential(validateProviderCredential(providerID, request.params.credential), request.params.credentialUnavailable === true);
           this.capacityAccounts.delete(providerID);
+          // A new credential changes what is on disk to read, so probe again.
+          this.availabilityCheckedAt.delete(providerID);
           this.cached.set(providerID, { id: adapter.id, name: adapter.name, enabled: this.enabled.get(providerID) ?? true,
             source: "provider_quota", windows: [], quotaMetrics: [], identity: null, credits: null, analytics: null,
             error: { code: "provider_not_refreshed", message: "Connection changed. Check this source again.", retryable: true }, updatedAt: null });
@@ -179,9 +188,15 @@ export class EngineService {
 
   private async refreshAvailable(force: boolean): Promise<void> {
     const now = this.now().valueOf();
+    // A forced pass is the user asking for the current answer, so the window that
+    // normally makes a probe cheap does not apply to it.
+    if (force) this.availabilityCheckedAt.clear();
     const providers = await Promise.all([...this.providers.values()].map(async (provider) => {
       if (this.explicitlyConfigured.has(provider.id) || !provider.isAvailable) return provider;
-      const available = await provider.isAvailable().catch(() => false);
+      const available = await this.probeAvailability(provider, now);
+      // A probe that was skipped inside its trust window keeps the last answer,
+      // so a provider is neither re-enabled nor dropped without new evidence.
+      if (available === null) return provider;
       const cached = this.cached.get(provider.id);
       this.enabled.set(provider.id, available || Boolean(cached?.analytics || cached?.windows.length));
       return provider;
@@ -216,6 +231,15 @@ export class EngineService {
         status: "completed"
       });
     }));
+  }
+
+  /** Probes a provider at most once per trust window; null means the answer was reused. */
+  private async probeAvailability(provider: ProviderAdapter, now: number): Promise<boolean | null> {
+    const checkedAt = this.availabilityCheckedAt.get(provider.id);
+    if (checkedAt !== undefined && now - checkedAt < AVAILABILITY_TTL_MS) return null;
+    const available = await provider.isAvailable!().catch(() => false);
+    this.availabilityCheckedAt.set(provider.id, now);
+    return available;
   }
 
   private async selectCapacityAccount(adapter: ProviderAdapter): Promise<string | null | undefined> {

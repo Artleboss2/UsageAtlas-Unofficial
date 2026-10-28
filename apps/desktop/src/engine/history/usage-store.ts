@@ -158,14 +158,21 @@ export class UsageStore {
     );
     return this.get(record.recordId, owner)!;
   }
-  pending(): PendingRecord[] {
+  /**
+   * Records waiting to be saved, optionally limited to providers the server
+   * accepts, so a source it does not model cannot hide the ones it can save.
+   */
+  pending(providers?: readonly string[]): PendingRecord[] {
+    // An explicitly empty scope means nothing is uploadable, not everything.
+    if (providers && !providers.length) return [];
     const pending: PendingRecord[] = [];
     let bytes = 0;
     let after: string | null = null;
+    const scope = providers ? ` AND provider IN (${providers.map(() => "?").join(",")})` : "";
     while (pending.length < USAGE_BATCH_SIZE) {
       const rows = this.db.all(
-        "SELECT * FROM usage_record WHERE owner = ? AND local_version > saved_version AND conflict IS NULL AND save_error IS NULL AND (? IS NULL OR id > ?) ORDER BY id LIMIT ?",
-        [this.owner, after, after, USAGE_BATCH_SIZE - pending.length]
+        `SELECT * FROM usage_record WHERE owner = ? AND local_version > saved_version AND conflict IS NULL AND save_error IS NULL AND (? IS NULL OR id > ?)${scope} ORDER BY id LIMIT ?`,
+        [this.owner, after, after, ...(providers ?? []), USAGE_BATCH_SIZE - pending.length]
       );
       if (!rows.length) break;
       for (const row of rows) {
@@ -220,6 +227,12 @@ export class UsageStore {
       return null;
     }
   }
+  /** Providers of the records still waiting to be saved, in stable order. */
+  pendingProviders(): string[] {
+    return this.db
+      .all("SELECT DISTINCT provider FROM usage_record WHERE owner IN (?, '') AND local_version > saved_version AND conflict IS NULL AND save_error IS NULL ORDER BY provider", [this.owner])
+      .map((row) => String(row.provider));
+  }
   counts(): { pending: number; conflicts: number; invalid: number } {
     const row = this.db.get(
       "SELECT COALESCE(SUM(local_version > saved_version), 0) AS pending, COALESCE(SUM(conflict IS NOT NULL AND save_error IS NULL), 0) AS conflicts, COALESCE(SUM(local_version > saved_version AND save_error IS NOT NULL), 0) AS invalid FROM usage_record WHERE owner IN (?, '')",
@@ -236,7 +249,7 @@ export class UsageStore {
   }
   /**
    * `localize` maps a cloud copy back onto the local record it came from. A record
-   * uploaded under another provider (see `report-aliases`) must not rename the row
+   * uploaded under another provider (see `report-plans`) must not rename the row
    * counted here when it comes back down.
    */
   merge(remote: CloudRecord, localize?: (incoming: UsageRecord, local: UsageRecord) => UsageRecord): void {

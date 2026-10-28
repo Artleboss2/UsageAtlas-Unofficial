@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { buildAnalytics, type UsageRecord } from "../analytics/local-usage";
 import { openWritableSqlite } from "../platform/sqlite";
 import { identifyFact } from "./statistics-store";
 import { UsageStore } from "./usage-store";
@@ -59,6 +60,18 @@ function sync(local: UsageStore) {
   const service = new UsageSync(local);
   resources.push(() => service.close());
   return service;
+}
+const observedAt = new Date("2026-09-23T12:00:00Z");
+function usageEvent(overrides: Partial<UsageRecord> = {}): UsageRecord {
+  return {
+    timestamp: "2026-09-23T02:00:00Z", day: "2026-09-23", model: "deepseek-v4-flash", modelProvider: "deepseek",
+    sessionID: "session-1", projectPath: "C:/work/project", projectLabel: "project", serviceTier: "sponsored",
+    inputTokens: 40, cachedInputTokens: 10, cacheCreationInputTokens: 0, outputTokens: 25, totalTokens: 75,
+    estimatedCostUSD: 0.001, eventKey: "source-1", ...overrides
+  };
+}
+function analytics(records: UsageRecord[] = [usageEvent()]) {
+  return buildAnalytics(records, observedAt, 90, 1, false, "local_sessions", undefined, undefined, "UTC");
 }
 
 describe("usage cloud storage", () => {
@@ -346,7 +359,7 @@ describe("usage cloud storage", () => {
     const service = sync(local);
     await service.configure("a", cloud);
     service.setAutomatic(false);
-    service.setReportAliases([{ source: "freebuff", reportAs: "codex", model: "gpt-5.3-codex" }]);
+    service.setReportPlans([{ source: "freebuff", targets: [{ reportAs: "codex", model: "gpt-5.3-codex", weight: 100 }] }]);
     await service.save();
     expect(cloud.rows.get(own.recordId)?.record).toMatchObject({
       providerId: "codex",
@@ -381,6 +394,71 @@ describe("usage cloud storage", () => {
     expect(local.db.get("SELECT COUNT(*) AS facts FROM usage_fact")?.facts).toBe(1);
   });
 
+  it("renumbers a relabelled observation and still acknowledges the local row", async () => {
+    const local = store();
+    local.statistics.collect("freebuff", "local", "replica", analytics());
+    const pending = local.statistics.pending();
+    expect(pending).toHaveLength(2);
+    const sent: { id: string; kind: string; providerId: string; modelKey: string | null }[] = [];
+    const cloud = remoteCloud();
+    cloud.saveFacts = async facts => {
+      // What the server checks: the id is the hash of the content it received.
+      for (const fact of facts) {
+        expect(identifyFact(fact).id).toBe(fact.id);
+        sent.push({ id: fact.id, kind: fact.kind, providerId: fact.providerId,
+          modelKey: fact.kind === "usage_event" ? fact.modelKey : null });
+      }
+      return facts.map(fact => fact.id);
+    };
+    const service = sync(local);
+    await service.configure("a", cloud);
+    service.setAutomatic(false);
+    service.setReportPlans([{ source: "freebuff", targets: [{ reportAs: "codex", model: "gpt-5.3-codex", weight: 100 }] }]);
+    await service.save();
+    expect(sent.every(fact => fact.providerId === "codex")).toBe(true);
+    expect(sent.filter(fact => fact.kind === "usage_event")).toEqual([
+      { id: expect.any(String), kind: "usage_event", providerId: "codex", modelKey: "gpt-5.3-codex" }
+    ]);
+    // The renamed ids differ from the ones stored here, and the local rows are
+    // still marked saved under their own ids.
+    expect(sent.some(fact => pending.some(row => row.id === fact.id))).toBe(false);
+    expect(local.statistics.pending()).toEqual([]);
+    expect(service.status().error).toBeNull();
+    expect(service.status().heldBack).toEqual([]);
+    expect(local.db.get("SELECT COUNT(*) AS facts FROM usage_fact WHERE saved = 0")?.facts).toBe(0);
+    expect(local.db.get("SELECT COUNT(*) AS facts FROM usage_fact")?.facts).toBe(2);
+  });
+
+  it("holds back a source the server does not model instead of failing the save", async () => {
+    const local = store();
+    local.statistics.collect("freebuff", "local", "replica", analytics());
+    const own = day();
+    own.providerId = "codex";
+    local.put(own);
+    const cloud = remoteCloud();
+    const facts: string[] = [];
+    cloud.saveFacts = async values => {
+      for (const fact of values) facts.push(fact.providerId);
+      return values.map(fact => fact.id);
+    };
+    const service = sync(local);
+    await service.configure("a", cloud);
+    service.setAutomatic(false);
+    await service.save();
+    // Codex usage is saved; Freebuff's waits here until a rule renames it.
+    expect(cloud.rows.size).toBe(1);
+    expect(facts).toEqual([]);
+    expect(service.status().error).toBeNull();
+    expect(service.status().heldBack).toEqual(["freebuff"]);
+    expect(local.statistics.pendingCount()).toBe(2);
+    // The same rule then lets the held-back observations through.
+    service.setReportPlans([{ source: "freebuff", targets: [{ reportAs: "codex", model: "gpt-5.3-codex", weight: 100 }] }]);
+    await service.save();
+    expect(facts).toEqual(["codex", "codex"]);
+    expect(local.statistics.pendingCount()).toBe(0);
+    expect(service.status().heldBack).toEqual([]);
+  });
+
   it("inserts a record that only exists in the cloud under the provider it was stored as", async () => {
     const local = store();
     const foreign = { ...day(), recordId: "ffffffff-ffff-4fff-8fff-ffffffffffff", localDay: "2026-09-06" };
@@ -389,7 +467,7 @@ describe("usage cloud storage", () => {
     const service = sync(local);
     await service.configure("a", cloud);
     service.setAutomatic(false);
-    service.setReportAliases([{ source: "freebuff", reportAs: "codex", model: "gpt-5.3-codex" }]);
+    service.setReportPlans([{ source: "freebuff", targets: [{ reportAs: "codex", model: "gpt-5.3-codex", weight: 100 }] }]);
     await service.restore();
     expect(local.get(foreign.recordId)?.record.providerId).toBe(foreign.providerId);
   });

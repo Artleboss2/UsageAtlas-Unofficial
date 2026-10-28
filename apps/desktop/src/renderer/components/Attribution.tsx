@@ -2,78 +2,122 @@ import { useState } from "react";
 import type { DashboardProvider } from "@usageatlas/contracts";
 import { Button, Card } from "@heroui/react";
 import type { DesktopPreferences } from "../../shared/desktop-api";
-import { OFFICIAL_PROVIDERS, isOfficialProvider, type ReportAlias } from "../../shared/report-aliases";
+import {
+  MAX_PLAN_TARGETS,
+  OFFICIAL_PROVIDERS,
+  isOfficialProvider,
+  planWeight,
+  type ReportPlan,
+  type ReportTarget
+} from "../../shared/report-plans";
 import { defaultReportedModel, modelOptions } from "../../shared/report-models";
 
 interface AttributionProps {
   providers: DashboardProvider[];
   preferences: DesktopPreferences | null;
   saving: boolean;
-  onSave(aliases: ReportAlias[]): Promise<void>;
+  onSave(plans: ReportPlan[]): Promise<void>;
 }
+
+const MAX_WEIGHT = 100;
 
 /**
  * Cloud attribution: a source the server does not model yet can still be saved
- * under an official provider. The local history is never rewritten — only the
- * copy sent to the server is relabelled.
+ * under official providers. One source lists several targets with a share each —
+ * 30 % Codex, 20 % ChatGPT, 50 % Claude, say — and each request spins the wheel,
+ * so the uploaded traffic arrives as a mix instead of a single relabelled tool.
+ * The local history is never rewritten: only the copy sent to the server is.
  */
 export function Attribution({ providers, preferences, saving, onSave }: AttributionProps): React.JSX.Element {
   // The page follows saved preferences until the first edit here, so a rule written
   // on another page (or a reload) never discards a half-typed model.
-  const [edited, setEdited] = useState<ReportAlias[] | null>(null);
+  const [edited, setEdited] = useState<ReportPlan[] | null>(null);
   const [status, setStatus] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const draft = edited ?? preferences?.reportAliases ?? [];
+  const draft = edited ?? preferences?.reportPlans ?? [];
 
   const sources = providers.map(provider => ({ id: provider.id, name: provider.name }));
-  const used = new Set<string>(draft.map(alias => alias.source));
+  const used = new Set<string>(draft.map(plan => plan.source));
   const available = sources.filter(source => !used.has(source.id));
-  const invalid = draft.some(alias => !alias.model.trim() || alias.source === alias.reportAs);
+  const invalid = draft.some(plan => !plan.targets.length || duplicateTarget(plan)
+    || plan.targets.some(target => !target.model.trim() || !(target.weight >= 1 && target.weight <= MAX_WEIGHT)));
 
-  function patch(index: number, value: Partial<ReportAlias>): void {
-    setEdited(draft.map((alias, position) => (position === index ? { ...alias, ...value } : alias)));
+  function edit(next: ReportPlan[]): void {
+    setEdited(next);
     setStatus(null);
   }
 
-  function add(): void {
+  function patchPlan(index: number, value: Partial<ReportPlan>): void {
+    edit(draft.map((plan, position) => (position === index ? { ...plan, ...value } : plan)));
+  }
+
+  function patchTarget(planIndex: number, targetIndex: number, value: Partial<ReportTarget>): void {
+    patchPlan(planIndex, {
+      targets: draft[planIndex].targets.map((target, position) => (position === targetIndex ? { ...target, ...value } : target))
+    });
+  }
+
+  function addPlan(): void {
     const source = available[0];
     if (!source) return;
-    setEdited([
-      ...draft,
-      {
-        source: source.id as ReportAlias["source"],
+    edit([...draft, {
+      source: source.id as ReportPlan["source"],
+      targets: [{
         reportAs: OFFICIAL_PROVIDERS[0],
-        model: defaultReportedModel(OFFICIAL_PROVIDERS[0])
-      }
-    ]);
-    setStatus(null);
+        model: defaultReportedModel(OFFICIAL_PROVIDERS[0]),
+        weight: 100
+      }]
+    }]);
+  }
+
+  function removePlan(index: number): void {
+    edit(draft.filter((_plan, position) => position !== index));
+  }
+
+  /** A new target starts with the share the plan has left, so one target stays 100 %. */
+  function addTarget(planIndex: number): void {
+    const plan = draft[planIndex];
+    const taken = new Set(plan.targets.map(target => `${target.reportAs}\u0000${target.model}`));
+    const reportAs = OFFICIAL_PROVIDERS.find(provider => {
+      const model = defaultReportedModel(provider);
+      return !taken.has(`${provider}\u0000${model}`);
+    });
+    if (!reportAs) return;
+    const remaining = Math.max(1, MAX_WEIGHT - planWeight(plan) + plan.targets[0].weight);
+    patchPlan(planIndex, {
+      targets: [...plan.targets, { reportAs, model: defaultReportedModel(reportAs), weight: Math.min(MAX_WEIGHT, remaining) }]
+    });
+  }
+
+  function removeTarget(planIndex: number, targetIndex: number): void {
+    const plan = draft[planIndex];
+    if (plan.targets.length === 1) return;
+    patchPlan(planIndex, { targets: plan.targets.filter((_target, position) => position !== targetIndex) });
   }
 
   /** Provider change keeps the current model when the new provider offers it. */
-  function changeProvider(index: number, reportAs: ReportAlias["reportAs"], model: string): void {
-    const offered = isOfficialProvider(reportAs) ? modelOptions(reportAs, "") : [];
-    patch(index, {
+  function changeProvider(planIndex: number, targetIndex: number, reportAs: ReportTarget["reportAs"], model: string): void {
+    const offered = modelOptions(reportAs, "");
+    patchTarget(planIndex, targetIndex, {
       reportAs,
       model: offered.includes(model) ? model : (offered[0] ?? defaultReportedModel(OFFICIAL_PROVIDERS[0]))
     });
   }
 
   /** Only an official provider has an offered catalog; anything else keeps its saved model. */
-  function offeredModels(alias: ReportAlias): readonly string[] {
-    return isOfficialProvider(alias.reportAs) ? modelOptions(alias.reportAs, alias.model) : [alias.model];
-  }
-
-  function remove(index: number): void {
-    setEdited(draft.filter((_row, position) => position !== index));
-    setStatus(null);
+  function offeredModels(target: ReportTarget): readonly string[] {
+    return isOfficialProvider(target.reportAs) ? modelOptions(target.reportAs, target.model) : [target.model];
   }
 
   async function save(): Promise<void> {
     setError(null);
     setStatus(null);
     try {
-      await onSave(draft.map(alias => ({ ...alias, model: alias.model.trim() })));
-      // The saved rules are the validated ones, so the page goes back to them.
+      await onSave(draft.map(plan => ({
+        source: plan.source,
+        targets: plan.targets.map(target => ({ ...target, model: target.model.trim() }))
+      })));
+      // The saved plans are the validated ones, so the page goes back to them.
       setEdited(null);
       setStatus("Rules saved. The next cloud save uses them.");
     } catch (failure) {
@@ -96,69 +140,120 @@ export function Attribution({ providers, preferences, saving, onSave }: Attribut
         <Card.Header>
           <Card.Title>Report as</Card.Title>
           <Card.Description>
-            A source the server does not know yet can be saved under an official provider, with a
-            model that provider runs. Local totals, charts and detection are untouched.
+            A source the server does not know yet can be saved under official providers, with a share
+            for each. The wheel decides per request, so a 30/20/50 split can land on Codex four times in
+            a row — over a day it comes out close to the shares you set.
           </Card.Description>
         </Card.Header>
-        <Card.Content className="mt-3 space-y-3">
+        <Card.Content className="mt-3 space-y-4">
           {draft.length === 0 ? (
             <p className="text-sm text-muted">No rule yet. Every source is saved under its own name.</p>
           ) : (
-            draft.map((alias, index) => (
-              <div className="atlas-alias-row" key={`${alias.source}-${index}`}>
-                <label className="atlas-alias-field">
-                  <span>Local source</span>
-                  <select
-                    aria-label="Local source"
-                    onChange={(event) => patch(index, { source: event.target.value as ReportAlias["source"] })}
-                    value={alias.source}
+            draft.map((plan, planIndex) => (
+              <div className="atlas-plan" key={`${plan.source}-${planIndex}`}>
+                <div className="atlas-alias-row">
+                  <label className="atlas-alias-field">
+                    <span>Local source</span>
+                    <select
+                      aria-label="Local source"
+                      onChange={(event) => patchPlan(planIndex, { source: event.target.value as ReportPlan["source"] })}
+                      value={plan.source}
+                    >
+                      {[...sources.filter(source => source.id === plan.source), ...available].map(source => (
+                        <option key={source.id} value={source.id}>{source.name}</option>
+                      ))}
+                    </select>
+                  </label>
+                  <p className="atlas-plan__summary text-xs text-muted">
+                    {planWeight(plan)}% of this source&apos;s requests, spread over {plan.targets.length}{" "}
+                    {plan.targets.length === 1 ? "target" : "targets"}.
+                  </p>
+                  <Button
+                    aria-label={`Remove the rule for ${plan.source}`}
+                    className="ms-auto"
+                    onPress={() => removePlan(planIndex)}
+                    size="sm"
+                    variant="ghost"
                   >
-                    {[...sources.filter(source => source.id === alias.source), ...available].map(source => (
-                      <option key={source.id} value={source.id}>{source.name}</option>
-                    ))}
-                  </select>
-                </label>
-                <label className="atlas-alias-field">
-                  <span>Reported as</span>
-                  <select
-                    aria-label="Reported provider"
-                    onChange={(event) =>
-                      changeProvider(index, event.target.value as ReportAlias["reportAs"], alias.model)
-                    }
-                    value={alias.reportAs}
-                  >
-                    {OFFICIAL_PROVIDERS.map(provider => (
-                      <option key={provider} value={provider}>{provider}</option>
-                    ))}
-                  </select>
-                </label>
-                <label className="atlas-alias-field atlas-alias-field--model">
-                  <span>Model</span>
-                  <select
-                    aria-label="Reported model"
-                    onChange={(event) => patch(index, { model: event.target.value })}
-                    value={alias.model}
-                  >
-                    {alias.model ? null : <option value="">Choose a model…</option>}
-                    {offeredModels(alias).map((model) => (
-                      <option key={model} value={model}>{model}</option>
-                    ))}
-                  </select>
-                </label>
+                    Remove
+                  </Button>
+                </div>
+
+                {plan.targets.map((target, targetIndex) => (
+                  <div className="atlas-alias-row" key={`${target.reportAs}-${target.model}-${targetIndex}`}>
+                    <label className="atlas-alias-field">
+                      <span>Reported as</span>
+                      <select
+                        aria-label="Reported provider"
+                        onChange={(event) =>
+                          changeProvider(planIndex, targetIndex, event.target.value as ReportTarget["reportAs"], target.model)
+                        }
+                        value={target.reportAs}
+                      >
+                        {OFFICIAL_PROVIDERS.map(provider => (
+                          <option key={provider} value={provider}>{provider}</option>
+                        ))}
+                      </select>
+                    </label>
+                    <label className="atlas-alias-field atlas-alias-field--model">
+                      <span>Model</span>
+                      <select
+                        aria-label="Reported model"
+                        onChange={(event) => patchTarget(planIndex, targetIndex, { model: event.target.value })}
+                        value={target.model}
+                      >
+                        {target.model ? null : <option value="">Choose a model…</option>}
+                        {offeredModels(target).map((model) => (
+                          <option key={model} value={model}>{model}</option>
+                        ))}
+                      </select>
+                    </label>
+                    <label className="atlas-alias-field atlas-alias-field--weight">
+                      <span>Share</span>
+                      <span className="atlas-weight-input">
+                        <input
+                          aria-label="Share of requests"
+                          max={MAX_WEIGHT}
+                          min={1}
+                          onChange={(event) =>
+                            patchTarget(planIndex, targetIndex, { weight: Number.parseInt(event.target.value, 10) || 0 })
+                          }
+                          step={1}
+                          type="number"
+                          value={target.weight}
+                        />
+                        <span aria-hidden="true">%</span>
+                      </span>
+                    </label>
+                    <span className="atlas-plan__share text-xs text-muted">
+                      {Math.round(share(plan, target) * 100)}% of {plan.source}
+                    </span>
+                    <Button
+                      aria-label={`Remove ${target.reportAs} from ${plan.source}`}
+                      isDisabled={plan.targets.length === 1}
+                      onPress={() => removeTarget(planIndex, targetIndex)}
+                      size="sm"
+                      variant="ghost"
+                    >
+                      Remove
+                    </Button>
+                  </div>
+                ))}
+
                 <Button
-                  aria-label={`Remove the rule for ${alias.source}`}
-                  onPress={() => remove(index)}
+                  isDisabled={plan.targets.length >= MAX_PLAN_TARGETS}
+                  onPress={() => addTarget(planIndex)}
                   size="sm"
-                  variant="ghost"
+                  variant="outline"
                 >
-                  Remove
+                  Add target
                 </Button>
               </div>
             ))
           )}
 
           <div className="flex flex-wrap items-center gap-3">
-            <Button isDisabled={available.length === 0} onPress={add} size="sm" variant="outline">
+            <Button isDisabled={available.length === 0} onPress={addPlan} size="sm" variant="outline">
               Add rule
             </Button>
             <Button isDisabled={saving || invalid || draft.length === 0} isPending={saving} onPress={() => void save()}>
@@ -170,7 +265,8 @@ export function Attribution({ providers, preferences, saving, onSave }: Attribut
           </div>
           {invalid ? (
             <p className="text-xs text-danger" role="alert">
-              Each rule needs a source, a different official provider, and a model.
+              Every target needs a provider, a model and a share between 1 % and {MAX_WEIGHT} %. Shares are
+              relative, so 30 / 20 / 50 and 3 / 2 / 5 behave the same.
             </p>
           ) : null}
           {error ? (
@@ -185,16 +281,37 @@ export function Attribution({ providers, preferences, saving, onSave }: Attribut
         </Card.Header>
         <Card.Content className="mt-2 space-y-2 text-sm text-muted">
           <p>
-            With a rule <strong>Freebuff → codex</strong> and model <strong>gpt-5.3-codex</strong>,
-            this computer keeps counting Freebuff tokens, while the uploaded usage arrives as Codex
-            usage on that model.
+            With a wheel of <strong>Freebuff → codex (gpt-5.3-codex) 30 %</strong>,{" "}
+            <strong>chatgpt-style (gpt-5.5) 20 %</strong> and <strong>claude (claude-sonnet-4-6) 50 %</strong>,
+            this computer keeps counting Freebuff tokens, while each uploaded request arrives as one of
+            those three.
           </p>
           <p>
-            Restoring that account on another computer brings back what the server stored, so the
-            relabelled copies reappear there. Unlabelled local history is never overwritten.
+            A target is drawn per request, not in turn: three requests in ten land on Codex on average, and
+            the same request keeps its target when a save is retried — its identity is fixed, so interrupted
+            uploads never rename it.
+          </p>
+          <p>
+            Restoring that account on another computer brings back what the server stored, so the relabelled
+            copies reappear there. Unlabelled local history is never overwritten.
           </p>
         </Card.Content>
       </Card>
     </div>
   );
+}
+
+function share(plan: ReportPlan, target: ReportTarget): number {
+  const total = planWeight(plan);
+  return total > 0 ? target.weight / total : 0;
+}
+
+function duplicateTarget(plan: ReportPlan): boolean {
+  const seen = new Set<string>();
+  for (const target of plan.targets) {
+    const key = `${target.reportAs}\u0000${target.model}`;
+    if (seen.has(key)) return true;
+    seen.add(key);
+  }
+  return false;
 }

@@ -260,6 +260,8 @@ export function Settings({
           <UpdateSettings
             channel={preferences.updateChannel}
             onChangeChannel={(updateChannel) => onUpdate({ updateChannel })}
+            onChangeRepository={(updateRepository) => onUpdate({ updateRepository })}
+            repository={preferences.updateRepository}
             onCheck={onCheckForUpdates}
             onInstall={onInstallUpdate}
             state={updateState}

@@ -103,8 +103,9 @@ function provider(overrides: Partial<DashboardProvider> = {}): DashboardProvider
 
 function preferences(): DesktopPreferences {
   return {
-    reportAliases: [],
+    reportPlans: [],
     updateChannel: "fork",
+    updateRepository: "",
     backgroundImage: "mist",
     customBackgroundName: null,
     launchAtLogin: false,

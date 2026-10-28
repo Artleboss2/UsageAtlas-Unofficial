@@ -13,6 +13,7 @@ import ZAI from "@lobehub/icons/es/ZAI/components/Mono.js";
 
 const warpLogo = new URL("../assets/providers/warp.svg", import.meta.url).href;
 const factoryLogo = new URL("../assets/providers/factory.svg", import.meta.url).href;
+const freebuffLogo = new URL("../assets/providers/freebuff.svg", import.meta.url).href;
 
 interface ProviderLogoProps {
   providerID: string;
@@ -58,7 +59,10 @@ export function ProviderLogo({
         ? "size-12 text-base"
         : "size-16 text-xl";
   const iconSize = mark ? 16 : mini ? 22 : compact ? 27 : 32;
-  const image = providerID === "warp" ? warpLogo : providerID === "factory" ? factoryLogo : null;
+  const image = providerID === "warp" ? warpLogo
+    : providerID === "factory" ? factoryLogo
+      : providerID === "freebuff" ? freebuffLogo
+        : null;
 
   return (
     <span aria-hidden="true" className={`atlas-provider-logo ${avatarClassName}`}>

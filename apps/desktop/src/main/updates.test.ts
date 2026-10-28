@@ -1,5 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { app, autoUpdater, net } from "electron";
+import type { UpdateChannel } from "../shared/desktop-api";
+import { resolveUpdateSource } from "./update-feed";
 import { configureAutoUpdates } from "./updates";
 
 vi.mock("electron", async () => {
@@ -136,15 +138,15 @@ describe("desktop updates", () => {
   });
 
   it("reads the fork's GitHub releases when that channel is selected", async () => {
-    const updater = configureAutoUpdates({ channel: () => "fork" });
+    const updater = configureAutoUpdates({ source: () => resolveUpdateSource("fork") });
     await updater.check();
     expect(autoUpdater.setFeedURL).toHaveBeenCalledWith({ url: "https://github.com/Artleboss2/UsageAtlas-Unofficial/releases/latest/download" });
     expect(updater.downloadPageURL()).toBe("https://github.com/Artleboss2/UsageAtlas-Unofficial/releases/latest");
   });
 
   it("follows the channel without a restart", async () => {
-    let channel: "fork" | "upstream" = "fork";
-    const updater = configureAutoUpdates({ channel: () => channel });
+    let channel: UpdateChannel = "fork";
+    const updater = configureAutoUpdates({ source: () => resolveUpdateSource(channel) });
     await updater.check();
     autoUpdater.emit("update-not-available");
     channel = "upstream";
@@ -158,7 +160,7 @@ describe("desktop updates", () => {
   it("compares versions from the GitHub tag on platforms it cannot install in place", async () => {
     Object.defineProperty(process, "platform", { value: "linux" });
     vi.mocked(net.fetch).mockResolvedValue(new Response(JSON.stringify({ tag_name: "desktop-v0.2.12" })));
-    const updater = configureAutoUpdates({ channel: () => "fork" });
+    const updater = configureAutoUpdates({ source: () => resolveUpdateSource("fork") });
     expect(await updater.check()).toMatchObject({ status: "available", availableVersion: "0.2.12" });
     expect(vi.mocked(net.fetch).mock.calls[0][0])
       .toBe("https://api.github.com/repos/Artleboss2/UsageAtlas-Unofficial/releases/latest");

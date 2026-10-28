@@ -3,6 +3,16 @@ import type { EngineStatus, UsageAtlasDesktopAPI } from "../shared/desktop-api";
 import { IPC } from "../shared/desktop-api";
 
 const api: UsageAtlasDesktopAPI = {
+  platform: process.platform,
+  minimizeWindow: () => ipcRenderer.invoke(IPC.minimizeWindow),
+  toggleMaximizeWindow: () => ipcRenderer.invoke(IPC.toggleMaximizeWindow),
+  closeWindow: () => ipcRenderer.invoke(IPC.closeWindow),
+  getWindowState: () => ipcRenderer.invoke(IPC.getWindowState),
+  onWindowMaximized: (listener) => {
+    const handler = (_event: Electron.IpcRendererEvent, maximized: boolean) => listener(maximized);
+    ipcRenderer.on(IPC.windowMaximized, handler);
+    return () => ipcRenderer.removeListener(IPC.windowMaximized, handler);
+  },
   getProviderCredentials: () => ipcRenderer.invoke(IPC.getProviderCredentials),
   setProviderCredential: (provider, credential) => ipcRenderer.invoke(IPC.setProviderCredential, provider, credential),
   getUpdateState: () => ipcRenderer.invoke(IPC.getUpdateState),
@@ -26,7 +36,7 @@ const api: UsageAtlasDesktopAPI = {
   getSnapshot: () => ipcRenderer.invoke(IPC.snapshot),
   refreshAll: () => ipcRenderer.invoke(IPC.refreshAll),
   setProviderEnabled: (providerID, enabled) => ipcRenderer.invoke(IPC.setProviderEnabled, providerID, enabled),
-  setReportAliases: (aliases) => ipcRenderer.invoke(IPC.setReportAliases, aliases),
+  setReportPlans: (plans) => ipcRenderer.invoke(IPC.setReportPlans, plans),
   getPreferences: () => ipcRenderer.invoke(IPC.getPreferences),
   updatePreferences: (patch) => ipcRenderer.invoke(IPC.updatePreferences, patch),
   getDiagnostics: () => ipcRenderer.invoke(IPC.getDiagnostics),

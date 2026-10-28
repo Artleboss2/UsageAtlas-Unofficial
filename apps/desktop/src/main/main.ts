@@ -1,7 +1,7 @@
 import { CloudAccount, type KnownProfileStatus } from "./cloud-account";
 import { ProviderCredentialStore, configureProviderCredentials } from "./provider-credentials";
 import { isQuotaProvider, validateProviderCredential } from "../shared/quota-providers";
-import { validateReportAliases } from "../shared/report-aliases";
+import { validateReportPlans } from "../shared/report-plans";
 import type { DashboardSnapshot } from "@usageatlas/contracts";
 import { existsSync, mkdtempSync, statSync, writeFileSync } from "node:fs";
 import {
@@ -30,7 +30,7 @@ import { pathToFileURL } from "node:url";
 import { isLimitKey } from "../shared/capacity-model";
 import { DashboardSession } from "./dashboard-session";
 import type { AppRoute, DesktopPreferences } from "../shared/desktop-api";
-import { IPC, isBackgroundImagePreference } from "../shared/desktop-api";
+import { IPC, isBackgroundImagePreference, isUpdateChannel, isUpdateRepository } from "../shared/desktop-api";
 import { isUsageAlertPreferences } from "../shared/usage-alerts";
 import { isGrowthEvent } from "../shared/growth-events";
 import { EngineManager } from "./engine-manager";
@@ -39,6 +39,7 @@ import { PublicLeaderboard } from "./public-leaderboard";
 import { DesktopTelemetry } from "./telemetry";
 import { trayLimitLabels } from "./tray-limits";
 import { configureAutoUpdates, type DesktopUpdater } from "./updates";
+import { resolveUpdateSource } from "./update-feed";
 import {
   createUsageAlertNotification,
   UsageAlertDeliveryLog,
@@ -155,12 +156,11 @@ function createWindow(route: AppRoute = "day"): BrowserWindow {
     backgroundColor: chrome.backgroundColor,
     icon: process.platform === "win32" ? loadWindowsIcon() : loadRuntimeLogo(),
     roundedCorners: true,
+    // macOS keeps its traffic lights; every other platform draws its own controls
+    // in the renderer's title bar, next to the window buttons the app already had.
     ...(process.platform === "darwin"
       ? { titleBarStyle: "hiddenInset" as const }
-      : {
-          titleBarStyle: "hidden" as const,
-          titleBarOverlay: { color: chrome.backgroundColor, symbolColor: chrome.symbolColor, height: 40 }
-        }),
+      : { titleBarStyle: "hidden" as const }),
     title: "UsageAtlas",
     webPreferences: {
       preload: path.join(__dirname, "preload.js"),
@@ -193,15 +193,19 @@ function createWindow(route: AppRoute = "day"): BrowserWindow {
   });
 
   const syncWindowChrome = (): void => {
-    const next = systemWindowChrome();
-    window.setBackgroundColor(next.backgroundColor);
-    if (process.platform !== "darwin") {
-      window.setTitleBarOverlay({ color: next.backgroundColor, symbolColor: next.symbolColor, height: 40 });
-    }
+    window.setBackgroundColor(systemWindowChrome().backgroundColor);
   };
   nativeTheme.on("updated", syncWindowChrome);
+  // The renderer draws the maximize glyph, so it is told when the state flips.
+  const publishMaximized = (): void => {
+    if (!window.isDestroyed()) window.webContents.send(IPC.windowMaximized, window.isMaximized());
+  };
+  window.on("maximize", publishMaximized);
+  window.on("unmaximize", publishMaximized);
   window.once("closed", () => {
     nativeTheme.off("updated", syncWindowChrome);
+    window.off("maximize", publishMaximized);
+    window.off("unmaximize", publishMaximized);
   });
 
   if (MAIN_WINDOW_VITE_DEV_SERVER_URL) {
@@ -421,11 +425,32 @@ function registerIPC(): void {
     preferences.update({ providerEnabled: { ...current, [providerID]: enabled } });
     return dashboard.setProviderEnabled(providerID, enabled);
   });
-  ipcMain.handle(IPC.setReportAliases, async (event, value: unknown) => {
+  ipcMain.handle(IPC.setReportPlans, async (event, value: unknown) => {
     assertTrustedSender(event);
-    const next = preferences.update({ reportAliases: validateReportAliases(value) });
-    await engine.setReportAliases(next.reportAliases);
+    const next = preferences.update({ reportPlans: validateReportPlans(value) });
+    await engine.setReportPlans(next.reportPlans);
     return next;
+  });
+  ipcMain.handle(IPC.minimizeWindow, (event) => {
+    assertTrustedSender(event);
+    BrowserWindow.fromWebContents(event.sender)?.minimize();
+  });
+  ipcMain.handle(IPC.toggleMaximizeWindow, (event) => {
+    assertTrustedSender(event);
+    const window = BrowserWindow.fromWebContents(event.sender);
+    if (!window) return false;
+    if (window.isMaximized()) window.unmaximize();
+    else window.maximize();
+    return window.isMaximized();
+  });
+  ipcMain.handle(IPC.closeWindow, (event) => {
+    assertTrustedSender(event);
+    // Goes through the window's own close handler, so minimize-to-tray still applies.
+    BrowserWindow.fromWebContents(event.sender)?.close();
+  });
+  ipcMain.handle(IPC.getWindowState, (event) => {
+    assertTrustedSender(event);
+    return BrowserWindow.fromWebContents(event.sender)?.isMaximized() ?? false;
   });
   ipcMain.handle(IPC.getPreferences, (event) => {
     assertTrustedSender(event);
@@ -439,8 +464,11 @@ function registerIPC(): void {
     if (previous.anonymousAnalytics !== nextPreferences.anonymousAnalytics) {
       telemetry.setEnabled(nextPreferences.anonymousAnalytics);
     }
-    // A different publisher is checked against the new feed right away.
-    if (previous.updateChannel !== nextPreferences.updateChannel) void updates.check().catch(() => undefined);
+    // A different publisher, or a different repository on the custom channel, is
+    // checked against the new feed right away.
+    if (previous.updateChannel !== nextPreferences.updateChannel || previous.updateRepository !== nextPreferences.updateRepository) {
+      void updates.check().catch(() => undefined);
+    }
     updateTrayMenu();
     return nextPreferences;
   });
@@ -539,7 +567,7 @@ function isAllowedExternal(value: string): boolean {
 function isPreferencePatch(value: unknown): value is Partial<DesktopPreferences> {
   if (!value || typeof value !== "object" || Array.isArray(value)) return false;
   const patch = value as Record<string, unknown>;
-  if (Object.keys(patch).some((key) => !["launchAtLogin", "minimizeToTray", "anonymousAnalytics", "backgroundImage", "usageAlerts", "limitOrder", "trayLimits"].includes(key))) {
+  if (Object.keys(patch).some((key) => !["launchAtLogin", "minimizeToTray", "anonymousAnalytics", "backgroundImage", "usageAlerts", "limitOrder", "trayLimits", "updateChannel", "updateRepository"].includes(key))) {
     return false;
   }
   return (patch.launchAtLogin === undefined || typeof patch.launchAtLogin === "boolean")
@@ -552,6 +580,8 @@ function isPreferencePatch(value: unknown): value is Partial<DesktopPreferences>
       && patch.limitOrder.every(isLimitKey)
     ))
     && (patch.trayLimits === undefined || isTrayLimitPatch(patch.trayLimits))
+    && (patch.updateChannel === undefined || isUpdateChannel(patch.updateChannel))
+    && (patch.updateRepository === undefined || isUpdateRepository(patch.updateRepository))
     && (patch.usageAlerts === undefined || isUsageAlertPreferences(patch.usageAlerts));
 }
 
@@ -619,11 +649,11 @@ if (squirrelStartup) {
   await configureProviderCredentials(providerCredentials, engine);
   engine.onStatus(status => {
     if (status === "ready") void configureProviderCredentials(providerCredentials, engine).then(() => engine.applyProviderPreferences(preferences.get().providerEnabled))
-      .then(() => engine.setReportAliases(preferences.get().reportAliases))
+      .then(() => engine.setReportPlans(preferences.get().reportPlans))
       .then(() => cloudAccount.reconnect()).catch(() => undefined);
   });
   await engine.applyProviderPreferences(preferences.get().providerEnabled);
-  await engine.setReportAliases(preferences.get().reportAliases);
+  await engine.setReportPlans(preferences.get().reportPlans);
   dashboard.activate();
   registerIPC();
   createTray();
@@ -640,7 +670,7 @@ if (squirrelStartup) {
   updates = configureAutoUpdates({
     capture: (event) => telemetry.capture(event),
     // Read per check, so switching publisher takes effect on the next one.
-    channel: () => preferences.get().updateChannel,
+    source: () => resolveUpdateSource(preferences.get().updateChannel, preferences.get().updateRepository),
     onStateChange: (state) => {
       if (state.status === "error") {
         if (installPendingUpdate) isQuitting = false;

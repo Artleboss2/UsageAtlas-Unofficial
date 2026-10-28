@@ -11,10 +11,11 @@ import {
   rollForwardBackgroundDefault,
   sanitizeBackgroundImage,
   sanitizeUpdateChannel,
+  sanitizeUpdateRepository,
   type DesktopPreferences
 } from "../shared/desktop-api";
 import { cloneUsageAlertPreferences, sanitizeUsageAlertPreferences } from "../shared/usage-alerts";
-import { validateReportAliases } from "../shared/report-aliases";
+import { planFromLegacyAliases, validateReportPlans } from "../shared/report-plans";
 
 type ProfileState = "missing" | "private" | "public";
 
@@ -29,6 +30,7 @@ function defaultPreferences(): StoredPreferences {
   return {
     backgroundImage: DEFAULT_BACKGROUND_IMAGE,
     updateChannel: DEFAULT_UPDATE_CHANNEL,
+    updateRepository: "",
     customBackgroundName: null,
     launchAtLogin: true,
     minimizeToTray: true,
@@ -36,7 +38,7 @@ function defaultPreferences(): StoredPreferences {
     limitOrder: [],
     trayLimits: {},
     usageAlerts: {},
-    reportAliases: [],
+    reportPlans: [],
     anonymousAnalytics: true,
     analyticsInstallationId: randomUUID(),
     backgroundDefaultGeneration: BACKGROUND_DEFAULT_GENERATION,
@@ -60,6 +62,7 @@ export class PreferenceStore {
     return {
       backgroundImage: this.values.backgroundImage,
       updateChannel: this.values.updateChannel,
+      updateRepository: this.values.updateRepository,
       customBackgroundName: this.values.customBackgroundName,
       launchAtLogin: this.values.launchAtLogin,
       minimizeToTray: this.values.minimizeToTray,
@@ -68,7 +71,7 @@ export class PreferenceStore {
       limitOrder: [...this.values.limitOrder],
       trayLimits: { ...this.values.trayLimits },
       usageAlerts: cloneUsageAlertPreferences(this.values.usageAlerts),
-      reportAliases: this.values.reportAliases.map(alias => ({ ...alias }))
+      reportPlans: this.values.reportPlans.map(plan => ({ source: plan.source, targets: plan.targets.map(target => ({ ...target })) }))
     };
   }
 
@@ -98,6 +101,7 @@ export class PreferenceStore {
     if (typeof patch.minimizeToTray === "boolean") next.minimizeToTray = patch.minimizeToTray;
     if (typeof patch.anonymousAnalytics === "boolean") next.anonymousAnalytics = patch.anonymousAnalytics;
     if (patch.updateChannel !== undefined) next.updateChannel = sanitizeUpdateChannel(patch.updateChannel);
+    if (patch.updateRepository !== undefined) next.updateRepository = sanitizeUpdateRepository(patch.updateRepository);
     if (patch.providerEnabled && typeof patch.providerEnabled === "object") {
       next.providerEnabled = Object.fromEntries(Object.entries(patch.providerEnabled).filter(
         ([providerID, enabled]) => /^[a-z0-9-]{1,64}$/u.test(providerID) && typeof enabled === "boolean"
@@ -112,8 +116,8 @@ export class PreferenceStore {
     if (patch.usageAlerts && typeof patch.usageAlerts === "object") {
       next.usageAlerts = sanitizeUsageAlertPreferences(patch.usageAlerts);
     }
-    if (Array.isArray(patch.reportAliases)) {
-      next.reportAliases = validateReportAliases(patch.reportAliases);
+    if (Array.isArray(patch.reportPlans)) {
+      next.reportPlans = validateReportPlans(patch.reportPlans);
     }
     this.values = next;
     this.persist();
@@ -143,6 +147,7 @@ export class PreferenceStore {
         values: {
           backgroundImage: rolled.backgroundImage,
           updateChannel: sanitizeUpdateChannel(parsed.updateChannel),
+          updateRepository: sanitizeUpdateRepository(parsed.updateRepository),
           customBackgroundName: typeof parsed.customBackgroundName === "string" ? parsed.customBackgroundName : null,
           launchAtLogin: typeof parsed.launchAtLogin === "boolean" ? parsed.launchAtLogin : defaults.launchAtLogin,
           minimizeToTray: typeof parsed.minimizeToTray === "boolean" ? parsed.minimizeToTray : defaults.minimizeToTray,
@@ -156,7 +161,10 @@ export class PreferenceStore {
           limitOrder: sanitizeLimitOrder(parsed.limitOrder),
           trayLimits: sanitizeTrayLimits(parsed.trayLimits),
           usageAlerts: sanitizeUsageAlertPreferences(parsed.usageAlerts),
-          reportAliases: validateReportAliases(parsed.reportAliases),
+          // Single-target rules from earlier builds become one-target plans.
+          reportPlans: validateReportPlans(parsed.reportPlans ?? []).length
+            ? validateReportPlans(parsed.reportPlans)
+            : planFromLegacyAliases((parsed as { reportAliases?: unknown }).reportAliases),
           backgroundDefaultGeneration: rolled.appliedGeneration,
           lastProfile: isLastProfile(parsed.lastProfile) ? parsed.lastProfile : null
         },

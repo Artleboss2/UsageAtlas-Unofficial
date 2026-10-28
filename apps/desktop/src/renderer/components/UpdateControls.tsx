@@ -1,4 +1,4 @@
-import { Button, Card, Label, Radio, RadioGroup, Spinner } from "@heroui/react";
+import { Button, Card, Input, Label, Radio, RadioGroup, Spinner, TextField } from "@heroui/react";
 import type { DesktopUpdateState, UpdateChannel } from "../../shared/desktop-api";
 import { isUpdateChannel } from "../../shared/desktop-api";
 import { DESKTOP_VERSION } from "../../shared/version";
@@ -16,6 +16,12 @@ const CHANNELS: { value: UpdateChannel; label: string; description: string }[] =
     label: "Upstream",
     description:
       "The original project's releases. Installing one replaces this fork's private providers with the official build."
+  },
+  {
+    value: "custom",
+    label: "Another repository",
+    description:
+      "Releases from a GitHub repository you name, published as owner/name (for example yourname/UsageAtlas-Unofficial)."
   }
 ];
 
@@ -24,10 +30,20 @@ interface UpdateControlsProps {
   onCheck(): Promise<void>;
   onInstall(): Promise<void>;
   channel?: UpdateChannel;
+  repository?: string;
   onChangeChannel?(channel: UpdateChannel): Promise<void>;
+  onChangeRepository?(repository: string): Promise<void>;
 }
 
-export function UpdateSettings({ state, onCheck, onInstall, channel, onChangeChannel }: UpdateControlsProps): React.JSX.Element {
+export function UpdateSettings({
+  state,
+  onCheck,
+  onInstall,
+  channel,
+  repository,
+  onChangeChannel,
+  onChangeRepository
+}: UpdateControlsProps): React.JSX.Element {
   const busy = !state || state.status === "checking" || state.status === "downloading";
   const ready = state?.status === "ready";
   const available = state?.status === "available";
@@ -86,6 +102,24 @@ export function UpdateSettings({ state, onCheck, onInstall, channel, onChangeCha
             <p className="atlas-update-settings__hint text-xs text-muted">
               {CHANNELS.find((option) => option.value === channel)?.description}
             </p>
+            {channel === "custom" && onChangeRepository ? (
+              <div className="atlas-update-settings__repository">
+                <TextField
+                  isDisabled={busy || unavailable}
+                  // Saved on blur or Enter rather than per keystroke, so a half-typed
+                  // name never points a check at a repository that does not exist.
+                  defaultValue={repository ?? ""}
+                  key={repository ?? ""}
+                  onBlur={(event) => void onChangeRepository(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter") void onChangeRepository(event.currentTarget.value);
+                  }}
+                >
+                  <Label>GitHub repository</Label>
+                  <Input placeholder="owner/name" />
+                </TextField>
+              </div>
+            ) : null}
           </div>
         ) : null}
       </Card.Content>

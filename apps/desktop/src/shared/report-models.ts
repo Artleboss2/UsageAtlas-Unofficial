@@ -1,5 +1,5 @@
 import { PUBLIC_MODELS } from "@usageatlas/contracts/usage";
-import { OFFICIAL_PROVIDERS, type OfficialProvider } from "./report-aliases";
+import { OFFICIAL_PROVIDERS, type OfficialProvider } from "./report-plans";
 
 /**
  * Models a relabelled upload may name, per official provider, so the picker in

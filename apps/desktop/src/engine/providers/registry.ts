@@ -26,7 +26,7 @@ export function createProviderAdapters(): ProviderAdapter[] {
     createLocalToolAdapter("antigravity", { pricingCatalogLoader }),
     createLocalToolAdapter("pi", { pricingCatalogLoader }),
     createLocalToolAdapter("muse"),
-    createFreebuffAdapter(),
+    createFreebuffAdapter({ pricingCatalogLoader }),
     createWarpAdapter(), createKimiAdapter(), createKiloAdapter(), createCopilotAdapter(),
     createFactoryAdapter(), createAmpAdapter(), createQoderAdapter(), createZaiAdapter()
   ];

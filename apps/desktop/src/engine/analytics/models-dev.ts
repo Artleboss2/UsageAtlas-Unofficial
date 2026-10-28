@@ -30,6 +30,21 @@ export interface PricingCatalog {
   rate(providerID: string, modelID: string): ModelRate | null;
 }
 
+/**
+ * A tool's own vendor prefix, mapped to the provider that publishes the same
+ * model in the catalog. Freebuff serves `z-ai/glm-5.3-flash`, for instance,
+ * while models.dev keys the same model under `zhipuai`. Looked up only when the
+ * prefix itself has no rate, so a catalog that carries the vendor directly wins.
+ */
+const PROVIDER_ALIASES: Readonly<Record<string, readonly string[]>> = {
+  "z-ai": ["zhipuai", "zai"],
+  zhipu: ["zhipuai"],
+  mistralai: ["mistral"],
+  "x-ai": ["xai"],
+  qwen: ["alibaba", "qwen"],
+  "meta-llama": ["meta"]
+};
+
 interface CacheFile {
   fetchedAt: string;
   catalog: unknown;
@@ -48,7 +63,13 @@ export function pricingCatalogFromRates(
   return {
     revision,
     rate(providerID, modelID) {
-      return rates[providerID]?.[modelID] ?? null;
+      const direct = rates[providerID]?.[modelID];
+      if (direct) return direct;
+      for (const alias of PROVIDER_ALIASES[providerID] ?? []) {
+        const rate = rates[alias]?.[modelID];
+        if (rate) return rate;
+      }
+      return null;
     }
   };
 }

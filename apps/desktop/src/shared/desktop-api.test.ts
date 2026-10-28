@@ -3,8 +3,28 @@ import {
   DEFAULT_BACKGROUND_IMAGE,
   isBackgroundImagePreference,
   rollForwardBackgroundDefault,
-  sanitizeBackgroundImage
+  sanitizeBackgroundImage,
+  sanitizeUpdateChannel,
+  sanitizeUpdateRepository
 } from "./desktop-api";
+
+describe("update source preference", () => {
+  it("accepts the three publishers and rejects anything else", () => {
+    expect(sanitizeUpdateChannel("fork")).toBe("fork");
+    expect(sanitizeUpdateChannel("upstream")).toBe("upstream");
+    expect(sanitizeUpdateChannel("custom")).toBe("custom");
+    expect(sanitizeUpdateChannel("nightly")).toBe("fork");
+    expect(sanitizeUpdateChannel(null)).toBe("fork");
+  });
+
+  it("keeps a repository name and clears anything that is not one", () => {
+    expect(sanitizeUpdateRepository("  arthur/UsageAtlas-Builds ")).toBe("arthur/UsageAtlas-Builds");
+    expect(sanitizeUpdateRepository("UsageAtlas-Builds")).toBe("");
+    expect(sanitizeUpdateRepository("arthur/UsageAtlas-Builds/tree/main")).toBe("");
+    expect(sanitizeUpdateRepository("https://github.com/arthur/UsageAtlas-Builds")).toBe("");
+    expect(sanitizeUpdateRepository(7)).toBe("");
+  });
+});
 
 describe("background image preference", () => {
   it("defaults to the Mist wallpaper", () => {

@@ -242,13 +242,35 @@ async function routeVerified(route: SavedRoute, signal?: AbortSignal): Promise<b
   if (!route.databases.length && !route.chats.length) return false;
   for (const entry of route.databases) {
     signal?.throwIfAborted();
-    if (!(await entryFor(entry.path)) || !databaseUsable(entry.path)) return false;
+    const current = await entryFor(entry.path);
+    if (!current || !databaseUsableCached(current)) return false;
   }
   for (const entry of route.chats) {
     signal?.throwIfAborted();
     if (!(await entryFor(entry.path))) return false;
   }
   return true;
+}
+
+/**
+ * Schema probes, keyed by the identity of the file they were answered for.
+ *
+ * Verifying a six-database route by reopening each file costs about 20 ms, and
+ * the engine re-verifies its route on every refresh. A file that keeps its size
+ * and mtime cannot have changed its schema, so the answer stands until the file
+ * is written again; a replaced or migrated database gets a fresh probe.
+ */
+const schemaProbes = new Map<string, boolean>();
+const MAXIMUM_SCHEMA_PROBES = 256;
+
+function databaseUsableCached(entry: SavedEntry): boolean {
+  const key = `${entry.path}\u0000${entry.size}\u0000${Math.round(entry.mtimeMs)}`;
+  const known = schemaProbes.get(key);
+  if (known !== undefined) return known;
+  const usable = databaseUsable(entry.path);
+  if (schemaProbes.size >= MAXIMUM_SCHEMA_PROBES) schemaProbes.clear();
+  schemaProbes.set(key, usable);
+  return usable;
 }
 
 /** Opens read-only and requires the columns the reader actually queries. */
