@@ -23,6 +23,7 @@ import { providerConnection, type ProviderConnection } from "../provider-connect
 import { BUILT_IN_WALLPAPERS } from "../wallpapers";
 import { ProviderLogo } from "./ProviderLogo";
 import { ProviderCredentialForm } from "./ProviderCredentialForm";
+import { useI18n } from "../i18n";
 import { isQuotaProvider } from "../../shared/quota-providers";
 import { LANGUAGES, LANGUAGE_LABELS } from "../../shared/languages";
 
@@ -66,6 +67,7 @@ export function Settings({
   onSetProviderEnabled,
   markUrls = null,
 }: SettingsProps): React.JSX.Element {
+  const { t } = useI18n();
   const [tab, setTab] = useState<SettingsTab>("general");
   const sources = providers.map((provider) => ({
     provider,
@@ -106,11 +108,9 @@ export function Settings({
     <div className="atlas-page atlas-page--narrow">
       <header className="atlas-page-header flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <p className="atlas-kicker">Preferences</p>
-          <h1 className="atlas-page-title">Settings</h1>
-          <p className="atlas-hero-description">
-            Control startup, privacy, connected sources and how the app looks.
-          </p>
+          <p className="atlas-kicker">{t("settings.kicker")}</p>
+          <h1 className="atlas-page-title">{t("settings.title")}</h1>
+          <p className="atlas-hero-description">{t("settings.subtitle")}</p>
         </div>
         <span
           aria-live="polite"
@@ -120,13 +120,13 @@ export function Settings({
           {saving ? (
             <>
               <Spinner size="sm" />
-              <span>Saving…</span>
+              <span>{t("settings.saving")}</span>
             </>
           ) : null}
         </span>
       </header>
 
-      <div className="atlas-settings-tabs" role="tablist" aria-label="Settings sections">
+      <div className="atlas-settings-tabs" role="tablist" aria-label={t("settings.title")}>
         <button
           aria-selected={tab === "general"}
           className="atlas-settings-tabs__tab"
@@ -134,7 +134,7 @@ export function Settings({
           role="tab"
           type="button"
         >
-          General
+          {t("settings.generalTab")}
         </button>
         <button
           aria-selected={tab === "appearance"}
@@ -143,7 +143,7 @@ export function Settings({
           role="tab"
           type="button"
         >
-          Appearance
+          {t("settings.appearanceTab")}
         </button>
       </div>
 
@@ -157,22 +157,20 @@ export function Settings({
             <CloudSettings />
             <Card variant="transparent">
               <Card.Header>
-                <Card.Title>General</Card.Title>
-                <Card.Description>
-                  How UsageAtlas behaves on this computer.
-                </Card.Description>
+                <Card.Title>{t("settings.general.title")}</Card.Title>
+                <Card.Description>{t("settings.general.description")}</Card.Description>
               </Card.Header>
               <Card.Content className="atlas-settings-list mt-2">
                 <SettingRow
                   checked={preferences.launchAtLogin}
-                  description="Start quietly when you sign in."
-                  label="Launch at login"
+                  description={t("settings.launch.description")}
+                  label={t("settings.launch.label")}
                   onChange={(launchAtLogin) => onUpdate({ launchAtLogin })}
                 />
                 <SettingRow
                   checked={preferences.minimizeToTray}
-                  description="Keep usage checks running when the window closes."
-                  label="Keep running in the tray"
+                  description={t("settings.tray.description")}
+                  label={t("settings.tray.label")}
                   onChange={(minimizeToTray) => onUpdate({ minimizeToTray })}
                 />
               </Card.Content>
@@ -180,11 +178,8 @@ export function Settings({
 
             <Card variant="transparent">
               <Card.Header>
-                <Card.Title>Sources</Card.Title>
-                <Card.Description>
-                  Choose which AI tools appear in your analytics. A tool that needs
-                  a new sign-in is flagged here until you reconnect it.
-                </Card.Description>
+                <Card.Title>{t("settings.sources.title")}</Card.Title>
+                <Card.Description>{t("settings.sources.description")}</Card.Description>
               </Card.Header>
               <Card.Content className="atlas-settings-list mt-2">
                 {sources.length ? (
@@ -222,7 +217,7 @@ export function Settings({
                   ))
                 ) : (
                   <p className="px-3 py-5 text-sm text-muted" role="status">
-                    {refreshing ? "Checking your connected sources…" : "No supported sources were detected yet."}
+                    {t(refreshing ? "settings.sources.checking" : "settings.sources.empty")}
                   </p>
                 )}
                 {needsReconnect ? (
@@ -232,7 +227,7 @@ export function Settings({
                       onPress={() => void onRefresh()}
                       variant="outline"
                     >
-                      <span>Check sources again</span>
+                      <span>{t("settings.sources.recheck")}</span>
                       <RefreshIcon
                         className={`size-4${refreshing ? " animate-spin" : ""}`}
                       />
@@ -244,13 +239,11 @@ export function Settings({
 
             <Card variant="transparent">
               <Card.Header>
-                <Card.Title>Language</Card.Title>
-                <Card.Description>
-                  Choose the interface language. Numbers and dates keep their English formatting.
-                </Card.Description>
+                <Card.Title>{t("settings.language.title")}</Card.Title>
+                <Card.Description>{t("settings.language.description")}</Card.Description>
               </Card.Header>
               <Card.Content className="mt-2">
-                <div aria-label="Interface language" className="atlas-language-options" role="radiogroup">
+                <div aria-label={t("settings.language.label")} className="atlas-language-options" role="radiogroup">
                   {LANGUAGES.map((language) => (
                     <button
                       aria-checked={preferences.language === language}
@@ -274,16 +267,14 @@ export function Settings({
 
             <Card variant="transparent">
               <Card.Header>
-                <Card.Title>Usage count</Card.Title>
-                <Card.Description>
-                  A general headcount of how many people use UsageAtlas.
-                </Card.Description>
+                <Card.Title>{t("settings.usage.title")}</Card.Title>
+                <Card.Description>{t("settings.usage.description")}</Card.Description>
               </Card.Header>
               <Card.Content className="atlas-settings-list mt-2">
                 <SettingRow
                   checked={preferences.anonymousAnalytics}
-                  description="Completely anonymous. It only counts this general app analytics so we know how many people are using the app. Cloud usage saves are controlled separately above."
-                  label="Allow General App analytics in the count"
+                  description={t("settings.usage.allowDescription")}
+                  label={t("settings.usage.allow")}
                   onChange={(anonymousAnalytics) =>
                     onUpdate({ anonymousAnalytics })
                   }
@@ -323,10 +314,8 @@ export function Settings({
           <div className="mt-8 grid gap-5" hidden={tab !== "appearance"}>
             <Card variant="transparent">
               <Card.Header>
-                <Card.Title>Preview</Card.Title>
-                <Card.Description>
-                  Exactly how usage numbers and labels will read.
-                </Card.Description>
+                <Card.Title>{t("settings.preview.title")}</Card.Title>
+                <Card.Description>{t("settings.preview.description")}</Card.Description>
               </Card.Header>
               <Card.Content className="mt-2">
                 <div
@@ -336,24 +325,20 @@ export function Settings({
                     color: appearance.textColor ?? undefined
                   }}
                 >
-                  <p className="atlas-appearance-preview__kicker">Today · All tools</p>
-                  <p className="atlas-appearance-preview__value">1,284,930 tokens</p>
-                  <p className="atlas-appearance-preview__meta">
-                    Across 42 models and 8 connected sources
-                  </p>
+                  <p className="atlas-appearance-preview__kicker">{t("settings.preview.kicker")}</p>
+                  <p className="atlas-appearance-preview__value">{t("settings.preview.value")}</p>
+                  <p className="atlas-appearance-preview__meta">{t("settings.preview.meta")}</p>
                 </div>
               </Card.Content>
             </Card>
 
             <Card variant="transparent">
               <Card.Header>
-                <Card.Title>Font</Card.Title>
-                <Card.Description>
-                  Every family ships with the app, so a choice looks the same on any computer.
-                </Card.Description>
+                <Card.Title>{t("settings.font.title")}</Card.Title>
+                <Card.Description>{t("settings.font.description")}</Card.Description>
               </Card.Header>
               <Card.Content className="mt-2">
-                <div className="atlas-font-grid" role="radiogroup" aria-label="Interface font">
+                <div className="atlas-font-grid" role="radiogroup" aria-label={t("settings.font.aria")}>
                   {FONT_OPTIONS.map((option) => (
                     <button
                       aria-checked={appearance.font === option.id}
@@ -385,16 +370,14 @@ export function Settings({
 
             <Card variant="transparent">
               <Card.Header>
-                <Card.Title>Text size</Card.Title>
-                <Card.Description>
-                  Scales every label and number in the app.
-                </Card.Description>
+                <Card.Title>{t("settings.textSize.title")}</Card.Title>
+                <Card.Description>{t("settings.textSize.description")}</Card.Description>
               </Card.Header>
               <Card.Content className="mt-2">
                 <div className="atlas-appearance-scale">
                   <span aria-hidden="true" className="atlas-appearance-scale__edge">A</span>
                   <input
-                    aria-label="Interface text size"
+                    aria-label={t("settings.textSize.aria")}
                     className="atlas-slider"
                     max={130}
                     min={85}
@@ -411,10 +394,8 @@ export function Settings({
 
             <Card variant="transparent">
               <Card.Header>
-                <Card.Title>Text colour</Card.Title>
-                <Card.Description>
-                  Tints the interface ink, or keep the theme's own colour.
-                </Card.Description>
+                <Card.Title>{t("settings.ink.title")}</Card.Title>
+                <Card.Description>{t("settings.ink.description")}</Card.Description>
               </Card.Header>
               <Card.Content className="mt-2">
                 <div className="atlas-ink-swatches">
@@ -434,9 +415,9 @@ export function Settings({
                     </button>
                   ))}
                   <label className="atlas-ink-custom">
-                    <span>Custom</span>
+                    <span>{t("settings.ink.custom")}</span>
                     <input
-                      aria-label="Custom text colour"
+                      aria-label={t("settings.ink.aria")}
                       onChange={(event) => setAppearance({ textColor: event.target.value })}
                       type="color"
                       value={appearance.textColor ?? "#1d1d1f"}
@@ -448,14 +429,11 @@ export function Settings({
 
             <Card variant="transparent">
               <Card.Header>
-                <Card.Title>App icon</Card.Title>
-                <Card.Description>
-                  Used by the title bar, the window and the tray. The installed app's own
-                  file icon keeps the fork's datamoshed artwork.
-                </Card.Description>
+                <Card.Title>{t("settings.mark.title")}</Card.Title>
+                <Card.Description>{t("settings.mark.description")}</Card.Description>
               </Card.Header>
               <Card.Content className="mt-2">
-                <div className="atlas-mark-grid" role="radiogroup" aria-label="Application icon">
+                <div className="atlas-mark-grid" role="radiogroup" aria-label={t("settings.mark.aria")}>
                   {MARK_OPTIONS.map((option) => (
                     <button
                       aria-checked={appearance.mark === option.id}
@@ -480,10 +458,8 @@ export function Settings({
 
             <Card variant="transparent">
               <Card.Header>
-                <Card.Title>Background</Card.Title>
-                <Card.Description>
-                  Choose the image shown behind your dashboard.
-                </Card.Description>
+                <Card.Title>{t("settings.background.title")}</Card.Title>
+                <Card.Description>{t("settings.background.description")}</Card.Description>
               </Card.Header>
               <Card.Content className="mt-2">
                 <div className="atlas-wallpaper-setting">
@@ -504,7 +480,7 @@ export function Settings({
                     }
                     variant="secondary"
                   >
-                    <Label>Background image</Label>
+                    <Label>{t("settings.background.title")}</Label>
                     {BUILT_IN_WALLPAPERS.map((wallpaper) => (
                       <WallpaperOption
                         key={wallpaper.id}
@@ -522,7 +498,7 @@ export function Settings({
                     ) : null}
                   </RadioGroup>
                   <p className="atlas-wallpaper-hint text-xs text-muted">
-                    JPG, PNG, or WebP up to 25 MB.
+                    {t("settings.background.hint")}
                   </p>
                   <p
                     className="atlas-wallpaper-error mt-1 text-xs"
@@ -536,7 +512,7 @@ export function Settings({
                       onPress={() => void onChooseCustomBackground()}
                       variant="outline"
                     >
-                      {customBackgroundUrl ? "Change image" : "Choose image"}
+                      {t(customBackgroundUrl ? "settings.background.change" : "settings.background.choose")}
                     </Button>
                   </div>
                 </div>
