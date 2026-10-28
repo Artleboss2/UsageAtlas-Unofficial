@@ -64,6 +64,24 @@ export const zh: Messages = {
   "settings.background.choose": "选择图片",
   "settings.background.change": "更换图片",
 
+  "option.font.system": "系统自带字体",
+  "option.font.inter": "中性，为屏幕而设计",
+  "option.font.manrope": "圆润而几何",
+  "option.font.figtree": "柔和友好",
+  "option.font.jakarta": "宽阔，编辑风格",
+  "option.font.geist": "紧凑而技术",
+
+  "option.mark.datamosh": "非官方分支的标志",
+  "option.mark.classic": "原始图案",
+  "option.mark.duotone": "冷色重调",
+
+  "option.ink.graphite": "石墨",
+  "option.ink.cobalt": "钴蓝",
+  "option.ink.plum": "梅紫",
+  "option.ink.forest": "森林",
+  "option.ink.ember": "余烬",
+  "option.background.custom": "自定义",
+
   "alerts.kicker": "通知",
   "alerts.title": "用量提醒",
   "alerts.description": "精确选择 UsageAtlas 何时提醒你。",

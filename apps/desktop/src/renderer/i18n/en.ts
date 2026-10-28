@@ -66,6 +66,24 @@ export const en = {
   "settings.background.choose": "Choose image",
   "settings.background.change": "Change image",
 
+  "option.font.system": "The platform's own UI font",
+  "option.font.inter": "Neutral, made for screens",
+  "option.font.manrope": "Rounded and geometric",
+  "option.font.figtree": "Soft and friendly",
+  "option.font.jakarta": "Wide, editorial",
+  "option.font.geist": "Tight and technical",
+
+  "option.mark.datamosh": "The unofficial fork mark",
+  "option.mark.classic": "The original artwork",
+  "option.mark.duotone": "Cool re-tint",
+
+  "option.ink.graphite": "Graphite",
+  "option.ink.cobalt": "Cobalt",
+  "option.ink.plum": "Plum",
+  "option.ink.forest": "Forest",
+  "option.ink.ember": "Ember",
+  "option.background.custom": "Custom",
+
   "alerts.kicker": "Notifications",
   "alerts.title": "Usage alerts",
   "alerts.description": "Choose exactly when UsageAtlas should warn you about usage.",

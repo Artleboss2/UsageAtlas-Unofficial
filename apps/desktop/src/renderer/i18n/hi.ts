@@ -64,6 +64,24 @@ export const hi: Messages = {
   "settings.background.choose": "छवि चुनें",
   "settings.background.change": "छवि बदलें",
 
+  "option.font.system": "सिस्टम का अपना फ़ॉन्ट",
+  "option.font.inter": "स्क्रीन के लिए बना, तटस्थ",
+  "option.font.manrope": "गोल और ज्यामितीय",
+  "option.font.figtree": "कोमल और मिलनसार",
+  "option.font.jakarta": "चौड़ा, संपादकीय",
+  "option.font.geist": "कसा हुआ और तकनीकी",
+
+  "option.mark.datamosh": "अनौपचारिक फ़ोर्क का चिह्न",
+  "option.mark.classic": "मूल चित्र",
+  "option.mark.duotone": "ठंडा नया रंग",
+
+  "option.ink.graphite": "ग्रेफ़ाइट",
+  "option.ink.cobalt": "कोबाल्ट",
+  "option.ink.plum": "बेर",
+  "option.ink.forest": "वन",
+  "option.ink.ember": "अंगार",
+  "option.background.custom": "कस्टम",
+
   "alerts.kicker": "सूचनाएँ",
   "alerts.title": "उपयोग अलर्ट",
   "alerts.description": "तय करें कि UsageAtlas आपको कब सचेत करे।",

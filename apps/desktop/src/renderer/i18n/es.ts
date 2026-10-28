@@ -64,6 +64,24 @@ export const es: Messages = {
   "settings.background.choose": "Elegir imagen",
   "settings.background.change": "Cambiar imagen",
 
+  "option.font.system": "La fuente propia del sistema",
+  "option.font.inter": "Neutra, pensada para pantallas",
+  "option.font.manrope": "Redondeada y geométrica",
+  "option.font.figtree": "Suave y cercana",
+  "option.font.jakarta": "Amplia, editorial",
+  "option.font.geist": "Compacta y técnica",
+
+  "option.mark.datamosh": "La marca no oficial del fork",
+  "option.mark.classic": "La ilustración original",
+  "option.mark.duotone": "Nuevo tinte frío",
+
+  "option.ink.graphite": "Grafito",
+  "option.ink.cobalt": "Cobalto",
+  "option.ink.plum": "Ciruela",
+  "option.ink.forest": "Bosque",
+  "option.ink.ember": "Brasa",
+  "option.background.custom": "Personalizado",
+
   "alerts.kicker": "Notificaciones",
   "alerts.title": "Alertas de uso",
   "alerts.description": "Elige exactamente cuándo UsageAtlas debe avisarte.",

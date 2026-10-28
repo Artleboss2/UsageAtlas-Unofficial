@@ -20,7 +20,7 @@ describe("translations", () => {
   it("interpolates the token alert sentence", () => {
     expect(renderToStaticMarkup(
       <I18nProvider language="fr" systemLocale="en-US"><Probe /></I18nProvider>
-    )).toContain("fr|Tu as utilisé 128,400 jetons sur Freebuff aujourd&#x27;hui.");
+    )).toContain("fr|Tu as utilisé 128,400 tokens sur Freebuff aujourd&#x27;hui.");
   });
 
   it("follows the system locale and falls back to English", () => {
