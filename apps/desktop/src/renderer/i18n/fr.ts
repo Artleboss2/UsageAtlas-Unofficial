@@ -35,6 +35,7 @@ export const fr: Messages = {
   "settings.usage.title": "Comptage d'utilisation",
   "settings.usage.description": "Un décompte général du nombre de personnes qui utilisent UsageAtlas.",
   "settings.usage.allow": "Autoriser les statistiques générales dans le comptage",
+  "settings.usage.allowDescription": "Totalement anonyme. Seules ces statistiques générales de l'app sont comptées, pour savoir combien de personnes l'utilisent. Les sauvegardes cloud se règlent séparément, ci-dessus.",
   "settings.language.title": "Langue",
   "settings.language.description": "La langue de l'interface. Les nombres et les dates gardent leur format anglais.",
   "settings.language.label": "Langue de l'interface",

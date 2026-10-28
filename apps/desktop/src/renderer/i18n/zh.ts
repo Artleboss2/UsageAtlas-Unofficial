@@ -35,6 +35,7 @@ export const zh: Messages = {
   "settings.usage.title": "使用人数统计",
   "settings.usage.description": "统计有多少人在使用 UsageAtlas。",
   "settings.usage.allow": "允许将通用统计计入人数",
+  "settings.usage.allowDescription": "完全匿名，仅统计应用的总体使用情况，以便了解有多少人在使用。云端用量保存可在上方单独控制。",
   "settings.language.title": "语言",
   "settings.language.description": "界面语言。数字和日期仍使用英文格式。",
   "settings.language.label": "界面语言",

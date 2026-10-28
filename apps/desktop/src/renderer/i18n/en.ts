@@ -37,6 +37,7 @@ export const en = {
   "settings.usage.title": "Usage count",
   "settings.usage.description": "A general headcount of how many people use UsageAtlas.",
   "settings.usage.allow": "Allow General App analytics in the count",
+  "settings.usage.allowDescription": "Completely anonymous. It only counts this general app analytics so we know how many people are using the app. Cloud usage saves are controlled separately above.",
   "settings.language.title": "Language",
   "settings.language.description": "The language of the interface. Numbers and dates keep their English formatting.",
   "settings.language.label": "Interface language",

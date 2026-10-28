@@ -35,6 +35,7 @@ export const hi: Messages = {
   "settings.usage.title": "उपयोग गणना",
   "settings.usage.description": "कितने लोग UsageAtlas इस्तेमाल करते हैं, इसकी सामान्य गिनती।",
   "settings.usage.allow": "गिनती में सामान्य ऐप आँकड़े शामिल करें",
+  "settings.usage.allowDescription": "पूरी तरह गुमनाम। केवल ऐप के ये सामान्य आँकड़े गिने जाते हैं ताकि पता चले कि कितने लोग इसे इस्तेमाल करते हैं। क्लाउड सेव ऊपर अलग से नियंत्रित होते हैं।",
   "settings.language.title": "भाषा",
   "settings.language.description": "इंटरफ़ेस की भाषा। संख्याएँ और तारीखें अंग्रेज़ी प्रारूप में ही रहती हैं।",
   "settings.language.label": "इंटरफ़ेस भाषा",

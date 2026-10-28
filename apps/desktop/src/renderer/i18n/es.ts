@@ -35,6 +35,7 @@ export const es: Messages = {
   "settings.usage.title": "Recuento de uso",
   "settings.usage.description": "Un recuento general de cuántas personas usan UsageAtlas.",
   "settings.usage.allow": "Incluir las estadísticas generales en el recuento",
+  "settings.usage.allowDescription": "Completamente anónimo. Solo se cuentan estas estadísticas generales de la app para saber cuántas personas la usan. Las copias en la nube se controlan por separado, arriba.",
   "settings.language.title": "Idioma",
   "settings.language.description": "El idioma de la interfaz. Los números y las fechas mantienen el formato inglés.",
   "settings.language.label": "Idioma de la interfaz",
