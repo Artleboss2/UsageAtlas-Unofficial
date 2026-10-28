@@ -3,10 +3,14 @@
 All notable UsageAtlas desktop changes are recorded here. This is an unofficial fork; see
 [README.md](README.md) for what it adds and what it is not.
 
-## Unreleased
+## 0.3.5 — 2026-10-28
 
 ### Added
 
+- **Five interface languages.** Settings → General → Language offers *System*, English, Français,
+  Español, 中文 and हिन्दी. The app shell, window controls and usage pages read from a typed catalog,
+  so a missing translation fails the build instead of falling back silently; numbers and dates keep
+  their English formatting so a figure reads the same in every language.
 - **Gemini CLI, Qwen Code, Cline and Roo Code readers.** Each tool writes its own transcript; the new
   readers parse the token objects in place (`tokens.{input,output,cached,thoughts,total}`, Gemini-style
   `usageMetadata`, and Cline/Roo `api_req_started` request info) and keep only numeric usage. The
