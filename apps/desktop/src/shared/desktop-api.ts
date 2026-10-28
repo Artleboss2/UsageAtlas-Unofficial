@@ -59,6 +59,22 @@ export function sanitizeTokenAlerts(value: unknown): TokenAlertPreferences {
   };
 }
 
+/**
+ * How big figures are spelled in the interface. `exact` prints every digit
+ * (`1,284,930`); `compact` shortens them to a unit (`1.3M`), which is the only
+ * honest choice for dense chart axes.
+ */
+export const NUMBER_STYLES = ["exact", "compact"] as const;
+export type NumberStyle = (typeof NUMBER_STYLES)[number];
+
+/** Accent tints offered in Settings → Appearance. `system` keeps the theme's own. */
+export const ACCENT_TINTS = ["system", "ink", "cobalt", "violet", "rose", "forest", "amber"] as const;
+export type AccentTint = (typeof ACCENT_TINTS)[number];
+
+/** Glass keeps the translucent material; solid paints every card with the surface. */
+export const APPEARANCE_SURFACES = ["glass", "solid"] as const;
+export type AppearanceSurface = (typeof APPEARANCE_SURFACES)[number];
+
 export interface AppearancePreferences {
   font: AppearanceFont;
   /** Root type scale, 0.85–1.3. */
@@ -66,16 +82,29 @@ export interface AppearancePreferences {
   /** A `#rrggbb` ink colour, or null for the theme's own text colour. */
   textColor: string | null;
   mark: AppMark;
+  numberStyle: NumberStyle;
+  accent: AccentTint;
+  surface: AppearanceSurface;
+  /** Page slides, rail highlight and hover motion. */
+  animate: boolean;
 }
 
 export const DEFAULT_APPEARANCE: AppearancePreferences = {
   font: "system",
   fontScale: 1,
   textColor: null,
-  mark: "datamosh"
+  mark: "datamosh",
+  // Full figures by default: a token count is a measurement, not a headline.
+  numberStyle: "exact",
+  accent: "system",
+  surface: "glass",
+  animate: true
 };
 const appearanceFontSet = new Set<string>(APPEARANCE_FONTS);
 const appMarkSet = new Set<string>(APP_MARKS);
+const numberStyleSet = new Set<string>(NUMBER_STYLES);
+const accentTintSet = new Set<string>(ACCENT_TINTS);
+const appearanceSurfaceSet = new Set<string>(APPEARANCE_SURFACES);
 
 export function isAppearanceFont(value: unknown): value is AppearanceFont {
   return typeof value === "string" && appearanceFontSet.has(value);
@@ -83,6 +112,18 @@ export function isAppearanceFont(value: unknown): value is AppearanceFont {
 
 export function isAppMark(value: unknown): value is AppMark {
   return typeof value === "string" && appMarkSet.has(value);
+}
+
+export function isNumberStyle(value: unknown): value is NumberStyle {
+  return typeof value === "string" && numberStyleSet.has(value);
+}
+
+export function isAccentTint(value: unknown): value is AccentTint {
+  return typeof value === "string" && accentTintSet.has(value);
+}
+
+export function isAppearanceSurface(value: unknown): value is AppearanceSurface {
+  return typeof value === "string" && appearanceSurfaceSet.has(value);
 }
 
 export function sanitizeAppearance(value: unknown): AppearancePreferences {
@@ -98,7 +139,11 @@ export function sanitizeAppearance(value: unknown): AppearancePreferences {
     font: isAppearanceFont(record.font) ? record.font : DEFAULT_APPEARANCE.font,
     fontScale: scale,
     textColor,
-    mark: isAppMark(record.mark) ? record.mark : DEFAULT_APPEARANCE.mark
+    mark: isAppMark(record.mark) ? record.mark : DEFAULT_APPEARANCE.mark,
+    numberStyle: isNumberStyle(record.numberStyle) ? record.numberStyle : DEFAULT_APPEARANCE.numberStyle,
+    accent: isAccentTint(record.accent) ? record.accent : DEFAULT_APPEARANCE.accent,
+    surface: isAppearanceSurface(record.surface) ? record.surface : DEFAULT_APPEARANCE.surface,
+    animate: typeof record.animate === "boolean" ? record.animate : DEFAULT_APPEARANCE.animate
   };
 }
 

@@ -32,9 +32,12 @@ import { DashboardSession } from "./dashboard-session";
 import type { AppMark, AppRoute, DesktopPreferences } from "../shared/desktop-api";
 import {
   IPC,
+  isAccentTint,
   isAppearanceFont,
+  isAppearanceSurface,
   isAppMark,
   isBackgroundImagePreference,
+  isNumberStyle,
   isUpdateChannel,
   isUpdateRepository,
   sanitizeTokenAlerts
@@ -640,9 +643,13 @@ function isPreferencePatch(value: unknown): value is Partial<DesktopPreferences>
 function isAppearancePatch(value: unknown): boolean {
   if (!value || typeof value !== "object" || Array.isArray(value)) return false;
   const patch = value as Record<string, unknown>;
-  if (Object.keys(patch).some((key) => !["font", "fontScale", "textColor", "mark"].includes(key))) return false;
+  if (Object.keys(patch).some((key) => !["font", "fontScale", "textColor", "mark", "numberStyle", "accent", "surface", "animate"].includes(key))) return false;
   return (patch.font === undefined || isAppearanceFont(patch.font))
     && (patch.mark === undefined || isAppMark(patch.mark))
+    && (patch.numberStyle === undefined || isNumberStyle(patch.numberStyle))
+    && (patch.accent === undefined || isAccentTint(patch.accent))
+    && (patch.surface === undefined || isAppearanceSurface(patch.surface))
+    && (patch.animate === undefined || typeof patch.animate === "boolean")
     && (patch.fontScale === undefined || (
       typeof patch.fontScale === "number"
       && Number.isFinite(patch.fontScale)
