@@ -32,9 +32,14 @@
   records usage — including what was researched and deliberately left out — is in
   [docs/PROVIDER_USAGE_SOURCES.md](docs/PROVIDER_USAGE_SOURCES.md).
 - **Appearance, in Settings.** A dedicated Appearance tab chooses the font (System, Inter, Manrope,
-  Figtree, Jakarta, Geist — all bundled variable fonts), the type scale, the ink colour, the app
-  mark (datamosh, classic or duotone, applied to the title bar, window and tray) and the background.
-  Pages glide in from the side they were reached from, and the home selectors grow under the pointer.
+  Figtree, Jakarta, Geist — all bundled variable fonts), the type scale, the ink colour, the accent
+  tint used by buttons and focus rings (theme, ink, cobalt, violet, rose, forest, amber), glass or
+  solid card surfaces, whether the interface animates, the app mark (datamosh, classic or duotone,
+  applied to the title bar, window and taskbar) and the background. Figures print every digit by
+  default — `1,284,930`, not `1.3M` — and Settings can switch back to short units; chart axes stay
+  short either way because labels would otherwise collide. Pages glide in from the side they were
+  reached from, the rail highlight slides between pages, and the home selectors grow under the
+  pointer.
 - **A daily token alert that works for every source.** Usage alerts now include a token threshold:
   once a source passes it in a local day, a desktop notification says exactly
   `You used 128,400 tokens on Freebuff today.` A test button sends a real notification.
@@ -60,6 +65,42 @@
   which keeps the branding and web copies untouched and regenerates the same bytes on every run.
   Windows and Linux draw their own minimize, maximize and close buttons in the title bar, the way
   Freebuff does; macOS keeps its traffic lights.
+
+## What 0.4.0 aims for
+
+Concrete, checkable goals for the next minor release. Each one is done only when its acceptance
+criterion is met in a build this fork publishes.
+
+- [ ] **Find usage stores for providers nobody mapped yet.** Ship a catalog of at least 250 AI
+  providers (name, CLI or app, expected config roots) and, for a provider with no reader, generate
+  candidate file names and folders, probe them offline, and propose the store that actually holds
+  token counts with a confidence score. Acceptance: an unknown provider added by name is either
+  located with a passing schema probe or reported as "no local store found" in under two seconds,
+  without network access, and the result survives a move of the config directory.
+- [ ] **Compact cloud saves.** Adopt the storage sample the upstream author shares, encode repeated
+  model and provider names once per save, and migrate existing saves without losing a request.
+  Acceptance: a save that currently uploads 1 MB uploads at most 500 KB with identical restored
+  totals, and the migration runs once per account with a rollback path.
+- [ ] **Appearance that goes further.** A free accent colour picker, per-section density
+  (comfortable / compact), adjustable background dimming, and theme import/export as a small JSON
+  file. Acceptance: a theme exported on one computer reproduces the same font, scale, ink, accent,
+  surfaces and background on another, and no setting needs a restart.
+- [ ] **Attribution per model, with a preview.** Extend the wheel from provider shares to optional
+  model shares, and show the distribution a save will produce before it leaves the machine.
+  Acceptance: a rule with 30 % Codex / 20 % ChatGPT / 50 % Claude over 1,000 requests lands within
+  two percentage points of each share, and the preview matches the uploaded payload exactly.
+- [ ] **Updates you can trust.** Background download with a persistent "restart to 0.4.0" badge, a
+  one-click rollback to the previously installed build, and a check that never reports "latest" for
+  a window older than the build on disk. Acceptance: installing a release while an older window is
+  open shows the restart prompt within one check, and rollback returns to the previous version with
+  local history intact.
+- [ ] **Complete translation.** Every user-facing string in the five catalogs (English, French,
+  Spanish, Chinese, Hindi), including cloud, attribution and diagnostics screens. Acceptance: a test
+  fails when a catalog key is missing, and a string sweep finds no hard-coded English left in the
+  renderer outside diagnostics output.
+- [ ] **Cheaper idle.** Acceptance: cold start to first paint under 400 ms on the reference machine
+  (Windows 11, 8 cores), under 250 MB resident after one hour idle, and no long task above 50 ms
+  when switching pages.
 
 ## Why the cloud still works, and what that means
 
@@ -104,6 +145,12 @@ Settings → App updates chooses the publisher:
 
 Installing an upstream build replaces this fork's renderer, so the private providers disappear until
 you reinstall a fork release.
+
+Squirrel keeps each applied build in its own `app-<version>` folder. If an update lands while an
+older window is still open, that window's updater would otherwise ask the shared `Update.exe` and
+hear "up to date" for the newer package. The app now reads the installed folders, reports the newer
+version, and its **Update and restart** button relaunches through the Squirrel stub at the install
+root — so the window you keep using is the one actually installed.
 
 ## Build from source
 

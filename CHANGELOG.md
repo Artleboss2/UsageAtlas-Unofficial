@@ -3,6 +3,35 @@
 All notable UsageAtlas desktop changes are recorded here. This is an unofficial fork; see
 [README.md](README.md) for what it adds and what it is not.
 
+## 0.3.7 — 2026-10-28
+
+### Added
+
+- **Four more appearance settings.** Settings → Appearance now also offers the number style, an
+  accent tint for buttons and focus rings (theme, ink, cobalt, violet, rose, forest, amber), glass or
+  solid card surfaces, and a switch that turns interface motion off while leaving progress spinners
+  working. Each choice applies immediately, is saved locally and is validated before it reaches the
+  preference file.
+- **Full figures by default.** Every total, card and table prints all its digits — `1,284,930`
+  instead of `1.3M` — with `Short units` one click away. Chart axes stay compact in both modes, and
+  currency follows the same choice.
+- **A restart prompt when the installed build is newer.** An update applied while an older window is
+  still open now shows up as *Version X is installed*, and updating relaunches through the Squirrel
+  stub so the window ends up on the build that is actually on disk.
+
+### Changed
+
+- The Appearance preview reads its figure from the same formatter as the dashboard, so it shows the
+  real digit style rather than a fixed sample.
+- README gained a checkable 0.4.0 plan (provider discovery, compact cloud saves, deeper appearance,
+  per-model attribution, trusted updates, complete translation, cheaper idle).
+
+### Fixed
+
+- A stale window could claim *You're on the latest version* while a newer release was already
+  unpacked next to it: Squirrel compares against the package on disk, so the older build now reports
+  the waiting version instead.
+
 ## 0.3.6 — 2026-10-28
 
 ### Added
