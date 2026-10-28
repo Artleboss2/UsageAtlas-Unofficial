@@ -60,6 +60,17 @@ describe("Settings appearance", () => {
     expect(html).toContain("Text colour");
   });
 
+  it("offers full figures, an accent tint, solid surfaces and a motion switch", () => {
+    const html = render([]);
+
+    expect(html).toContain("Every digit");
+    expect(html).toContain("Short units");
+    expect(html).toContain("Accent colour");
+    expect(html).toContain("Glass");
+    expect(html).toContain("Solid");
+    expect(html).toContain("Animate the interface");
+  });
+
   it("offers Mist, Valley, Night, Monterey, and Big Sur as background choices", () => {
     const html = render([]);
 
@@ -116,7 +127,16 @@ function provider(overrides: Partial<DashboardProvider> = {}): DashboardProvider
 
 function preferences(): DesktopPreferences {
   return {
-    appearance: { font: "system", fontScale: 1, textColor: null, mark: "datamosh" },
+    appearance: {
+      font: "system",
+      fontScale: 1,
+      textColor: null,
+      mark: "datamosh",
+      numberStyle: "exact",
+      accent: "system",
+      surface: "glass",
+      animate: true
+    },
     tokenAlerts: { enabled: true, thresholdTokens: 100_000 },
     reportPlans: [],
     language: "system",

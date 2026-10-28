@@ -11,14 +11,25 @@ import type {
   DesktopUpdateState
 } from "../../shared/desktop-api";
 import {
+  ACCENT_TINTS,
+  APPEARANCE_SURFACES,
   DEFAULT_APPEARANCE,
   DEFAULT_BACKGROUND_IMAGE,
+  NUMBER_STYLES,
   isBackgroundImagePreference
 } from "../../shared/desktop-api";
 import { FORK_HOME_URL } from "../../shared/fork";
 import { DESKTOP_VERSION } from "../../shared/version";
 import { CheckIcon, ExternalIcon, RefreshIcon } from "../icons";
-import { applyAppearance, FONT_OPTIONS, FONT_STACKS, INK_SWATCHES, MARK_OPTIONS } from "../appearance";
+import {
+  ACCENT_TINT_VALUES,
+  applyAppearance,
+  FONT_OPTIONS,
+  FONT_STACKS,
+  INK_SWATCHES,
+  MARK_OPTIONS
+} from "../appearance";
+import { formatTokens } from "../number-format";
 import type { MessageKey } from "../i18n";
 import { providerConnection, type ProviderConnection } from "../provider-connection";
 import { BUILT_IN_WALLPAPERS } from "../wallpapers";
@@ -327,7 +338,7 @@ export function Settings({
                   }}
                 >
                   <p className="atlas-appearance-preview__kicker">{t("settings.preview.kicker")}</p>
-                  <p className="atlas-appearance-preview__value">{t("settings.preview.value")}</p>
+                  <p className="atlas-appearance-preview__value">{formatTokens(1_284_930)}</p>
                   <p className="atlas-appearance-preview__meta">{t("settings.preview.meta")}</p>
                 </div>
               </Card.Content>
@@ -430,6 +441,109 @@ export function Settings({
                     />
                   </label>
                 </div>
+              </Card.Content>
+            </Card>
+
+            <Card variant="transparent">
+              <Card.Header>
+                <Card.Title>{t("settings.numbers.title")}</Card.Title>
+                <Card.Description>{t("settings.numbers.description")}</Card.Description>
+              </Card.Header>
+              <Card.Content className="mt-2">
+                <div aria-label={t("settings.numbers.aria")} className="atlas-choice-tiles" role="radiogroup">
+                  {NUMBER_STYLES.map((style) => (
+                    <button
+                      aria-checked={appearance.numberStyle === style}
+                      className="atlas-choice-tile"
+                      key={style}
+                      onClick={() => setAppearance({ numberStyle: style })}
+                      role="radio"
+                      type="button"
+                    >
+                      <span className="atlas-choice-tile__sample">
+                        {style === "exact" ? "1,284,930" : "1.3M"}
+                      </span>
+                      <span className="atlas-choice-tile__label">
+                        {t(`option.number.${style}` as MessageKey)}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              </Card.Content>
+            </Card>
+
+            <Card variant="transparent">
+              <Card.Header>
+                <Card.Title>{t("settings.accent.title")}</Card.Title>
+                <Card.Description>{t("settings.accent.description")}</Card.Description>
+              </Card.Header>
+              <Card.Content className="mt-2">
+                <div aria-label={t("settings.accent.aria")} className="atlas-ink-swatches" role="radiogroup">
+                  {ACCENT_TINTS.map((tint) => {
+                    const label = t(`option.accent.${tint}` as MessageKey);
+                    const value = ACCENT_TINT_VALUES[tint];
+                    return (
+                      <button
+                        aria-checked={appearance.accent === tint}
+                        aria-label={label}
+                        className="atlas-ink-swatch"
+                        data-theme={tint === "system" ? "true" : undefined}
+                        key={tint}
+                        onClick={() => setAppearance({ accent: tint })}
+                        role="radio"
+                        style={value ? { background: value.accent } : undefined}
+                        title={label}
+                        type="button"
+                      >
+                        {appearance.accent === tint ? <CheckIcon /> : null}
+                      </button>
+                    );
+                  })}
+                </div>
+              </Card.Content>
+            </Card>
+
+            <Card variant="transparent">
+              <Card.Header>
+                <Card.Title>{t("settings.surface.title")}</Card.Title>
+                <Card.Description>{t("settings.surface.description")}</Card.Description>
+              </Card.Header>
+              <Card.Content className="mt-2">
+                <div aria-label={t("settings.surface.title")} className="atlas-choice-tiles" role="radiogroup">
+                  {APPEARANCE_SURFACES.map((surface) => (
+                    <button
+                      aria-checked={appearance.surface === surface}
+                      className="atlas-choice-tile"
+                      key={surface}
+                      onClick={() => setAppearance({ surface })}
+                      role="radio"
+                      type="button"
+                    >
+                      <span aria-hidden="true" className="atlas-choice-tile__swatch" data-surface={surface} />
+                      <span className="atlas-choice-tile__label">
+                        {t(`option.surface.${surface}` as MessageKey)}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              </Card.Content>
+            </Card>
+
+            <Card variant="transparent">
+              <Card.Header>
+                <Card.Title>{t("settings.motion.title")}</Card.Title>
+                <Card.Description>{t("settings.motion.description")}</Card.Description>
+              </Card.Header>
+              <Card.Content className="atlas-settings-list mt-2">
+                <SettingRow
+                  checked={appearance.animate}
+                  description={t("settings.motion.switchDescription")}
+                  label={t("settings.motion.label")}
+                  onChange={(animate) => {
+                    setAppearance({ animate });
+                    return Promise.resolve();
+                  }}
+                />
               </Card.Content>
             </Card>
 

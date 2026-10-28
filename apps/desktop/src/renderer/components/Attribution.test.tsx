@@ -154,7 +154,16 @@ function provider(overrides: Partial<DashboardProvider> = {}): DashboardProvider
 
 function preferences(reportPlans: ReportPlan[]): DesktopPreferences {
   return {
-    appearance: { font: "system", fontScale: 1, textColor: null, mark: "datamosh" },
+    appearance: {
+      font: "system",
+      fontScale: 1,
+      textColor: null,
+      mark: "datamosh",
+      numberStyle: "exact",
+      accent: "system",
+      surface: "glass",
+      animate: true
+    },
     tokenAlerts: { enabled: true, thresholdTokens: 100_000 },
     reportPlans,
     language: "system",

@@ -1,4 +1,5 @@
-import type { AppMark, AppearanceFont, AppearancePreferences } from "../shared/desktop-api";
+import type { AccentTint, AppMark, AppearanceFont, AppearancePreferences } from "../shared/desktop-api";
+import { setNumberStyle } from "./number-format";
 
 export interface FontOption {
   id: AppearanceFont;
@@ -47,13 +48,44 @@ export const INK_SWATCHES: { id: InkSwatchId; value: string | null }[] = [
 ];
 
 /**
- * Applies typography, type scale and ink colour to the document. Kept out of the
- * component so the same function serves the first render and every change.
+ * Accent tints. `system` keeps the theme's own accent (near-black in light mode,
+ * white in dark mode); the rest override it for buttons, focus rings and links.
+ * Every tint is dark enough to keep white label text legible.
+ */
+export const ACCENT_TINT_VALUES: Record<AccentTint, { accent: string; hover: string } | null> = {
+  system: null,
+  ink: { accent: "#1d1d1f", hover: "#3a3a3c" },
+  cobalt: { accent: "#0b5fd8", hover: "#0a51ba" },
+  violet: { accent: "#6b3fd4", hover: "#5b34b8" },
+  rose: { accent: "#c02c5c", hover: "#a82550" },
+  forest: { accent: "#146b4a", hover: "#11573c" },
+  amber: { accent: "#9a5b06", hover: "#824c05" }
+};
+
+/**
+ * Applies typography, type scale, ink colour, accent, surfaces and motion to the
+ * document. Kept out of the component so the same function serves the first
+ * render and every change.
  */
 export function applyAppearance(appearance: AppearancePreferences): void {
   const root = document.documentElement;
   root.dataset.appearanceFont = appearance.font;
+  root.dataset.appearanceSurface = appearance.surface;
+  root.dataset.appearanceMotion = appearance.animate ? "on" : "off";
   root.style.setProperty("--atlas-font-scale", String(appearance.fontScale));
   if (appearance.textColor) root.style.setProperty("--foreground", appearance.textColor);
   else root.style.removeProperty("--foreground");
+
+  const tint = ACCENT_TINT_VALUES[appearance.accent];
+  if (tint) {
+    root.style.setProperty("--accent", tint.accent);
+    root.style.setProperty("--accent-hover", tint.hover);
+    root.style.setProperty("--accent-foreground", "#ffffff");
+  } else {
+    root.style.removeProperty("--accent");
+    root.style.removeProperty("--accent-hover");
+    root.style.removeProperty("--accent-foreground");
+  }
+
+  setNumberStyle(appearance.numberStyle);
 }

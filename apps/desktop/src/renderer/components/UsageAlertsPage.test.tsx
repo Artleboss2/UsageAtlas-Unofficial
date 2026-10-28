@@ -36,7 +36,16 @@ describe("UsageAlertsPage", () => {
 });
 
 const preferences: DesktopPreferences = {
-  appearance: { font: "system", fontScale: 1, textColor: null, mark: "datamosh" },
+  appearance: {
+    font: "system",
+    fontScale: 1,
+    textColor: null,
+    mark: "datamosh",
+    numberStyle: "exact",
+    accent: "system",
+    surface: "glass",
+    animate: true
+  },
   tokenAlerts: { enabled: true, thresholdTokens: 100_000 },
   reportPlans: [],
   language: "system",
