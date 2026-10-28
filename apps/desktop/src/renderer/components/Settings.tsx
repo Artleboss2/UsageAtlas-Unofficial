@@ -24,6 +24,7 @@ import { BUILT_IN_WALLPAPERS } from "../wallpapers";
 import { ProviderLogo } from "./ProviderLogo";
 import { ProviderCredentialForm } from "./ProviderCredentialForm";
 import { isQuotaProvider } from "../../shared/quota-providers";
+import { LANGUAGES, LANGUAGE_LABELS } from "../../shared/languages";
 
 interface SettingsProps {
   updateState: DesktopUpdateState | null;
@@ -238,6 +239,36 @@ export function Settings({
                     </Button>
                   </div>
                 ) : null}
+              </Card.Content>
+            </Card>
+
+            <Card variant="transparent">
+              <Card.Header>
+                <Card.Title>Language</Card.Title>
+                <Card.Description>
+                  Choose the interface language. Numbers and dates keep their English formatting.
+                </Card.Description>
+              </Card.Header>
+              <Card.Content className="mt-2">
+                <div aria-label="Interface language" className="atlas-language-options" role="radiogroup">
+                  {LANGUAGES.map((language) => (
+                    <button
+                      aria-checked={preferences.language === language}
+                      className="atlas-language-option"
+                      key={language}
+                      onClick={() => void onUpdate({ language })}
+                      role="radio"
+                      type="button"
+                    >
+                      <span>{LANGUAGE_LABELS[language]}</span>
+                      {preferences.language === language ? (
+                        <span aria-hidden="true" className="atlas-language-option__check">
+                          <CheckIcon />
+                        </span>
+                      ) : null}
+                    </button>
+                  ))}
+                </div>
               </Card.Content>
             </Card>
 
