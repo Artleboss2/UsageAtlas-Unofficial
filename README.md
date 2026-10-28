@@ -45,9 +45,10 @@
   `owner/name` you name), without a restart.
 - **A glitched icon.** The app icon is the original artwork deliberately datamoshed — channel split,
   displaced bands, torn scanlines — so an install of this fork is never mistaken for the official
-  build. Regenerate it from the untouched master with
-  `node apps/desktop/scripts/glitch-icon.mjs`. Windows and Linux draw their own minimize, maximize
-  and close buttons in the title bar, the way Freebuff does; macOS keeps its traffic lights.
+  build. The mark is applied by the icon pipeline itself (`node tooling/generate-desktop-icons.mjs`),
+  which keeps the branding and web copies untouched and regenerates the same bytes on every run.
+  Windows and Linux draw their own minimize, maximize and close buttons in the title bar, the way
+  Freebuff does; macOS keeps its traffic lights.
 
 ## Why the cloud still works, and what that means
 
