@@ -1,9 +1,12 @@
 import { app, autoUpdater, net } from "electron";
+import { existsSync } from "node:fs";
+import path from "node:path";
 import type { DesktopUpdateState } from "../shared/desktop-api";
 import {
   compareVersions,
   downloadPageURL,
   latestPublishedVersion,
+  newerInstalledVersion,
   redactUpdateError,
   resolveUpdateSource,
   squirrelFeedURL,
@@ -34,12 +37,26 @@ export function configureAutoUpdates(hooks: AutoUpdateHooks = {}): DesktopUpdate
   const currentVersion = app.getVersion();
   const source = (): UpdateSource => hooks.source?.() ?? resolveUpdateSource("upstream");
   const firstRunUntil = process.argv.includes("--squirrel-firstrun") ? Date.now() + FIRST_CHECK_DELAY_MS : 0;
+  // A build installed while an older window stayed open is already on disk. Say
+  // so instead of letting Squirrel answer "up to date" for the newer package.
+  const installedAhead = newerInstalledVersion(process.execPath, currentVersion);
   let state: DesktopUpdateState = {
-    status: enabled ? "idle" : "unavailable",
+    status: enabled ? (installedAhead ? "ready" : "idle") : "unavailable",
     currentVersion,
-    availableVersion: null,
+    availableVersion: installedAhead,
     error: null
   };
+
+  /**
+   * Squirrel's stub at the install root opens the newest applied release; the
+   * running `app-<older>` executable would only ever relaunch itself.
+   */
+  function restartIntoInstalledBuild(): void {
+    const stub = path.resolve(process.execPath, "..", "..", "UsageAtlas.exe");
+    if (process.platform === "win32" && existsSync(stub)) app.relaunch({ execPath: stub });
+    else app.relaunch();
+    app.exit(0);
+  }
   let initialTimer: NodeJS.Timeout | undefined;
   let timer: NodeJS.Timeout | undefined;
 
@@ -63,6 +80,12 @@ export function configureAutoUpdates(hooks: AutoUpdateHooks = {}): DesktopUpdate
     if (!enabled || state.status === "checking" || state.status === "downloading" || state.status === "ready") return state;
     if (Date.now() < firstRunUntil) {
       publish({ status: "error", error: "Finishing installation. Try checking again in a few seconds." });
+      return state;
+    }
+    const pending = newerInstalledVersion(process.execPath, currentVersion);
+    if (pending) {
+      hooks.onUpdateReady?.(restartIntoInstalledBuild);
+      publish({ status: "ready", availableVersion: pending });
       return state;
     }
     publish({ status: "checking", availableVersion: null });
@@ -94,6 +117,7 @@ export function configureAutoUpdates(hooks: AutoUpdateHooks = {}): DesktopUpdate
   }
 
   if (enabled) {
+    if (installedAhead) hooks.onUpdateReady?.(restartIntoInstalledBuild);
     if (squirrelFeedURL(process.platform, process.arch, currentVersion, source())) {
       autoUpdater.on("update-available", () => {
         hooks.capture?.("desktop_update_available");

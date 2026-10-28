@@ -1,9 +1,13 @@
-import { describe, expect, it } from "vitest";
+import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import path from "node:path";
+import { afterEach, describe, expect, it } from "vitest";
 import {
   compareVersions,
   downloadPageURL,
   isNewerVersion,
   latestPublishedVersion,
+  newerInstalledVersion,
   redactUpdateError,
   resolveUpdateSource,
   squirrelFeedURL,
@@ -118,6 +122,36 @@ describe("latestPublishedVersion", () => {
     expect(latestPublishedVersion({})).toBeNull();
     expect(latestPublishedVersion({ version: 3 })).toBeNull();
     expect(latestPublishedVersion({ version: "latest" })).toBeNull();
+  });
+});
+
+describe("newerInstalledVersion", () => {
+  const roots: string[] = [];
+  afterEach(() => {
+    for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true });
+  });
+
+  /** Builds the `app-<version>` folders Squirrel leaves under the install root. */
+  function install(...versions: string[]): string {
+    const root = mkdtempSync(path.join(tmpdir(), "usageatlas-install-"));
+    roots.push(root);
+    for (const version of versions) mkdirSync(path.join(root, `app-${version}`));
+    return root;
+  }
+
+  it("reports a build that is already unpacked while an older window runs", () => {
+    const root = install("0.3.4", "0.3.5", "0.3.6");
+    expect(newerInstalledVersion(path.join(root, "app-0.3.5", "UsageAtlas.exe"), "0.3.5")).toBe("0.3.6");
+  });
+
+  it("stays quiet when the running build is the newest one", () => {
+    const root = install("0.3.5", "0.3.6");
+    expect(newerInstalledVersion(path.join(root, "app-0.3.6", "UsageAtlas.exe"), "0.3.6")).toBeNull();
+  });
+
+  it("ignores paths that are not a Squirrel install", () => {
+    const root = install("0.3.6");
+    expect(newerInstalledVersion(path.join(root, "UsageAtlas.exe"), "0.3.5")).toBeNull();
   });
 });
 
