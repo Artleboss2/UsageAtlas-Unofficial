@@ -29,8 +29,16 @@ import { tmpdir } from "node:os";
 import { pathToFileURL } from "node:url";
 import { isLimitKey } from "../shared/capacity-model";
 import { DashboardSession } from "./dashboard-session";
-import type { AppRoute, DesktopPreferences } from "../shared/desktop-api";
-import { IPC, isBackgroundImagePreference, isUpdateChannel, isUpdateRepository } from "../shared/desktop-api";
+import type { AppMark, AppRoute, DesktopPreferences } from "../shared/desktop-api";
+import {
+  IPC,
+  isAppearanceFont,
+  isAppMark,
+  isBackgroundImagePreference,
+  isUpdateChannel,
+  isUpdateRepository,
+  sanitizeTokenAlerts
+} from "../shared/desktop-api";
 import { isUsageAlertPreferences } from "../shared/usage-alerts";
 import { isGrowthEvent } from "../shared/growth-events";
 import { EngineManager } from "./engine-manager";
@@ -41,9 +49,12 @@ import { trayLimitLabels } from "./tray-limits";
 import { configureAutoUpdates, type DesktopUpdater } from "./updates";
 import { resolveUpdateSource } from "./update-feed";
 import {
+  createTokenAlertNotification,
   createUsageAlertNotification,
+  TokenAlertEvaluator,
   UsageAlertDeliveryLog,
   UsageAlertEvaluator,
+  type TriggeredTokenAlert,
   type TriggeredUsageAlert
 } from "./usage-alerts";
 import { UtilityEngineTransport } from "./utility-engine-transport";
@@ -95,6 +106,7 @@ let updates: DesktopUpdater;
 
 const activeUsageNotifications = new Set<Notification>();
 let usageAlertEvaluator = new UsageAlertEvaluator();
+const tokenAlertEvaluator = new TokenAlertEvaluator();
 const usageAlertDeliveryLog = new UsageAlertDeliveryLog();
 /** Includes the X and Bluesky composers for sharing a recap. */
 const allowedExternalHosts = new Set(["usageatlas.com", "github.com", "x.com", "bsky.app"]);
@@ -109,8 +121,34 @@ const windowChrome = {
   light: { backgroundColor: "#f5f5f7", symbolColor: "#1d1d1f" },
   dark: { backgroundColor: "#1c1c1e", symbolColor: "#f5f5f7" }
 } as const;
-function runtimeIconPath(filename: "usageatlas.ico" | "usageatlas.png"): string {
-  return path.join(runtimeIconDirectory, filename);
+/** Which artwork each selectable mark ships as, under the packaged icons directory. */
+const appMarkFiles: Record<AppMark, string> = {
+  datamosh: "usageatlas.png",
+  classic: path.join("marks", "mark-classic.png"),
+  duotone: path.join("marks", "mark-duotone.png")
+};
+
+function appMarkPath(mark: AppMark): string {
+  return path.join(runtimeIconDirectory, appMarkFiles[mark]);
+}
+
+function loadAppMark(mark: AppMark): Electron.NativeImage {
+  const image = nativeImage.createFromPath(appMarkPath(mark));
+  if (image.isEmpty()) throw new Error("UsageAtlas application mark could not be loaded");
+  return image;
+}
+
+function trayImage(image: Electron.NativeImage): Electron.NativeImage {
+  const size = process.platform === "darwin" ? 18 : 22;
+  return image.resize({ width: size, height: size, quality: "best" });
+}
+
+/** Swaps the window, dock and tray artwork without restarting the app. */
+function applyAppMark(mark: AppMark): void {
+  const image = loadAppMark(mark);
+  if (mainWindow && !mainWindow.isDestroyed()) mainWindow.setIcon(image);
+  if (process.platform === "darwin") app.dock?.setIcon(image);
+  if (tray && !tray.isDestroyed()) tray.setImage(trayImage(image));
 }
 
 function customBackgroundPath(): string {
@@ -122,18 +160,6 @@ function customBackgroundUrl(): string | null {
   if (!existsSync(imagePath)) return null;
   const image = nativeImage.createFromPath(imagePath);
   return image.isEmpty() ? null : `app://usageatlas/custom-background?v=${statSync(imagePath).mtimeMs}`;
-}
-
-function loadRuntimeLogo(): Electron.NativeImage {
-  const image = nativeImage.createFromPath(runtimeIconPath("usageatlas.png"));
-  if (image.isEmpty()) throw new Error("UsageAtlas application icon could not be loaded");
-  return image;
-}
-
-function loadWindowsIcon(): Electron.NativeImage {
-  const image = nativeImage.createFromPath(runtimeIconPath("usageatlas.ico"));
-  if (image.isEmpty()) throw new Error("UsageAtlas Windows icon could not be loaded");
-  return image;
 }
 
 function systemWindowChrome(): (typeof windowChrome)[keyof typeof windowChrome] {
@@ -154,7 +180,7 @@ function createWindow(route: AppRoute = "day"): BrowserWindow {
     show: false,
     autoHideMenuBar: true,
     backgroundColor: chrome.backgroundColor,
-    icon: process.platform === "win32" ? loadWindowsIcon() : loadRuntimeLogo(),
+    icon: loadAppMark(preferences.get().appearance.mark),
     roundedCorners: true,
     // macOS keeps its traffic lights; every other platform draws its own controls
     // in the renderer's title bar, next to the window buttons the app already had.
@@ -228,18 +254,26 @@ function showWindow(route: AppRoute = "day"): void {
   }
 }
 
+function showTokenNotification(alert: TriggeredTokenAlert): void {
+  if (!Notification.isSupported()) return;
+  showNotification(createTokenAlertNotification(alert), "day");
+}
+
 function showUsageNotification(alert: TriggeredUsageAlert): void {
   if (!Notification.isSupported()) return;
   if (!usageAlertDeliveryLog.allow(alert)) return;
-  const content = createUsageAlertNotification(alert);
+  showNotification(createUsageAlertNotification(alert), "limits");
+}
+
+function showNotification(content: { title: string; body: string }, route: AppRoute): void {
   const notification = new Notification({
     ...content,
-    icon: runtimeIconPath("usageatlas.png")
+    icon: loadAppMark(preferences.get().appearance.mark)
   });
   const release = (): void => {
     activeUsageNotifications.delete(notification);
   };
-  notification.once("click", () => showWindow("limits"));
+  notification.once("click", () => showWindow(route));
   notification.once("close", release);
   activeUsageNotifications.add(notification);
   notification.show();
@@ -265,14 +299,7 @@ async function runBackgroundUsageCheck(): Promise<void> {
 }
 
 function createTray(): void {
-  const image = process.platform === "win32"
-    ? loadWindowsIcon()
-    : loadRuntimeLogo().resize({
-        width: process.platform === "darwin" ? 18 : 22,
-        height: process.platform === "darwin" ? 18 : 22,
-        quality: "best"
-      });
-  tray = new Tray(image);
+  tray = new Tray(trayImage(loadAppMark(preferences.get().appearance.mark)));
   tray.setToolTip("UsageAtlas");
   updateTrayMenu();
   if (process.platform !== "darwin") {
@@ -469,8 +496,24 @@ function registerIPC(): void {
     if (previous.updateChannel !== nextPreferences.updateChannel || previous.updateRepository !== nextPreferences.updateRepository) {
       void updates.check().catch(() => undefined);
     }
+    if (previous.appearance.mark !== nextPreferences.appearance.mark) {
+      applyAppMark(nextPreferences.appearance.mark);
+    }
     updateTrayMenu();
     return nextPreferences;
+  });
+  ipcMain.handle(IPC.getAppMarks, (event) => {
+    assertTrustedSender(event);
+    return Object.fromEntries(Object.keys(appMarkFiles).map(mark => [mark, loadAppMark(mark as AppMark).toDataURL()])) as Record<AppMark, string>;
+  });
+  ipcMain.handle(IPC.sendTestAlert, (event, tokens: unknown, providerName: unknown) => {
+    assertTrustedSender(event);
+    const safeTokens = typeof tokens === "number" && Number.isFinite(tokens) ? Math.max(0, Math.round(tokens)) : 12_400;
+    const safeName = typeof providerName === "string" && providerName.trim().length > 0 && providerName.length <= 80
+      ? providerName.trim() : "a source";
+    if (!Notification.isSupported()) return false;
+    showNotification(createTokenAlertNotification({ providerID: "test", providerName: safeName, tokens: safeTokens }), "alerts");
+    return true;
   });
   ipcMain.handle(IPC.getCustomBackground, (event) => {
     assertTrustedSender(event);
@@ -567,10 +610,12 @@ function isAllowedExternal(value: string): boolean {
 function isPreferencePatch(value: unknown): value is Partial<DesktopPreferences> {
   if (!value || typeof value !== "object" || Array.isArray(value)) return false;
   const patch = value as Record<string, unknown>;
-  if (Object.keys(patch).some((key) => !["launchAtLogin", "minimizeToTray", "anonymousAnalytics", "backgroundImage", "usageAlerts", "limitOrder", "trayLimits", "updateChannel", "updateRepository"].includes(key))) {
+  if (Object.keys(patch).some((key) => !["launchAtLogin", "minimizeToTray", "anonymousAnalytics", "backgroundImage", "usageAlerts", "tokenAlerts", "appearance", "limitOrder", "trayLimits", "updateChannel", "updateRepository"].includes(key))) {
     return false;
   }
   return (patch.launchAtLogin === undefined || typeof patch.launchAtLogin === "boolean")
+    && (patch.appearance === undefined || isAppearancePatch(patch.appearance))
+    && (patch.tokenAlerts === undefined || isTokenAlertPatch(patch.tokenAlerts))
     && (patch.minimizeToTray === undefined || typeof patch.minimizeToTray === "boolean")
     && (patch.anonymousAnalytics === undefined || typeof patch.anonymousAnalytics === "boolean")
     && (patch.backgroundImage === undefined || isBackgroundImagePreference(patch.backgroundImage))
@@ -583,6 +628,37 @@ function isPreferencePatch(value: unknown): value is Partial<DesktopPreferences>
     && (patch.updateChannel === undefined || isUpdateChannel(patch.updateChannel))
     && (patch.updateRepository === undefined || isUpdateRepository(patch.updateRepository))
     && (patch.usageAlerts === undefined || isUsageAlertPreferences(patch.usageAlerts));
+}
+
+function isAppearancePatch(value: unknown): boolean {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const patch = value as Record<string, unknown>;
+  if (Object.keys(patch).some((key) => !["font", "fontScale", "textColor", "mark"].includes(key))) return false;
+  return (patch.font === undefined || isAppearanceFont(patch.font))
+    && (patch.mark === undefined || isAppMark(patch.mark))
+    && (patch.fontScale === undefined || (
+      typeof patch.fontScale === "number"
+      && Number.isFinite(patch.fontScale)
+      && patch.fontScale >= 0.85
+      && patch.fontScale <= 1.3
+    ))
+    && (patch.textColor === undefined || patch.textColor === null
+      || (typeof patch.textColor === "string" && /^#[0-9a-f]{6}$/iu.test(patch.textColor)));
+}
+
+function isTokenAlertPatch(value: unknown): boolean {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const patch = value as Record<string, unknown>;
+  if (Object.keys(patch).some((key) => !["enabled", "thresholdTokens"].includes(key))) return false;
+  const sanitized = sanitizeTokenAlerts(patch);
+  return (patch.enabled === undefined || typeof patch.enabled === "boolean")
+    && (patch.thresholdTokens === undefined || (
+      typeof patch.thresholdTokens === "number"
+      && Number.isSafeInteger(patch.thresholdTokens)
+      && patch.thresholdTokens >= 1_000
+      && patch.thresholdTokens <= 1_000_000_000
+      && sanitized.thresholdTokens === patch.thresholdTokens
+    ));
 }
 
 function isTrayLimitPatch(value: unknown): boolean {
@@ -616,7 +692,7 @@ async function registerApplicationProtocol(): Promise<void> {
 if (squirrelStartup) {
   app.quit();
 } else void app.whenReady().then(async () => {
-  if (process.platform === "darwin") app.dock?.setIcon(loadRuntimeLogo());
+  if (process.platform === "darwin") app.dock?.setIcon(loadAppMark("datamosh"));
   session.defaultSession.setPermissionRequestHandler((_webContents, _permission, callback) => callback(false));
   session.defaultSession.setPermissionCheckHandler(() => false);
   await registerApplicationProtocol();
@@ -639,6 +715,7 @@ if (squirrelStartup) {
   }, snapshot => {
     const alerts = usageAlertEvaluator.evaluate(snapshot, preferences.get().usageAlerts);
     for (const alert of alerts) showUsageNotification(alert);
+    for (const alert of tokenAlertEvaluator.evaluate(snapshot, preferences.get().tokenAlerts)) showTokenNotification(alert);
   });
   engine.onProgress(progress => dashboard.progress(progress));
   engine.onImportProgress(message => dashboard.importProgress(message.accountId, message.progress));
@@ -658,6 +735,7 @@ if (squirrelStartup) {
   registerIPC();
   createTray();
   mainWindow = createWindow();
+  applyAppMark(preferences.get().appearance.mark);
   telemetry.capture("desktop_app_opened");
   if (cloudAccount.profileStatus().state === "signed-out") {
     profileStatusReported = true;

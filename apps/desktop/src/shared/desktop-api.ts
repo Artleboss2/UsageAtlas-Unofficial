@@ -19,6 +19,88 @@ export interface UsageAlertRule {
 }
 
 export type UsageAlertPreferences = Record<string, Record<string, UsageAlertRule>>;
+
+/**
+ * The typography choices offered in Settings → Appearance. Every family ships as a
+ * bundled variable font, so a choice never depends on what the machine has installed.
+ */
+export const APPEARANCE_FONTS = ["system", "inter", "manrope", "figtree", "jakarta", "geist"] as const;
+export type AppearanceFont = (typeof APPEARANCE_FONTS)[number];
+
+/** Application marks the title bar and the window icon can use. */
+export const APP_MARKS = ["datamosh", "classic", "duotone"] as const;
+export type AppMark = (typeof APP_MARKS)[number];
+
+/**
+ * A daily token alert: once a source passes the threshold, the app says exactly
+ * how many tokens it used. Unlike capacity rules it needs no provider quota
+ * window, so it works for every local history reader.
+ */
+export interface TokenAlertPreferences {
+  enabled: boolean;
+  thresholdTokens: number;
+}
+
+export const DEFAULT_TOKEN_ALERTS: TokenAlertPreferences = {
+  enabled: true,
+  thresholdTokens: 100_000
+};
+
+export function sanitizeTokenAlerts(value: unknown): TokenAlertPreferences {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return { ...DEFAULT_TOKEN_ALERTS };
+  const record = value as Record<string, unknown>;
+  const threshold = typeof record.thresholdTokens === "number" && Number.isFinite(record.thresholdTokens)
+    ? Math.min(1_000_000_000, Math.max(1_000, Math.round(record.thresholdTokens)))
+    : DEFAULT_TOKEN_ALERTS.thresholdTokens;
+  return {
+    enabled: typeof record.enabled === "boolean" ? record.enabled : DEFAULT_TOKEN_ALERTS.enabled,
+    thresholdTokens: threshold
+  };
+}
+
+export interface AppearancePreferences {
+  font: AppearanceFont;
+  /** Root type scale, 0.85–1.3. */
+  fontScale: number;
+  /** A `#rrggbb` ink colour, or null for the theme's own text colour. */
+  textColor: string | null;
+  mark: AppMark;
+}
+
+export const DEFAULT_APPEARANCE: AppearancePreferences = {
+  font: "system",
+  fontScale: 1,
+  textColor: null,
+  mark: "datamosh"
+};
+const appearanceFontSet = new Set<string>(APPEARANCE_FONTS);
+const appMarkSet = new Set<string>(APP_MARKS);
+
+export function isAppearanceFont(value: unknown): value is AppearanceFont {
+  return typeof value === "string" && appearanceFontSet.has(value);
+}
+
+export function isAppMark(value: unknown): value is AppMark {
+  return typeof value === "string" && appMarkSet.has(value);
+}
+
+export function sanitizeAppearance(value: unknown): AppearancePreferences {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return { ...DEFAULT_APPEARANCE };
+  const record = value as Record<string, unknown>;
+  const scale = typeof record.fontScale === "number" && Number.isFinite(record.fontScale)
+    ? Math.min(1.3, Math.max(0.85, Math.round(record.fontScale * 100) / 100))
+    : DEFAULT_APPEARANCE.fontScale;
+  const textColor = typeof record.textColor === "string" && /^#[0-9a-f]{6}$/iu.test(record.textColor)
+    ? record.textColor.toLowerCase()
+    : null;
+  return {
+    font: isAppearanceFont(record.font) ? record.font : DEFAULT_APPEARANCE.font,
+    fontScale: scale,
+    textColor,
+    mark: isAppMark(record.mark) ? record.mark : DEFAULT_APPEARANCE.mark
+  };
+}
+
 export const BUILT_IN_BACKGROUND_IDS = ["mist", "valley", "anime-calm", "monterey", "big-sur"] as const;
 export type BuiltInBackgroundId = (typeof BUILT_IN_BACKGROUND_IDS)[number];
 export type BackgroundImagePreference = BuiltInBackgroundId | "custom";
@@ -83,6 +165,8 @@ export function sanitizeUpdateRepository(value: unknown): string {
 }
 
 export interface DesktopPreferences {
+  /** Typography, ink colour and app mark. */
+  appearance: AppearancePreferences;
   backgroundImage: BackgroundImagePreference;
   /** Publisher whose releases the app updates from. */
   updateChannel: UpdateChannel;
@@ -98,6 +182,8 @@ export interface DesktopPreferences {
   /** Limit keys switched off for the tray menu. Missing keys stay in the menu. */
   trayLimits: Record<string, boolean>;
   usageAlerts: UsageAlertPreferences;
+  /** Daily per-source token warning, independent of provider quota windows. */
+  tokenAlerts: TokenAlertPreferences;
   /** Local provider → the official providers and models its cloud save is reported as. */
   reportPlans: ReportPlan[];
 }
@@ -139,6 +225,10 @@ export interface DashboardState {
 export interface UsageAtlasDesktopAPI {
   /** Renderer-side platform check: macOS keeps its own traffic lights. */
   readonly platform: string;
+  /** PNG data URLs for every application mark, keyed by id. */
+  getAppMarks(): Promise<Record<AppMark, string>>;
+  /** Shows a desktop notification now, to check that alerts arrive. */
+  sendTestAlert(tokens: number, providerName: string): Promise<boolean>;
   minimizeWindow(): Promise<void>;
   /** Returns the state the window is in after the toggle. */
   toggleMaximizeWindow(): Promise<boolean>;
@@ -177,6 +267,8 @@ export interface UsageAtlasDesktopAPI {
 }
 
 export const IPC = {
+  getAppMarks: "app:marks",
+  sendTestAlert: "alerts:test",
   getProviderCredentials: "providers:credentials-status",
   setProviderCredential: "providers:set-credential",
   getUpdateState: "updates:get",

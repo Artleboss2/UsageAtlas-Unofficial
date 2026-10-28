@@ -19,9 +19,25 @@ describe("UsageAlertsPage", () => {
     expect(html).toContain('role="switch"');
     expect(html).toContain('aria-label="Claude 5-hour usage alert"');
   });
+
+  it("previews the daily token notification in the exact wording it sends", () => {
+    const html = renderToStaticMarkup(
+      <UsageAlertsPage
+        preferences={preferences}
+        providers={[provider]}
+        saving={false}
+        onUpdate={vi.fn()}
+      />,
+    );
+
+    expect(html).toContain("Daily token alert");
+    expect(html).toContain("You used 100,000 tokens on Claude today.");
+  });
 });
 
 const preferences: DesktopPreferences = {
+  appearance: { font: "system", fontScale: 1, textColor: null, mark: "datamosh" },
+  tokenAlerts: { enabled: true, thresholdTokens: 100_000 },
   reportPlans: [],
   updateChannel: "fork",
     updateRepository: "",

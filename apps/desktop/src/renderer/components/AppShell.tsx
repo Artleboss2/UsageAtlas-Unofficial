@@ -10,6 +10,10 @@ interface AppShellProps {
   onNavigate(route: AppRoute): void;
   /** A quiet dot on Profile until the page has been opened once. */
   profileBadge?: boolean;
+  /** PNG data URL for the mark chosen in Settings → Appearance. */
+  appMarkUrl?: string | null;
+  /** Where the user came from, so the incoming page glides in from the right side. */
+  previousRoute?: AppRoute | null;
   activityControl?: React.ReactNode;
   updateControl?: React.ReactNode;
   children: React.ReactNode;
@@ -39,8 +43,23 @@ const routeTitles: Record<AppRoute, string> = {
   settings: "Settings"
 };
 
-export function AppShell({ route, engineStatus, noticeCount, onNavigate, profileBadge = false, activityControl, updateControl, children }: AppShellProps): React.JSX.Element {
+/** Reading order of the rail, so a page slides in from the side it comes from. */
+const routeOrder: Record<AppRoute, number> = {
+  day: 0,
+  trends: 1,
+  insights: 2,
+  limits: 3,
+  alerts: 4,
+  profile: 5,
+  attribution: 6,
+  diagnostics: 7,
+  settings: 8
+};
+
+export function AppShell({ route, engineStatus, noticeCount, onNavigate, profileBadge = false, appMarkUrl = null, previousRoute = null, activityControl, updateControl, children }: AppShellProps): React.JSX.Element {
   const workspaceRef = useRef<HTMLElement>(null);
+  // A later page in the rail slides in from the right, an earlier one from the left.
+  const direction = previousRoute && routeOrder[route] < routeOrder[previousRoute] ? "back" : "forward";
 
   useLayoutEffect(() => {
     const workspace = workspaceRef.current;
@@ -55,7 +74,7 @@ export function AppShell({ route, engineStatus, noticeCount, onNavigate, profile
       <header aria-label="UsageAtlas" className="atlas-app-shell__titlebar drag-region">
         <div className="atlas-app-shell__brand">
           <span aria-hidden="true" className="atlas-app-shell__brand-mark">
-            <img alt="" src="./usageatlas.png" />
+            <img alt="" src={appMarkUrl ?? "./usageatlas.png"} />
           </span>
           <span className="atlas-app-shell__brand-name">UsageAtlas</span>
           {updateControl}
@@ -105,7 +124,9 @@ export function AppShell({ route, engineStatus, noticeCount, onNavigate, profile
       </aside>
 
       <main className="atlas-app-shell__workspace no-drag" onScroll={handleWorkspaceScroll} ref={workspaceRef}>
-        {children}
+        <div className="atlas-route-view" data-direction={direction} key={route}>
+          {children}
+        </div>
       </main>
     </div>
   );

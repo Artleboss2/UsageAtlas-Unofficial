@@ -6,6 +6,27 @@
   --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", "Inter Variable", Inter, "Segoe UI", sans-serif;
 }
 
+/* Bundled families, selected from Settings → Appearance. */
+html[data-appearance-font="inter"] {
+  --font-sans: "Inter Variable", Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+html[data-appearance-font="manrope"] {
+  --font-sans: "Manrope Variable", Manrope, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+html[data-appearance-font="figtree"] {
+  --font-sans: "Figtree Variable", Figtree, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+html[data-appearance-font="jakarta"] {
+  --font-sans: "Plus Jakarta Sans Variable", "Plus Jakarta Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+html[data-appearance-font="geist"] {
+  --font-sans: "Geist Variable", Geist, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
 /* Dither Kit chrome (axes, tooltip) is written against shadcn token names that
    HeroUI does not define. Alias them onto the theme tokens so the components
    stay unmodified and update cleanly; `inline` keeps them theme-reactive. */
@@ -154,6 +175,8 @@
   html {
     background: var(--background);
     font-family: var(--font-sans);
+    /* Settings → Appearance scales every rem-based size from here. */
+    font-size: calc(16px * var(--atlas-font-scale, 1));
     font-optical-sizing: auto;
     font-synthesis: none;
     text-rendering: optimizeLegibility;
@@ -275,44 +298,61 @@
 /*
  * The window buttons the app draws itself on Windows and Linux, in the corner
  * Freebuff puts them in. macOS keeps its traffic lights, so these are not shown.
+ * Round, softly filled on hover, and drawn with the same rounded strokes as the
+ * rest of the chrome instead of the sharp Windows glyphs.
  */
 .atlas-window-controls {
   display: inline-flex;
   height: 100%;
   margin-inline-start: auto;
-  align-items: stretch;
+  align-items: center;
+  gap: 2px;
+  padding-inline-end: 2px;
 }
 
 .atlas-window-controls__button {
   display: grid;
-  width: 44px;
+  width: 30px;
+  height: 30px;
   place-items: center;
   border: 0;
+  border-radius: 50%;
   background: transparent;
   color: var(--muted);
-  transition: background-color 120ms ease, color 120ms ease;
+  cursor: pointer;
+  transition:
+    background-color 180ms cubic-bezier(0.22, 1, 0.36, 1),
+    color 180ms cubic-bezier(0.22, 1, 0.36, 1),
+    transform 260ms cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 
 .atlas-window-controls__button svg {
-  width: 12px;
-  height: 12px;
+  width: 13px;
+  height: 13px;
   fill: none;
   stroke: currentColor;
-  stroke-width: 1.1;
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 
 .atlas-window-controls__button:hover {
-  background: rgba(127, 127, 127, 0.18);
+  background: color-mix(in oklch, var(--foreground) 8%, transparent);
   color: var(--foreground);
+  transform: scale(1.08);
+}
+
+.atlas-window-controls__button:active {
+  transform: scale(0.93);
 }
 
 .atlas-window-controls__button:focus-visible {
   outline: 2px solid var(--focus);
-  outline-offset: -2px;
+  outline-offset: -1px;
 }
 
 .atlas-window-controls__button--close:hover {
-  background: #e5484d;
+  background: #ff453a;
   color: #fff;
 }
 
@@ -556,7 +596,54 @@
   margin-inline: 0;
   padding: 0 var(--atlas-page-gutter) 72px;
   overflow-x: clip;
-  animation: atlas-enter 260ms cubic-bezier(0.2, 0, 0, 1) both;
+}
+
+/*
+ * Route motion. The whole sheet — cards included — glides in from the side the
+ * page was reached from, so navigating reads as movement through one surface
+ * instead of a repaint. Transform and opacity only: no layout, no repaint of the
+ * wallpaper, and the animation is skipped under reduced motion.
+ */
+.atlas-route-view {
+  min-height: 100%;
+}
+
+.atlas-route-view[data-direction="forward"] {
+  animation: atlas-route-forward 340ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.atlas-route-view[data-direction="back"] {
+  animation: atlas-route-back 340ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@keyframes atlas-route-forward {
+  from {
+    opacity: 0;
+    transform: translate3d(30px, 0, 0) scale(0.995);
+  }
+
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+}
+
+@keyframes atlas-route-back {
+  from {
+    opacity: 0;
+    transform: translate3d(-30px, 0, 0) scale(0.995);
+  }
+
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .atlas-route-view[data-direction] {
+    animation: none;
+  }
 }
 
 .atlas-page > :not(.atlas-toolbar) {
@@ -813,6 +900,36 @@
   box-shadow: var(--atlas-ring-hover);
   -webkit-backdrop-filter: blur(28px) saturate(150%);
   backdrop-filter: blur(28px) saturate(150%);
+}
+
+/*
+ * Apple-style growth on the home selectors: the pill lifts a few percent under
+ * the pointer with a springy return, without moving its neighbours. Hover only,
+ * and never under reduced motion.
+ */
+@media (hover: hover) and (prefers-reduced-motion: no-preference) {
+  .atlas-provider-select__trigger,
+  .atlas-period-trigger,
+  .atlas-toolbar :is(.button--secondary, .button--tertiary) {
+    transform-origin: center;
+    transition:
+      transform 380ms cubic-bezier(0.34, 1.56, 0.64, 1),
+      background 160ms cubic-bezier(0.2, 0, 0, 1),
+      box-shadow 160ms cubic-bezier(0.2, 0, 0, 1);
+  }
+
+  .atlas-provider-select__trigger:hover,
+  .atlas-period-trigger:hover,
+  .atlas-toolbar :is(.button--secondary, .button--tertiary):hover {
+    transform: scale(1.045);
+  }
+
+  .atlas-provider-select__trigger:active,
+  .atlas-period-trigger:active,
+  .atlas-toolbar :is(.button--secondary, .button--tertiary):active {
+    transform: scale(0.972);
+    transition-duration: 120ms;
+  }
 }
 
 .atlas-provider-select {
@@ -3130,4 +3247,373 @@
   .atlas-section-heading > div > p:not(.atlas-kicker) {
     color: var(--foreground);
   }
+}
+
+/*
+ * Settings → Appearance. The controls are deliberately quiet: one segmented tab
+ * bar, soft tiles that lift under the pointer, and a preview that uses the exact
+ * stack and ink being chosen.
+ */
+.atlas-settings-tabs {
+  display: inline-flex;
+  gap: 2px;
+  margin-block-start: 22px;
+  padding: 3px;
+  border-radius: 999px;
+  background: color-mix(in oklch, var(--surface-secondary) 82%, transparent);
+  box-shadow: var(--atlas-ring);
+  -webkit-backdrop-filter: var(--atlas-glass-filter);
+  backdrop-filter: var(--atlas-glass-filter);
+}
+
+.atlas-settings-tabs__tab {
+  min-height: 34px;
+  padding-inline: 18px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 0.8125rem;
+  font-weight: 550;
+  letter-spacing: -0.01em;
+  cursor: pointer;
+  transition:
+    background 220ms cubic-bezier(0.22, 1, 0.36, 1),
+    color 220ms cubic-bezier(0.22, 1, 0.36, 1),
+    box-shadow 220ms cubic-bezier(0.22, 1, 0.36, 1),
+    transform 320ms cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.atlas-settings-tabs__tab:hover {
+  color: var(--foreground);
+  transform: scale(1.03);
+}
+
+.atlas-settings-tabs__tab[aria-selected="true"] {
+  background: var(--surface);
+  color: var(--foreground);
+  box-shadow:
+    inset 0 0 0 0.5px rgba(0, 0, 0, 0.06),
+    0 2px 6px -2px rgba(0, 0, 0, 0.16);
+}
+
+.atlas-appearance-preview {
+  display: grid;
+  gap: 2px;
+  padding: 22px 24px;
+  border-radius: 18px;
+  background:
+    radial-gradient(120% 140% at 0% 0%, color-mix(in oklch, var(--surface) 92%, transparent), transparent 60%),
+    color-mix(in oklch, var(--surface-secondary) 70%, transparent);
+  box-shadow: var(--atlas-ring);
+}
+
+.atlas-appearance-preview__kicker {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.atlas-appearance-preview__value {
+  margin: 0;
+  font-size: 2rem;
+  font-weight: 640;
+  letter-spacing: -0.035em;
+  line-height: 1.12;
+}
+
+.atlas-appearance-preview__meta {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.8125rem;
+}
+
+.atlas-font-grid,
+.atlas-mark-grid {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(auto-fit, minmax(148px, 1fr));
+}
+
+.atlas-font-tile,
+.atlas-mark-tile {
+  position: relative;
+  display: grid;
+  justify-items: start;
+  gap: 2px;
+  padding: 14px;
+  border: 0;
+  border-radius: 16px;
+  background: color-mix(in oklch, var(--surface) 72%, transparent);
+  box-shadow: var(--atlas-ring);
+  color: var(--foreground);
+  text-align: start;
+  cursor: pointer;
+  transition:
+    transform 360ms cubic-bezier(0.34, 1.56, 0.64, 1),
+    box-shadow 200ms cubic-bezier(0.22, 1, 0.36, 1),
+    background 200ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.atlas-font-tile:hover,
+.atlas-mark-tile:hover {
+  transform: translateY(-2px) scale(1.02);
+  background: var(--surface);
+  box-shadow:
+    inset 0 0 0 0.5px rgba(0, 0, 0, 0.07),
+    0 10px 24px -16px rgba(0, 0, 0, 0.4);
+}
+
+.atlas-font-tile[aria-checked="true"],
+.atlas-mark-tile[aria-checked="true"] {
+  background: var(--surface);
+  box-shadow:
+    inset 0 0 0 1.5px var(--accent),
+    0 10px 24px -18px rgba(0, 0, 0, 0.45);
+}
+
+.atlas-font-tile__sample {
+  font-size: 1.5rem;
+  font-weight: 600;
+  letter-spacing: -0.03em;
+  line-height: 1.15;
+}
+
+.atlas-font-tile__label,
+.atlas-mark-tile__label {
+  font-size: 0.8125rem;
+  font-weight: 560;
+}
+
+.atlas-font-tile__note,
+.atlas-mark-tile__note {
+  color: var(--muted);
+  font-size: 0.6875rem;
+  line-height: 1.35;
+}
+
+.atlas-font-tile__check {
+  position: absolute;
+  inset-block-start: 10px;
+  inset-inline-end: 10px;
+  display: grid;
+  width: 18px;
+  height: 18px;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--accent);
+  color: var(--accent-foreground);
+}
+
+.atlas-font-tile__check svg {
+  width: 11px;
+  height: 11px;
+}
+
+.atlas-appearance-scale {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding-block: 6px;
+}
+
+.atlas-appearance-scale__edge {
+  color: var(--muted);
+  font-size: 0.8125rem;
+  font-weight: 550;
+}
+
+.atlas-appearance-scale__edge--large {
+  font-size: 1.375rem;
+  color: var(--foreground);
+}
+
+.atlas-appearance-scale__value {
+  min-width: 48px;
+  font-size: 0.8125rem;
+  font-variant-numeric: tabular-nums;
+  text-align: end;
+}
+
+.atlas-slider {
+  flex: 1;
+  height: 24px;
+  margin: 0;
+  background: transparent;
+  cursor: pointer;
+  appearance: none;
+  -webkit-appearance: none;
+}
+
+.atlas-slider::-webkit-slider-runnable-track {
+  height: 5px;
+  border-radius: 999px;
+  background: color-mix(in oklch, var(--foreground) 14%, transparent);
+}
+
+.atlas-slider::-webkit-slider-thumb {
+  width: 20px;
+  height: 20px;
+  margin-block-start: -7.5px;
+  border: 0;
+  border-radius: 50%;
+  background: var(--surface);
+  box-shadow:
+    inset 0 0 0 0.5px rgba(0, 0, 0, 0.1),
+    0 2px 6px rgba(0, 0, 0, 0.22);
+  -webkit-appearance: none;
+  transition: transform 240ms cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.atlas-slider:active::-webkit-slider-thumb {
+  transform: scale(1.12);
+}
+
+.atlas-ink-swatches {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+.atlas-ink-swatch {
+  display: grid;
+  width: 32px;
+  height: 32px;
+  place-items: center;
+  border: 0;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #f5f5f7 0 50%, #1d1d1f 50% 100%);
+  box-shadow:
+    inset 0 0 0 0.5px rgba(0, 0, 0, 0.14),
+    0 1px 3px rgba(0, 0, 0, 0.14);
+  color: #fff;
+  cursor: pointer;
+  transition: transform 300ms cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.atlas-ink-swatch:hover {
+  transform: scale(1.1);
+}
+
+.atlas-ink-swatch svg {
+  width: 14px;
+  height: 14px;
+  filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.45));
+}
+
+.atlas-ink-custom {
+  display: inline-flex;
+  min-height: 32px;
+  align-items: center;
+  gap: 8px;
+  padding-inline: 10px 6px;
+  border-radius: 999px;
+  background: color-mix(in oklch, var(--surface) 70%, transparent);
+  box-shadow: var(--atlas-ring);
+  color: var(--muted);
+  font-size: 0.75rem;
+}
+
+.atlas-ink-custom input {
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  cursor: pointer;
+}
+
+.atlas-ink-custom input::-webkit-color-swatch-wrapper {
+  padding: 0;
+}
+
+.atlas-ink-custom input::-webkit-color-swatch {
+  border: 0;
+  border-radius: 50%;
+  box-shadow: inset 0 0 0 0.5px rgba(0, 0, 0, 0.2);
+}
+
+.atlas-mark-tile__preview {
+  display: grid;
+  width: 56px;
+  height: 56px;
+  margin-block-end: 8px;
+  place-items: center;
+  overflow: hidden;
+  border-radius: 14px;
+  background: color-mix(in oklch, var(--foreground) 5%, transparent);
+}
+
+.atlas-mark-tile__preview img {
+  width: 100%;
+  height: 100%;
+  border-radius: inherit;
+  object-fit: cover;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .atlas-settings-tabs__tab,
+  .atlas-font-tile,
+  .atlas-mark-tile,
+  .atlas-ink-swatch {
+    transition: none;
+  }
+}
+
+/* Daily token alert card: the one rule that works without a quota window. */
+.atlas-token-alert__heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.atlas-token-alert__body {
+  display: grid;
+  gap: 12px;
+}
+
+.atlas-token-alert__unit {
+  margin: -6px 0 0;
+  color: var(--muted);
+  font-size: 0.75rem;
+}
+
+.atlas-token-alert__sample {
+  display: grid;
+  gap: 2px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: color-mix(in oklch, var(--foreground) 4%, transparent);
+}
+
+.atlas-token-alert__sample span {
+  color: var(--muted);
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.atlas-token-alert__sample strong {
+  font-size: 0.875rem;
+  font-weight: 550;
+  letter-spacing: -0.01em;
+}
+
+.atlas-token-alert__status {
+  min-height: 18px;
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.75rem;
+}
+
+/* `hidden` must win over layout utilities so an inactive Settings tab stays closed. */
+.atlas-page [hidden] {
+  display: none !important;
 }

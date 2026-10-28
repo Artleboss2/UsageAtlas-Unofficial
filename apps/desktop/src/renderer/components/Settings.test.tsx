@@ -40,13 +40,26 @@ describe("Settings updates", () => {
     const html = render([]);
 
     expect(html).toContain("Updates from");
-    expect(html).toContain("This fork");
-    expect(html).toContain("Upstream");
+    expect(html).toContain("Unofficial fork");
+    expect(html).toContain("Official app");
     expect(html).toContain("github.com/Artleboss2/UsageAtlas-Unofficial");
   });
 });
 
 describe("Settings appearance", () => {
+  it("offers the bundled fonts and application marks", () => {
+    const html = render([]);
+
+    expect(html).toContain("Manrope");
+    expect(html).toContain("Figtree");
+    expect(html).toContain("Geist");
+    expect(html).toContain("Datamosh");
+    expect(html).toContain("Classic");
+    expect(html).toContain("Duotone");
+    expect(html).toContain("Interface text size");
+    expect(html).toContain("Text colour");
+  });
+
   it("offers Mist, Valley, Night, Monterey, and Big Sur as background choices", () => {
     const html = render([]);
 
@@ -103,6 +116,8 @@ function provider(overrides: Partial<DashboardProvider> = {}): DashboardProvider
 
 function preferences(): DesktopPreferences {
   return {
+    appearance: { font: "system", fontScale: 1, textColor: null, mark: "datamosh" },
+    tokenAlerts: { enabled: true, thresholdTokens: 100_000 },
     reportPlans: [],
     updateChannel: "fork",
     updateRepository: "",

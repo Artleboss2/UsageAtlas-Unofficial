@@ -2,6 +2,10 @@ import { Toast } from "@heroui/react";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import "@fontsource-variable/inter";
+import "@fontsource-variable/manrope";
+import "@fontsource-variable/figtree";
+import "@fontsource-variable/plus-jakarta-sans";
+import "@fontsource-variable/geist";
 import "./globals.css";
 import { App } from "./App";
 

@@ -1,7 +1,7 @@
-import { Card, Skeleton, Spinner, Switch } from "@heroui/react";
+import { Button, Card, Input, Label, Skeleton, Spinner, Switch, TextField } from "@heroui/react";
 import { useId, useRef, useState, type KeyboardEvent, type PointerEvent } from "react";
 import type { DashboardProvider, DashboardWindow } from "@usageatlas/contracts";
-import type { DesktopPreferences, UsageAlertRule } from "../../shared/desktop-api";
+import type { DesktopPreferences, TokenAlertPreferences, UsageAlertRule } from "../../shared/desktop-api";
 import { DEFAULT_USAGE_ALERT_THRESHOLD } from "../../shared/usage-alerts";
 import { formatReset } from "../dashboard-model";
 import { AlertIcon, BellIcon, CheckIcon } from "../icons";
@@ -12,6 +12,8 @@ interface UsageAlertsPageProps {
   providers: DashboardProvider[];
   saving: boolean;
   onUpdate: (patch: Partial<DesktopPreferences>) => Promise<void>;
+  /** Shows a real desktop notification so the user can confirm it arrives. */
+  onTestAlert?: (tokens: number, providerName: string) => Promise<boolean>;
 }
 
 interface UsageAlertWindowCardProps {
@@ -35,9 +37,13 @@ export function UsageAlertsPage({
   providers,
   saving,
   onUpdate,
+  onTestAlert,
 }: UsageAlertsPageProps) {
   const meteredProviders = providers.filter((provider) => provider.windows.length > 0);
   const windowCount = meteredProviders.reduce((total, provider) => total + provider.windows.length, 0);
+  const tokenAlerts = preferences?.tokenAlerts ?? { enabled: true, thresholdTokens: 100_000 };
+  const sampleProvider = providers.find((provider) => provider.enabled)?.name ?? "Freebuff";
+  const sampleTokens = Math.max(tokenAlerts.thresholdTokens, 12_400);
   const activeAlertCount = preferences
     ? meteredProviders.reduce(
         (total, provider) =>
@@ -93,15 +99,28 @@ export function UsageAlertsPage({
 
       {!preferences ? (
         <AlertsPageSkeleton />
-      ) : meteredProviders.length === 0 ? (
-        <Card className="atlas-alerts-empty" variant="transparent">
-          <Card.Content>
-            <BellIcon aria-hidden />
-            <h2>No metered sources yet</h2>
-            <p>Connect a source with usage limits, then return here to create alerts.</p>
-          </Card.Content>
-        </Card>
       ) : (
+        <>
+          <TokenAlertCard
+            onTestAlert={onTestAlert}
+            onUpdate={onUpdate}
+            sampleProvider={sampleProvider}
+            sampleTokens={sampleTokens}
+            tokenAlerts={tokenAlerts}
+          />
+          {meteredProviders.length === 0 ? (
+            <Card className="atlas-alerts-empty" variant="transparent">
+              <Card.Content>
+                <BellIcon aria-hidden />
+                <h2>No capacity windows from your sources</h2>
+                <p>
+                  The daily token alert above works with every source. Capacity alerts appear once a
+                  provider reports quota windows.
+                </p>
+              </Card.Content>
+            </Card>
+          ) : null}
+          {meteredProviders.length > 0 ? (
         <>
           <Card className="atlas-alerts-overview" variant="transparent">
             <Card.Content>
@@ -177,9 +196,110 @@ export function UsageAlertsPage({
             ))}
           </div>
         </>
+          ) : null}
+        </>
       )}
     </div>
   );
+}
+
+/**
+ * The alert that works for every source: a daily token count, announced with the
+ * exact number and the provider name. No quota window is required, so private
+ * and unofficial providers are covered too.
+ */
+function TokenAlertCard({
+  tokenAlerts,
+  sampleProvider,
+  sampleTokens,
+  onUpdate,
+  onTestAlert,
+}: {
+  tokenAlerts: TokenAlertPreferences;
+  sampleProvider: string;
+  sampleTokens: number;
+  onUpdate: (patch: Partial<DesktopPreferences>) => Promise<void>;
+  onTestAlert?: (tokens: number, providerName: string) => Promise<boolean>;
+}) {
+  const [draft, setDraft] = useState(String(tokenAlerts.thresholdTokens));
+  const [tested, setTested] = useState<string | null>(null);
+  const commit = (raw: string): void => {
+    const parsed = Number(raw.replace(/[^0-9]/gu, ""));
+    if (!Number.isFinite(parsed) || parsed < 1_000) {
+      setDraft(String(tokenAlerts.thresholdTokens));
+      return;
+    }
+    const thresholdTokens = Math.min(1_000_000_000, Math.round(parsed));
+    setDraft(String(thresholdTokens));
+    if (thresholdTokens !== tokenAlerts.thresholdTokens) {
+      void onUpdate({ tokenAlerts: { ...tokenAlerts, thresholdTokens } });
+    }
+  };
+
+  return (
+    <Card className="atlas-token-alert" variant="transparent">
+      <Card.Header>
+        <div className="atlas-token-alert__heading">
+          <div>
+            <Card.Title>Daily token alert</Card.Title>
+            <Card.Description>
+              Once a source passes this many tokens in a day, you get a notification
+              that says exactly how many it used.
+            </Card.Description>
+          </div>
+          <Switch
+            aria-label="Daily token alerts"
+            isSelected={tokenAlerts.enabled}
+            onChange={(enabled) => void onUpdate({ tokenAlerts: { ...tokenAlerts, enabled } })}
+          >
+            <Switch.Content>
+              <Switch.Control>
+                <Switch.Thumb />
+              </Switch.Control>
+            </Switch.Content>
+          </Switch>
+        </div>
+      </Card.Header>
+      <Card.Content>
+        <div className="atlas-token-alert__body">
+          <TextField isDisabled={!tokenAlerts.enabled}>
+            <Label>Alert after</Label>
+            <Input
+              inputMode="numeric"
+              onBlur={(event) => commit(event.target.value)}
+              onChange={(event) => setDraft(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") commit(event.currentTarget.value);
+              }}
+              value={draft}
+            />
+          </TextField>
+          <p className="atlas-token-alert__unit">tokens per day</p>
+          <div className="atlas-token-alert__sample">
+            <span>Notification preview</span>
+            <strong>You used {formatTokens(sampleTokens)} tokens on {sampleProvider} today.</strong>
+          </div>
+          {onTestAlert ? (
+            <Button
+              onPress={async () => {
+                const shown = await onTestAlert(sampleTokens, sampleProvider);
+                setTested(shown ? "Sent. Check your notifications." : "Notifications are not available on this computer.");
+              }}
+              variant="outline"
+            >
+              <BellIcon />
+              <span>Send a test notification</span>
+            </Button>
+          ) : null}
+          <p aria-live="polite" className="atlas-token-alert__status">{tested ?? ""}</p>
+        </div>
+      </Card.Content>
+    </Card>
+  );
+}
+
+function formatTokens(value: number): string {
+  return new Intl.NumberFormat("en-US").format(Math.round(value));
 }
 
 function UsageAlertWindowCard({

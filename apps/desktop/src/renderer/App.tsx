@@ -9,6 +9,8 @@ import type {
   EngineStatus
 } from "../shared/desktop-api";
 import { applyWallpaper } from "./wallpapers";
+import { applyAppearance } from "./appearance";
+import type { AppMark } from "../shared/desktop-api";
 import { useAchievementNudge } from "./achievement-nudge";
 import { snapshotHasCachedUsage } from "../shared/cached-snapshot";
 import { dashboardFailure, dashboardIsLoading, initialDashboardState, latestDashboardState } from "./dashboard-state";
@@ -39,6 +41,8 @@ import type { ReportPlan } from "../shared/report-plans";
 export function App(): React.JSX.Element {
   const updates = useDesktopUpdates();
   const [route, setRoute] = useState<AppRoute>(() => routeFromHash(location.hash));
+  // Set on the way to a page, so the shell knows which side that page comes from.
+  const [previousRoute, setPreviousRoute] = useState<AppRoute | null>(null);
   const [dashboard, setDashboard] = useState(initialDashboardState);
   const { snapshot, refreshing, progress: refreshProgress } = dashboard;
   const updateDashboard = useCallback((next: DashboardState) => {
@@ -46,6 +50,7 @@ export function App(): React.JSX.Element {
   }, []);
   const [preferences, setPreferences] = useState<DesktopPreferences | null>(null);
   const [customBackgroundUrl, setCustomBackgroundUrl] = useState<string | null>(null);
+  const [markUrls, setMarkUrls] = useState<Record<AppMark, string> | null>(null);
   const [backgroundError, setBackgroundError] = useState<string | null>(null);
   const [diagnostics, setDiagnostics] = useState<EngineDiagnostics | null>(null);
   const [engineStatus, setEngineStatus] = useState<EngineStatus>("starting");
@@ -76,10 +81,11 @@ export function App(): React.JSX.Element {
   }, []);
 
   const navigate = useCallback((next: AppRoute): void => {
+    setPreviousRoute(route);
     location.hash = next;
     setRoute(next);
     if (next === "diagnostics") void loadDiagnostics();
-  }, [loadDiagnostics]);
+  }, [loadDiagnostics, route]);
 
   useEffect(() => {
     let active = true;
@@ -90,16 +96,18 @@ export function App(): React.JSX.Element {
     });
     const bootstrap = async (): Promise<void> => {
       try {
-        const [nextDashboard, nextPreferences, nextBackgroundUrl, nextDiagnostics] = await Promise.all([
+        const [nextDashboard, nextPreferences, nextBackgroundUrl, nextDiagnostics, nextMarks] = await Promise.all([
           window.usageAtlas.getSnapshot(),
           window.usageAtlas.getPreferences(),
           window.usageAtlas.getCustomBackground(),
-          window.usageAtlas.getDiagnostics()
+          window.usageAtlas.getDiagnostics(),
+          window.usageAtlas.getAppMarks().catch(() => null)
         ]);
         if (!active) return;
         updateDashboard(nextDashboard);
         setPreferences(nextPreferences);
         setCustomBackgroundUrl(nextBackgroundUrl);
+        setMarkUrls(nextMarks);
         setDiagnostics(nextDiagnostics);
         setEngineStatus(nextDiagnostics.status);
         setError(null);
@@ -120,6 +128,11 @@ export function App(): React.JSX.Element {
   useEffect(() => {
     applyWallpaper(preferences?.backgroundImage, customBackgroundUrl);
   }, [customBackgroundUrl, preferences?.backgroundImage]);
+
+  const appearance = preferences?.appearance;
+  useEffect(() => {
+    if (appearance) applyAppearance(appearance);
+  }, [appearance]);
 
   useEffect(() => {
     const onHashChange = () => setRoute(routeFromHash(location.hash));
@@ -324,12 +337,14 @@ export function App(): React.JSX.Element {
   }
 
   return (
-    <AppShell activityControl={!usageRoute ? activity : null} engineStatus={engineStatus} noticeCount={notices.length} onNavigate={navigate}
+    <AppShell activityControl={!usageRoute ? activity : null} appMarkUrl={preferences && markUrls ? markUrls[preferences.appearance.mark] : null}
+      engineStatus={engineStatus} previousRoute={previousRoute} noticeCount={notices.length} onNavigate={navigate}
       profileBadge={!profileVisited && cloud.status !== null && wantsProfilePrompt(cloud.status.profile)} route={route}
       updateControl={<UpdateTag state={updates.state} onCheck={updates.check} onInstall={updates.install} />}>
       {renderUsageRoute()}
       {route === "alerts" && (
         <UsageAlertsPage
+          onTestAlert={async (tokens, providerName) => window.usageAtlas.sendTestAlert(tokens, providerName)}
           onUpdate={updatePreferences}
           preferences={preferences}
           providers={snapshot?.providers ?? []}
@@ -386,6 +401,7 @@ export function App(): React.JSX.Element {
           onChooseCustomBackground={chooseCustomBackground}
           onOpenExternal={openExternal}
           onRefresh={refreshAll}
+          markUrls={markUrls}
           onSetProviderEnabled={setProviderEnabled}
           onUpdate={updatePreferences}
           preferences={preferences}

@@ -7,13 +7,13 @@ import { CheckIcon, DownloadIcon, RefreshIcon } from "../icons";
 const CHANNELS: { value: UpdateChannel; label: string; description: string }[] = [
   {
     value: "fork",
-    label: "This fork",
+    label: "Unofficial fork",
     description:
-      "Unofficial builds from github.com/Artleboss2/UsageAtlas-Unofficial, with the private provider readers."
+      "Builds from github.com/Artleboss2/UsageAtlas-Unofficial, with the private provider readers and appearance settings."
   },
   {
     value: "upstream",
-    label: "Upstream",
+    label: "Official app",
     description:
       "The original project's releases. Installing one replaces this fork's private providers with the official build."
   },

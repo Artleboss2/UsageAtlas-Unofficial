@@ -4,6 +4,8 @@ import { IPC } from "../shared/desktop-api";
 
 const api: UsageAtlasDesktopAPI = {
   platform: process.platform,
+  getAppMarks: () => ipcRenderer.invoke(IPC.getAppMarks),
+  sendTestAlert: (tokens, providerName) => ipcRenderer.invoke(IPC.sendTestAlert, tokens, providerName),
   minimizeWindow: () => ipcRenderer.invoke(IPC.minimizeWindow),
   toggleMaximizeWindow: () => ipcRenderer.invoke(IPC.toggleMaximizeWindow),
   closeWindow: () => ipcRenderer.invoke(IPC.closeWindow),

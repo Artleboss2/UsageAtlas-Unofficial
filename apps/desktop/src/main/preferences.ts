@@ -5,11 +5,15 @@ import path from "node:path";
 import { sanitizeLimitOrder, sanitizeTrayLimits } from "../shared/capacity-model";
 import {
   BACKGROUND_DEFAULT_GENERATION,
+  DEFAULT_APPEARANCE,
   DEFAULT_BACKGROUND_IMAGE,
   DEFAULT_UPDATE_CHANNEL,
   isBackgroundImagePreference,
   rollForwardBackgroundDefault,
+  DEFAULT_TOKEN_ALERTS,
+  sanitizeAppearance,
   sanitizeBackgroundImage,
+  sanitizeTokenAlerts,
   sanitizeUpdateChannel,
   sanitizeUpdateRepository,
   type DesktopPreferences
@@ -28,6 +32,7 @@ interface StoredPreferences extends DesktopPreferences {
 
 function defaultPreferences(): StoredPreferences {
   return {
+    appearance: { ...DEFAULT_APPEARANCE },
     backgroundImage: DEFAULT_BACKGROUND_IMAGE,
     updateChannel: DEFAULT_UPDATE_CHANNEL,
     updateRepository: "",
@@ -38,6 +43,7 @@ function defaultPreferences(): StoredPreferences {
     limitOrder: [],
     trayLimits: {},
     usageAlerts: {},
+    tokenAlerts: { ...DEFAULT_TOKEN_ALERTS },
     reportPlans: [],
     anonymousAnalytics: true,
     analyticsInstallationId: randomUUID(),
@@ -60,6 +66,7 @@ export class PreferenceStore {
 
   get(): DesktopPreferences {
     return {
+      appearance: { ...this.values.appearance },
       backgroundImage: this.values.backgroundImage,
       updateChannel: this.values.updateChannel,
       updateRepository: this.values.updateRepository,
@@ -71,6 +78,7 @@ export class PreferenceStore {
       limitOrder: [...this.values.limitOrder],
       trayLimits: { ...this.values.trayLimits },
       usageAlerts: cloneUsageAlertPreferences(this.values.usageAlerts),
+      tokenAlerts: { ...this.values.tokenAlerts },
       reportPlans: this.values.reportPlans.map(plan => ({ source: plan.source, targets: plan.targets.map(target => ({ ...target })) }))
     };
   }
@@ -91,6 +99,7 @@ export class PreferenceStore {
 
   update(patch: Partial<DesktopPreferences>): DesktopPreferences {
     const next = { ...this.values };
+    if (patch.appearance !== undefined) next.appearance = sanitizeAppearance(patch.appearance);
     if (isBackgroundImagePreference(patch.backgroundImage)) {
       next.backgroundImage = patch.backgroundImage;
     }
@@ -115,6 +124,9 @@ export class PreferenceStore {
     }
     if (patch.usageAlerts && typeof patch.usageAlerts === "object") {
       next.usageAlerts = sanitizeUsageAlertPreferences(patch.usageAlerts);
+    }
+    if (patch.tokenAlerts && typeof patch.tokenAlerts === "object") {
+      next.tokenAlerts = sanitizeTokenAlerts(patch.tokenAlerts);
     }
     if (Array.isArray(patch.reportPlans)) {
       next.reportPlans = validateReportPlans(patch.reportPlans);
@@ -145,6 +157,7 @@ export class PreferenceStore {
       );
       return {
         values: {
+          appearance: sanitizeAppearance(parsed.appearance),
           backgroundImage: rolled.backgroundImage,
           updateChannel: sanitizeUpdateChannel(parsed.updateChannel),
           updateRepository: sanitizeUpdateRepository(parsed.updateRepository),
@@ -161,6 +174,7 @@ export class PreferenceStore {
           limitOrder: sanitizeLimitOrder(parsed.limitOrder),
           trayLimits: sanitizeTrayLimits(parsed.trayLimits),
           usageAlerts: sanitizeUsageAlertPreferences(parsed.usageAlerts),
+          tokenAlerts: sanitizeTokenAlerts(parsed.tokenAlerts),
           // Single-target rules from earlier builds become one-target plans.
           reportPlans: validateReportPlans(parsed.reportPlans ?? []).length
             ? validateReportPlans(parsed.reportPlans)
