@@ -51,7 +51,11 @@ export type OfficialProvider = (typeof OFFICIAL_PROVIDERS)[number];
 const ALL_PROVIDERS = new Set<string>([
   ...OFFICIAL_PROVIDERS,
   "freebuff",
-  "zai"
+  "zai",
+  "gemini",
+  "qwen",
+  "cline",
+  "roo"
 ]);
 
 export const MAX_PLAN_TARGETS = 12;

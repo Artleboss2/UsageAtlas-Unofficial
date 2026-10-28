@@ -38,7 +38,8 @@ describe("provider adapters", () => {
       "opencode",
       "antigravity",
       "pi",
-      "muse", "freebuff", "warp", "kimi", "kilo", "copilot", "factory", "amp", "qoder", "zai"
+      "muse", "freebuff", "warp", "kimi", "kilo", "copilot", "factory", "amp", "qoder", "zai",
+      "gemini", "qwen", "cline", "roo"
     ]);
   });
 

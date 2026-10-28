@@ -10,6 +10,10 @@ import GithubCopilot from "@lobehub/icons/es/GithubCopilot/components/Mono.js";
 import Amp from "@lobehub/icons/es/Amp/components/Color.js";
 import Qoder from "@lobehub/icons/es/Qoder/components/Color.js";
 import ZAI from "@lobehub/icons/es/ZAI/components/Mono.js";
+import GeminiCLI from "@lobehub/icons/es/GeminiCLI/components/Color.js";
+import Qwen from "@lobehub/icons/es/Qwen/components/Color.js";
+import Cline from "@lobehub/icons/es/Cline/components/Mono.js";
+import RooCode from "@lobehub/icons/es/RooCode/components/Mono.js";
 
 const warpLogo = new URL("../assets/providers/warp.svg", import.meta.url).href;
 const factoryLogo = new URL("../assets/providers/factory.svg", import.meta.url).href;
@@ -50,7 +54,9 @@ export function ProviderLogo({
               ? Meta
               : providerID === "kimi" ? Kimi : providerID === "kilo" ? KiloCode
                 : providerID === "copilot" ? GithubCopilot : providerID === "amp" ? Amp
-                  : providerID === "qoder" ? Qoder : providerID === "zai" ? ZAI : null;
+                  : providerID === "qoder" ? Qoder : providerID === "zai" ? ZAI
+                    : providerID === "gemini" ? GeminiCLI : providerID === "qwen" ? Qwen
+                      : providerID === "cline" ? Cline : providerID === "roo" ? RooCode : null;
   const avatarClassName = mark
     ? "size-[18px] text-[10px]"
     : mini

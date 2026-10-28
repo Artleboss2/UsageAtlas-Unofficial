@@ -6,6 +6,7 @@ import { createCodexAdapter } from "./codex";
 import { createCursorAdapter } from "./cursor";
 import { createOpenCodeAdapter } from "./opencode";
 import { createLocalToolAdapter } from "./local-tools";
+import { createJsonFileAdapter } from "./local-files";
 import { createWarpAdapter } from "./warp";
 import { createKimiAdapter } from "./kimi";
 import { createKiloAdapter } from "./kilo";
@@ -28,6 +29,8 @@ export function createProviderAdapters(): ProviderAdapter[] {
     createLocalToolAdapter("muse"),
     createFreebuffAdapter({ pricingCatalogLoader }),
     createWarpAdapter(), createKimiAdapter(), createKiloAdapter(), createCopilotAdapter(),
-    createFactoryAdapter(), createAmpAdapter(), createQoderAdapter(), createZaiAdapter()
+    createFactoryAdapter(), createAmpAdapter(), createQoderAdapter(), createZaiAdapter(),
+    createJsonFileAdapter("gemini"), createJsonFileAdapter("qwen"),
+    createJsonFileAdapter("cline"), createJsonFileAdapter("roo")
   ];
 }
