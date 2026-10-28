@@ -3,6 +3,27 @@
 All notable UsageAtlas desktop changes are recorded here. This is an unofficial fork; see
 [README.md](README.md) for what it adds and what it is not.
 
+## 0.3.6 — 2026-10-28
+
+### Added
+
+- **The rail highlight slides between pages.** The active-page pill is a single element moved
+  between rail buttons, so going from Today to Profile — or from Profile to Usage alerts — glides
+  down the rail instead of the highlight jumping from one item to the next. It is measured from the
+  real buttons, so it stays aligned when the window or the type scale changes, and it is placed
+  without animation under reduced motion.
+
+### Changed
+
+- **The appearance pickers are translated too.** The font, app-icon and ink descriptions in
+  Settings → Appearance no longer stay in English inside a French, Spanish, Chinese or Hindi page,
+  and neither does the *Custom* background label.
+- **The chosen app mark reaches the Windows taskbar.** Each mark now ships a multi-size ICO beside
+  its PNG and the window icon is set from it, so the taskbar and Alt-Tab artwork follow the picker
+  instead of only the title bar and the tray. Windows keeps the icon of the installed shortcut
+  itself; only the running window can change it.
+- French uses the domain word *tokens* rather than translating it to *jetons*.
+
 ## 0.3.5 — 2026-10-28
 
 ### Added
