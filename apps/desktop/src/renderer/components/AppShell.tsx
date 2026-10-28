@@ -1,5 +1,5 @@
 import type { AppRoute, EngineStatus } from "../../shared/desktop-api";
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { AttributionIcon, BellIcon, DayIcon, InsightsIcon, ProfileIcon, PulseIcon, SettingsIcon, TrendsIcon } from "../icons";
 import { useI18n } from "../i18n";
 import type { MessageKey } from "../i18n";
@@ -61,8 +61,56 @@ const routeOrder: Record<AppRoute, number> = {
 export function AppShell({ route, engineStatus, noticeCount, onNavigate, profileBadge = false, appMarkUrl = null, previousRoute = null, activityControl, updateControl, children }: AppShellProps): React.JSX.Element {
   const { t } = useI18n();
   const workspaceRef = useRef<HTMLElement>(null);
+  const railRef = useRef<HTMLElement>(null);
+  const railButtons = useRef(new Map<AppRoute, HTMLButtonElement>());
+  const [highlight, setHighlight] = useState<{ top: number; left: number; width: number; height: number } | null>(null);
+  const [settled, setSettled] = useState(false);
   // A later page in the rail slides in from the right, an earlier one from the left.
   const direction = previousRoute && routeOrder[route] < routeOrder[previousRoute] ? "back" : "forward";
+
+  const registerRailButton = useCallback((item: AppRoute, node: HTMLButtonElement | null) => {
+    if (node) railButtons.current.set(item, node);
+    else railButtons.current.delete(item);
+  }, []);
+
+  // The highlight is one element moved with a transform, so the pill glides from
+  // the page you left to the one you opened. Measuring the real buttons keeps it
+  // aligned through font-scale and window-size changes.
+  const measureRail = useCallback(() => {
+    const rail = railRef.current;
+    const button = railButtons.current.get(route);
+    if (!rail) return;
+    // A sub-page such as Limits has no rail entry, so nothing is highlighted.
+    if (!button) {
+      setHighlight(null);
+      return;
+    }
+    const railBox = rail.getBoundingClientRect();
+    const box = button.getBoundingClientRect();
+    setHighlight({
+      top: box.top - railBox.top,
+      left: box.left - railBox.left,
+      width: box.width,
+      height: box.height
+    });
+  }, [route]);
+
+  useLayoutEffect(() => {
+    measureRail();
+  }, [measureRail]);
+
+  useEffect(() => {
+    const rail = railRef.current;
+    if (!rail) return;
+    const observer = new ResizeObserver(measureRail);
+    observer.observe(rail);
+    // The first placement must not animate from the top of the rail.
+    const frame = requestAnimationFrame(() => setSettled(true));
+    return () => {
+      observer.disconnect();
+      cancelAnimationFrame(frame);
+    };
+  }, [measureRail]);
 
   useLayoutEffect(() => {
     const workspace = workspaceRef.current;
@@ -88,13 +136,26 @@ export function AppShell({ route, engineStatus, noticeCount, onNavigate, profile
         <WindowControls />
       </header>
 
-      <aside aria-label="Primary navigation" className="atlas-app-shell__rail no-drag">
+      <aside aria-label="Primary navigation" className="atlas-app-shell__rail no-drag" ref={railRef}>
+        {highlight ? (
+          <span
+            aria-hidden="true"
+            className="atlas-app-shell__rail-highlight"
+            data-settled={settled ? "true" : "false"}
+            style={{
+              width: highlight.width,
+              height: highlight.height,
+              transform: `translate(${highlight.left}px, ${highlight.top}px)`
+            }}
+          />
+        ) : null}
         <nav aria-label="Main navigation" className="atlas-app-shell__navigation">
           {primaryNavigation.map((item) => (
             <RailButton
               icon={item.icon}
               badge={item.route === "profile" && profileBadge}
               isCurrent={route === item.route}
+              itemRef={(node) => registerRailButton(item.route, node)}
               key={item.route}
               label={t(item.labelKey)}
               onPress={() => onNavigate(item.route)}
@@ -106,6 +167,7 @@ export function AppShell({ route, engineStatus, noticeCount, onNavigate, profile
           <RailButton
             icon={PulseIcon}
             isCurrent={route === "diagnostics"}
+            itemRef={(node) => registerRailButton("diagnostics", node)}
             label={t("nav.diagnostics")}
             noticeCount={noticeCount}
             onPress={() => onNavigate("diagnostics")}
@@ -114,12 +176,14 @@ export function AppShell({ route, engineStatus, noticeCount, onNavigate, profile
           <RailButton
             icon={AttributionIcon}
             isCurrent={route === "attribution"}
+            itemRef={(node) => registerRailButton("attribution", node)}
             label={t("nav.attribution")}
             onPress={() => onNavigate("attribution")}
           />
           <RailButton
             icon={SettingsIcon}
             isCurrent={route === "settings"}
+            itemRef={(node) => registerRailButton("settings", node)}
             label={t("nav.settings")}
             onPress={() => onNavigate("settings")}
           />
@@ -216,6 +280,7 @@ function RailButton({
   badge = false,
   icon: Icon,
   isCurrent,
+  itemRef,
   label,
   noticeCount = 0,
   onPress,
@@ -224,6 +289,7 @@ function RailButton({
   badge?: boolean;
   icon: (props: React.SVGProps<SVGSVGElement>) => React.JSX.Element;
   isCurrent: boolean;
+  itemRef?(node: HTMLButtonElement | null): void;
   label: string;
   noticeCount?: number;
   onPress(): void;
@@ -236,6 +302,7 @@ function RailButton({
       aria-label={description}
       className="atlas-app-shell__rail-button"
       onClick={onPress}
+      ref={itemRef}
       title={description}
       type="button"
     >
