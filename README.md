@@ -27,6 +27,17 @@
   instead of reading as free. z.ai / GLM reads the Coding Plan's five-hour and weekly windows from
   the quota API. Neither is part of the original app. See [docs/FREEBUFF.md](docs/FREEBUFF.md) and
   [docs/QUOTA_PROVIDERS.md](docs/QUOTA_PROVIDERS.md).
+- **Four more local readers.** Gemini CLI, Qwen Code, Cline and Roo Code keep their own transcripts;
+  this fork reads the token objects those files already contain. The survey of how each AI tool
+  records usage — including what was researched and deliberately left out — is in
+  [docs/PROVIDER_USAGE_SOURCES.md](docs/PROVIDER_USAGE_SOURCES.md).
+- **Appearance, in Settings.** A dedicated Appearance tab chooses the font (System, Inter, Manrope,
+  Figtree, Jakarta, Geist — all bundled variable fonts), the type scale, the ink colour, the app
+  mark (datamosh, classic or duotone, applied to the title bar, window and tray) and the background.
+  Pages glide in from the side they were reached from, and the home selectors grow under the pointer.
+- **A daily token alert that works for every source.** Usage alerts now include a token threshold:
+  once a source passes it in a local day, a desktop notification says exactly
+  `You used 128,400 tokens on Freebuff today.` A test button sends a real notification.
 - **Cloud attribution, with a wheel.** The hosted service refuses a provider it does not model, so a
   cloud save containing Freebuff or z.ai usage is rejected. The **Attribution** page maps such a
   source to one or more official providers, each with a share — 30 % Codex, 20 % ChatGPT, 50 %
@@ -40,9 +51,9 @@
 - **Provider marks.** The unofficial sources carry their own logos — Freebuff's published mark,
   z.ai's, plus the Warp and Factory marks the app already shipped. Provenance and hashes are in
   [apps/desktop/src/renderer/assets/providers/README.md](apps/desktop/src/renderer/assets/providers/README.md).
-- **Publisher choice for updates.** Settings → App updates switches between *This fork* (these
-  GitHub releases), *Upstream* (the original project's mirror) and *Another repository* (any GitHub
-  `owner/name` you name), without a restart.
+- **Publisher choice for updates.** Settings → App updates switches between *Unofficial fork*
+  (these GitHub releases), *Official app* (the original project's mirror) and *Another repository*
+  (any GitHub `owner/name` you name), without a restart.
 - **A glitched icon.** The app icon is the original artwork deliberately datamoshed — channel split,
   displaced bands, torn scanlines — so an install of this fork is never mistaken for the official
   build. The mark is applied by the icon pipeline itself (`node tooling/generate-desktop-icons.mjs`),
