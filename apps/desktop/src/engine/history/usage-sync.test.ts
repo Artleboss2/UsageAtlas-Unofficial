@@ -91,6 +91,57 @@ describe("usage cloud storage", () => {
     expect(read).toHaveBeenCalledTimes(1);
     expect(service.status()).toMatchObject({ accountId: null, busy: false, automatic: false, lastCompleted: null });
   });
+  it("uploads every pending record in one save, past the batch size", async () => {
+    const local = store();
+    local.selectAccount("a");
+    for (let index = 0; index < 120; index += 1) {
+      const record = day(100 + index);
+      local.put({
+        ...record,
+        recordId: `00000000-0000-4000-8000-${String(index).padStart(12, "0")}`
+      });
+    }
+    const cloud = remoteCloud();
+    const service = sync(local);
+    await service.configure("a", cloud);
+    service.setAutomatic(false);
+    await service.save();
+    expect(local.pending()).toEqual([]);
+    expect(cloud.rows.size).toBe(120);
+  });
+
+  it("drains every observation when the server accepts only 40 per request", async () => {
+    const local = store();
+    local.selectAccount("a");
+    const start = new Date("2026-07-01T02:00:00Z");
+    const events = Array.from({ length: 50 }, (_, index) => {
+      const at = new Date(start.getTime() + index * 86_400_000).toISOString();
+      return usageEvent({
+        day: at.slice(0, 10),
+        timestamp: at,
+        eventKey: `source-${index}`,
+        sessionID: `session-${index}`
+      });
+    });
+    local.statistics.collect("codex", "local", "replica", analytics(events));
+    expect(local.statistics.pendingCount()).toBeGreaterThan(40);
+
+    const cloud = remoteCloud();
+    let requests = 0;
+    cloud.saveFacts = async facts => {
+      requests += 1;
+      // What the hosted service does: store and acknowledge the first 40.
+      return facts.slice(0, 40).map(fact => fact.id);
+    };
+    const service = sync(local);
+    await service.configure("a", cloud);
+    service.setAutomatic(false);
+    await service.save();
+
+    expect(local.statistics.pendingCount()).toBe(0);
+    expect(requests).toBeGreaterThan(1);
+  });
+
   it("restores over a corrupt payload and drops a damaged conflict instead of blocking the record", async () => {
     const local = store();
     local.selectAccount("a");

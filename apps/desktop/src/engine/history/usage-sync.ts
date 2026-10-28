@@ -23,6 +23,13 @@ import { spinTarget } from "./report-wheel";
 import { hasValidFingerprint, identifyFact } from "./statistics-store";
 import { ATTRIBUTION_SEPARATOR, parseAttribution, UsageStore } from "./usage-store";
 
+/**
+ * The hosted service stores at most this many observations per request. Sending
+ * the store's own 250-fact page made it acknowledge only the first 40 and the
+ * client treated the rest as a failed save, so one save drained 40 at a time.
+ */
+const STATISTICS_SAVE_BATCH = 40;
+
 export interface UsageCloud {
   readFacts?(after: string): Promise<{ facts: UsageFact[]; cursor: string; more: boolean }>;
   saveFacts?(facts: UsageFact[]): Promise<string[]>;
@@ -255,6 +262,7 @@ export class UsageSync {
           // whose id still matches it, so a renamed fact is renumbered here and the
           // acknowledgement is translated back to the row this computer wrote.
           const outgoing = this.store.statistics.pending(providers)
+            .slice(0, STATISTICS_SAVE_BATCH)
             .map(fact => this.renameFact(fact));
           if (!outgoing.length) break;
           if (!cloud.saveFacts) throw new Error("This server does not support saving usage observations. Update before saving.");
