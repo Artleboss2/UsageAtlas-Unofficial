@@ -18,6 +18,7 @@ import {
   sanitizeUpdateRepository,
   type DesktopPreferences
 } from "../shared/desktop-api";
+import { DEFAULT_LANGUAGE, sanitizeLanguage } from "../shared/languages";
 import { cloneUsageAlertPreferences, sanitizeUsageAlertPreferences } from "../shared/usage-alerts";
 import { planFromLegacyAliases, validateReportPlans } from "../shared/report-plans";
 
@@ -32,6 +33,7 @@ interface StoredPreferences extends DesktopPreferences {
 
 function defaultPreferences(): StoredPreferences {
   return {
+    language: DEFAULT_LANGUAGE,
     appearance: { ...DEFAULT_APPEARANCE },
     backgroundImage: DEFAULT_BACKGROUND_IMAGE,
     updateChannel: DEFAULT_UPDATE_CHANNEL,
@@ -66,6 +68,7 @@ export class PreferenceStore {
 
   get(): DesktopPreferences {
     return {
+      language: this.values.language,
       appearance: { ...this.values.appearance },
       backgroundImage: this.values.backgroundImage,
       updateChannel: this.values.updateChannel,
@@ -99,6 +102,7 @@ export class PreferenceStore {
 
   update(patch: Partial<DesktopPreferences>): DesktopPreferences {
     const next = { ...this.values };
+    if (patch.language !== undefined) next.language = sanitizeLanguage(patch.language);
     if (patch.appearance !== undefined) next.appearance = sanitizeAppearance(patch.appearance);
     if (isBackgroundImagePreference(patch.backgroundImage)) {
       next.backgroundImage = patch.backgroundImage;
@@ -157,6 +161,7 @@ export class PreferenceStore {
       );
       return {
         values: {
+          language: sanitizeLanguage(parsed.language),
           appearance: sanitizeAppearance(parsed.appearance),
           backgroundImage: rolled.backgroundImage,
           updateChannel: sanitizeUpdateChannel(parsed.updateChannel),

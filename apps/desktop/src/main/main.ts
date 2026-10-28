@@ -39,6 +39,7 @@ import {
   isUpdateRepository,
   sanitizeTokenAlerts
 } from "../shared/desktop-api";
+import { isLanguage } from "../shared/languages";
 import { isUsageAlertPreferences } from "../shared/usage-alerts";
 import { isGrowthEvent } from "../shared/growth-events";
 import { EngineManager } from "./engine-manager";
@@ -610,10 +611,11 @@ function isAllowedExternal(value: string): boolean {
 function isPreferencePatch(value: unknown): value is Partial<DesktopPreferences> {
   if (!value || typeof value !== "object" || Array.isArray(value)) return false;
   const patch = value as Record<string, unknown>;
-  if (Object.keys(patch).some((key) => !["launchAtLogin", "minimizeToTray", "anonymousAnalytics", "backgroundImage", "usageAlerts", "tokenAlerts", "appearance", "limitOrder", "trayLimits", "updateChannel", "updateRepository"].includes(key))) {
+  if (Object.keys(patch).some((key) => !["launchAtLogin", "minimizeToTray", "anonymousAnalytics", "backgroundImage", "usageAlerts", "tokenAlerts", "appearance", "language", "limitOrder", "trayLimits", "updateChannel", "updateRepository"].includes(key))) {
     return false;
   }
   return (patch.launchAtLogin === undefined || typeof patch.launchAtLogin === "boolean")
+    && (patch.language === undefined || isLanguage(patch.language))
     && (patch.appearance === undefined || isAppearancePatch(patch.appearance))
     && (patch.tokenAlerts === undefined || isTokenAlertPatch(patch.tokenAlerts))
     && (patch.minimizeToTray === undefined || typeof patch.minimizeToTray === "boolean")

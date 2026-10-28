@@ -2,6 +2,7 @@ import type { DashboardSnapshot } from "@usageatlas/contracts";
 import type { GrowthEvent, GrowthEventProperties } from "./growth-events";
 import type { ProviderCredential, ProviderCredentialStatus, QuotaProviderId } from "./quota-providers";
 import type { ReportPlan } from "./report-plans";
+import type { Language } from "./languages";
 
 export type AppRoute = "day" | "trends" | "insights" | "limits" | "alerts" | "profile" | "attribution" | "settings" | "diagnostics";
 export type EngineStatus = "starting" | "ready" | "degraded" | "stopped";
@@ -165,6 +166,8 @@ export function sanitizeUpdateRepository(value: unknown): string {
 }
 
 export interface DesktopPreferences {
+  /** Interface language, or `system` to follow the OS. */
+  language: Language;
   /** Typography, ink colour and app mark. */
   appearance: AppearancePreferences;
   backgroundImage: BackgroundImagePreference;
