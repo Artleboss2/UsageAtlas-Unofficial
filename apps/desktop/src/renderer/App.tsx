@@ -4,6 +4,7 @@ import { UsageEmpty, UsageFailure, UsageLoading, UsageRefreshStatus, UsageStorag
 import type {
   AppRoute,
   DashboardState,
+  DesktopAlertInboxEntry,
   DesktopPreferences,
   DesktopUsageAlert,
   EngineDiagnostics,
@@ -40,6 +41,27 @@ import { useCloudAccount, useLeaderboard, useProfilePageVisited, useProfilePromp
 import { useWrappedNudge } from "./wrapped-nudge";
 import type { ReportPlan } from "../shared/report-plans";
 
+const ALERT_INBOX_KEY = "usageatlas.alert-inbox.v1";
+const MAX_INBOX_ENTRIES = 50;
+
+/** Reads the received alerts kept on this computer; a corrupt list starts empty. */
+function readAlertInbox(): DesktopAlertInboxEntry[] {
+  try {
+    const parsed: unknown = JSON.parse(localStorage.getItem(ALERT_INBOX_KEY) ?? "[]");
+    if (!Array.isArray(parsed)) return [];
+    return parsed.flatMap(item => {
+      if (!item || typeof item !== "object") return [];
+      const entry = item as Record<string, unknown>;
+      if (typeof entry.title !== "string" || typeof entry.body !== "string"
+        || typeof entry.route !== "string" || typeof entry.receivedAt !== "string") return [];
+      if (Number.isNaN(Date.parse(entry.receivedAt))) return [];
+      return [{ title: entry.title, body: entry.body, route: entry.route as AppRoute, receivedAt: entry.receivedAt }];
+    }).slice(0, MAX_INBOX_ENTRIES);
+  } catch {
+    return [];
+  }
+}
+
 export function App(): React.JSX.Element {
   const updates = useDesktopUpdates();
   const [route, setRoute] = useState<AppRoute>(() => routeFromHash(location.hash));
@@ -64,6 +86,7 @@ export function App(): React.JSX.Element {
   const [error, setError] = useState<string | null>(null);
   const [dismissedNotices, setDismissedNotices] = useState<string[]>([]);
   const [usageAlert, setUsageAlert] = useState<DesktopUsageAlert | null>(null);
+  const [alertInbox, setAlertInbox] = useState<DesktopAlertInboxEntry[]>(readAlertInbox);
   const [selectedDay, setSelectedDay] = useState(() => todayDay());
   const [trendEndDay, setTrendEndDay] = useState(() => todayDay());
   const [trendRange, setTrendRange] = useState<AnalyticsRange>(30);
@@ -73,9 +96,23 @@ export function App(): React.JSX.Element {
   const profileVisited = useProfilePageVisited(route);
 
   useEffect(() => {
-    const unsubscribe = window.usageAtlas?.onUsageAlert?.(setUsageAlert);
+    const unsubscribe = window.usageAtlas?.onUsageAlert?.((alert) => {
+      setUsageAlert(alert);
+      setAlertInbox(current => [
+        { ...alert, receivedAt: new Date().toISOString() },
+        ...current
+      ].slice(0, MAX_INBOX_ENTRIES));
+    });
     return unsubscribe ?? undefined;
   }, []);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(ALERT_INBOX_KEY, JSON.stringify(alertInbox));
+    } catch {
+      // The list is a convenience; losing it must never break an alert.
+    }
+  }, [alertInbox]);
 
   const loadDiagnostics = useCallback(async (): Promise<void> => {
     setDiagnosticsLoading(true);
@@ -363,6 +400,8 @@ export function App(): React.JSX.Element {
       {renderUsageRoute()}
       {route === "alerts" && (
         <UsageAlertsPage
+          notifications={alertInbox}
+          onClearNotifications={() => setAlertInbox([])}
           onTestAlert={async (tokens, providerName) => window.usageAtlas.sendTestAlert(tokens, providerName)}
           onUpdate={updatePreferences}
           preferences={preferences}

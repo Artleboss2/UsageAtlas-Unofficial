@@ -1,7 +1,7 @@
 import { Button, Card, Input, Label, Skeleton, Spinner, Switch, TextField } from "@heroui/react";
 import { useId, useRef, useState, type KeyboardEvent, type PointerEvent } from "react";
 import type { DashboardProvider, DashboardWindow } from "@usageatlas/contracts";
-import type { DesktopPreferences, TokenAlertPreferences, UsageAlertRule } from "../../shared/desktop-api";
+import type { DesktopAlertInboxEntry, DesktopPreferences, TokenAlertPreferences, UsageAlertRule } from "../../shared/desktop-api";
 import { DEFAULT_USAGE_ALERT_THRESHOLD } from "../../shared/usage-alerts";
 import { formatReset } from "../dashboard-model";
 import { AlertIcon, BellIcon, CheckIcon } from "../icons";
@@ -13,6 +13,9 @@ interface UsageAlertsPageProps {
   providers: DashboardProvider[];
   saving: boolean;
   onUpdate: (patch: Partial<DesktopPreferences>) => Promise<void>;
+  /** Every alert this window has received, newest first. */
+  notifications?: DesktopAlertInboxEntry[];
+  onClearNotifications?: () => void;
   /** Shows a real desktop notification so the user can confirm it arrives. */
   onTestAlert?: (tokens: number, providerName: string) => Promise<boolean>;
 }
@@ -34,6 +37,8 @@ interface CircularThresholdPickerProps {
 }
 
 export function UsageAlertsPage({
+  notifications = [],
+  onClearNotifications,
   preferences,
   providers,
   saving,
@@ -98,6 +103,37 @@ export function UsageAlertsPage({
           )}
         </div>
       </header>
+
+      <Card className="atlas-alert-inbox" variant="transparent">
+        <Card.Header>
+          <Card.Title>{t("alerts.inbox.title")}</Card.Title>
+          <Card.Description>{t("alerts.inbox.description")}</Card.Description>
+        </Card.Header>
+        <Card.Content>
+          {notifications.length === 0 ? (
+            <p className="atlas-alert-inbox__empty">{t("alerts.inbox.empty")}</p>
+          ) : (
+            <ul className="atlas-alert-inbox__list">
+              {notifications.map((notification) => (
+                <li key={`${notification.receivedAt}-${notification.title}`} className="atlas-alert-inbox__item">
+                  <div className="atlas-alert-inbox__head">
+                    <strong>{notification.title}</strong>
+                    <time dateTime={notification.receivedAt}>
+                      {new Date(notification.receivedAt).toLocaleString()}
+                    </time>
+                  </div>
+                  <p>{notification.body}</p>
+                </li>
+              ))}
+            </ul>
+          )}
+          {notifications.length > 0 && onClearNotifications ? (
+            <Button onPress={onClearNotifications} size="sm" variant="ghost">
+              {t("alerts.inbox.clear")}
+            </Button>
+          ) : null}
+        </Card.Content>
+      </Card>
 
       {!preferences ? (
         <AlertsPageSkeleton />

@@ -89,9 +89,13 @@ if (process.env.USAGEATLAS_SMOKE_TEST === "1") {
 /** The id Squirrel registers the Start Menu shortcut and toasts under. */
 const APP_USER_MODEL_ID = "com.squirrel.UsageAtlas.UsageAtlas";
 
-if (process.platform === "win32") {
-  app.setAppUserModelId(app.isPackaged ? APP_USER_MODEL_ID : "com.usageatlas.desktop.dev");
-}
+/**
+ * The id Windows uses to group windows, shortcuts and toasts. A development run
+ * registers its own shortcut, so it gets UsageAtlas artwork instead of Electron's.
+ */
+const APP_DEV_USER_MODEL_ID = "com.usageatlas.desktop.dev";
+const appUserModelId = app.isPackaged ? APP_USER_MODEL_ID : APP_DEV_USER_MODEL_ID;
+if (process.platform === "win32") app.setAppUserModelId(appUserModelId);
 
 let mainWindow: BrowserWindow | null = null;
 let tray: Tray | null = null;
@@ -163,18 +167,32 @@ function startMenuShortcutPath(): string {
   return path.join(app.getPath("appData"), "Microsoft", "Windows", "Start Menu", "Programs", "UsageAtlas.lnk");
 }
 
+function devShortcutPath(): string {
+  return path.join(app.getPath("appData"), "Microsoft", "Windows", "Start Menu", "Programs", "UsageAtlas Dev.lnk");
+}
+
+/**
+ * Windows takes the taskbar button and toast identity from a Start Menu shortcut
+ * matching the process's AppUserModelID. An installed build already has one; a
+ * development run creates its own, otherwise Explorer falls back to electron.exe
+ * and every icon in the shell stays the stock atom. The shortcut is rewritten on
+ * every launch, so a mark chosen in Settings is already right when the window
+ * appears, and a restart is never needed for the shell to catch up.
+ */
 function applyShortcutMark(mark: AppMark): void {
-  if (process.platform !== "win32" || !app.isPackaged) return;
-  const shortcut = startMenuShortcutPath();
-  if (!existsSync(shortcut)) return;
+  if (process.platform !== "win32" || process.env.USAGEATLAS_SMOKE_TEST === "1") return;
+  const shortcut = app.isPackaged ? startMenuShortcutPath() : devShortcutPath();
   const stub = path.resolve(process.execPath, "..", "..", "UsageAtlas.exe");
+  const target = app.isPackaged && existsSync(stub) ? stub : process.execPath;
   try {
-    shell.writeShortcutLink(shortcut, "update", {
-      target: existsSync(stub) ? stub : process.execPath,
+    shell.writeShortcutLink(shortcut, existsSync(shortcut) ? "update" : "create", {
+      target,
       cwd: path.dirname(process.execPath),
+      // A development shortcut must relaunch the same app, not an empty Electron.
+      args: app.isPackaged ? undefined : app.getAppPath(),
       icon: appMarkPath(mark, "ico"),
       iconIndex: 0,
-      appUserModelId: APP_USER_MODEL_ID,
+      appUserModelId: app.isPackaged ? APP_USER_MODEL_ID : APP_DEV_USER_MODEL_ID,
       description: "UsageAtlas"
     });
   } catch {
@@ -199,7 +217,7 @@ function applyAppMark(mark: AppMark): void {
         // The taskbar button of an AppUserModelID app follows these details, not
         // only setIcon; this is what makes the picker visible in the taskbar.
         mainWindow.setAppDetails({
-          appId: APP_USER_MODEL_ID,
+          appId: appUserModelId,
           appIconPath: appMarkPath(mark, "ico"),
           appIconIndex: 0,
           relaunchCommand: `"${existsSync(stub) ? stub : process.execPath}"`,
@@ -334,6 +352,9 @@ function showUsageNotification(alert: TriggeredUsageAlert): void {
 function showNotification(content: { title: string; body: string }, route: AppRoute): void {
   const notification = new Notification({
     ...content,
+    // Windows shows the registered app name above the title; the title itself
+    // carries the brand too, so a toast is identifiable even without a shortcut.
+    title: `UsageAtlas · ${content.title}`,
     icon: loadAppMark(preferences.get().appearance.mark)
   });
   const release = (): void => {

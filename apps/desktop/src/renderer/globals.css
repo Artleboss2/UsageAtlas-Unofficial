@@ -3986,3 +3986,52 @@ html[data-appearance-motion="off"] .atlas-ink-swatch:hover {
   height: 14px;
   color: var(--accent);
 }
+
+/* The in-app inbox: the same alerts the toast carries, kept until cleared. */
+.atlas-alert-inbox {
+  margin-block: 22px;
+}
+
+.atlas-alert-inbox__empty {
+  color: var(--muted);
+  font-size: 0.875rem;
+}
+
+.atlas-alert-inbox__list {
+  display: grid;
+  gap: 8px;
+  margin: 0 0 12px;
+  padding: 0;
+  list-style: none;
+}
+
+.atlas-alert-inbox__item {
+  padding: 10px 12px;
+  border: 1px solid var(--separator);
+  border-radius: 12px;
+  background: color-mix(in oklch, var(--surface) 55%, transparent);
+}
+
+.atlas-alert-inbox__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.atlas-alert-inbox__head strong {
+  font-size: 0.875rem;
+}
+
+.atlas-alert-inbox__head time {
+  color: var(--muted);
+  font-size: 0.75rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.atlas-alert-inbox__item p {
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: 0.8125rem;
+}

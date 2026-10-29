@@ -283,6 +283,12 @@ export interface DesktopUsageAlert {
   route: AppRoute;
 }
 
+/** One received alert, kept in the in-app notification list. */
+export interface DesktopAlertInboxEntry extends DesktopUsageAlert {
+  /** ISO timestamp of the moment the window received it. */
+  receivedAt: string;
+}
+
 export interface UsageAtlasDesktopAPI {
   /** Renderer-side platform check: macOS keeps its own traffic lights. */
   readonly platform: string;

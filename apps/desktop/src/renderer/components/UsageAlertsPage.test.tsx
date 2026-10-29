@@ -20,6 +20,28 @@ describe("UsageAlertsPage", () => {
     expect(html).toContain('aria-label="Claude 5-hour usage alert"');
   });
 
+  it("lists received alerts in the tab, not only as a popup", () => {
+    const html = renderToStaticMarkup(
+      <UsageAlertsPage
+        notifications={[{
+          title: "Claude capacity alert",
+          body: "Weekly has 20% remaining.",
+          route: "limits",
+          receivedAt: "2026-10-29T03:00:00.000Z"
+        }]}
+        onClearNotifications={vi.fn()}
+        preferences={preferences}
+        providers={[provider]}
+        saving={false}
+        onUpdate={vi.fn()}
+      />,
+    );
+
+    expect(html).toContain("Claude capacity alert");
+    expect(html).toContain("Weekly has 20% remaining.");
+    expect(html).toContain("Clear notifications");
+  });
+
   it("previews the daily token notification in the exact wording it sends", () => {
     const html = renderToStaticMarkup(
       <UsageAlertsPage
