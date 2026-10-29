@@ -3,6 +3,30 @@
 All notable UsageAtlas desktop changes are recorded here. This is an unofficial fork; see
 [README.md](README.md) for what it adds and what it is not.
 
+## 0.3.9 — 2026-10-28
+
+### Fixed
+
+- **The cloud counter no longer includes usage the server refuses.** Cline and Roo observations have
+  no reader on the hosted service and no attribution rule, so they stayed pending forever and made
+  `Save to cloud` look broken. The page counts only what a save can send, names the held-back sources
+  with their own total, and reads *Everything the server accepts is saved to cloud* when nothing is
+  left. The hourly timer ignores held-back rows instead of waking for them.
+- **One copy of the app runs at a time.** Squirrel leaves the previous build running after an update,
+  so several versions shared this profile, competed for `history.sqlite`, and the taskbar group kept
+  the first build's icon. A single-instance lock focuses the open window instead of starting another.
+- **Windows draws the app's ICO, not the Electron atom.** The window is created with the chosen
+  mark's ICO; a stale second instance can no longer keep the default artwork in front.
+
+### Changed
+
+- **The local archive is bounded.** `usage_record_history` was write-only and had grown to 4.2 MB of
+  an 8 MB database after two days. It keeps the newest 20 versions per record on write and on open,
+  then vacuums the freed pages: 7.91 MiB → 3.99 MiB measured on a copy of a real profile.
+- **README documents the 0.4.0 storage budget.** One document per provider and day, merged
+  additively, with a fake-data measurement (30.1 MB of observations → 0.29 MB of day documents,
+  1.0 % of today's payload) and the provider list the discovery work targets.
+
 ## 0.3.8 — 2026-10-28
 
 ### Fixed
