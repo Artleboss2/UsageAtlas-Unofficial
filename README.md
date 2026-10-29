@@ -69,15 +69,112 @@
 
 ## Timeline
 
-![Timeline: every 0.3 release from the Freebuff reader to the 0.3.8 cloud-save and notification fixes, followed by the seven 0.4.0 goals](docs/timeline.svg)
+![Timeline: every 0.3 release from the Freebuff reader to the 0.3.9 cloud-counter and local-archive fixes, followed by the seven 0.4.0 goals](docs/timeline.svg)
 
 Each shipped card is detailed in [CHANGELOG.md](CHANGELOG.md); the 0.4.0 cards below carry the
 acceptance test each one has to meet before it counts as done.
 
+## Storage budget: a third of today, by design
+
+Today the app uploads one JSON observation per request, plus a `collection` observation for every
+scan of every source and a `capacity` observation for every quota check. On this profile that is
+2,670 rows and 2.4 MB of payload for only 253 real requests, before the indexes that point at them.
+The plan for 0.4.0 is to **store one document per provider and day** and make it merge additively,
+so repeated scans and repeated saves add into the same document instead of appending rows.
+
+**Target**: a save and a local database no larger than **one third** of today's bytes for the same
+usage, with identical totals on the dashboard. Measured on synthetic data below, the aggregation
+lands far under that.
+
+### The day document
+
+Key: `(account, providerId, localDay)`. Fields appear only when they carry something, so a quiet
+day is a few hundred bytes instead of a schema-shaped padding. Example (fake data):
+
+```json
+{
+  "v": 2, "p": "freebuff", "d": "2026-09-01", "tz": "Etc/GMT+8",
+  "tot": { "in": 327400, "cacheRead": 4206900, "cacheWrite": 0, "out": 108800, "req": 200, "cost": 219900 },
+  "models": {
+    "deepseek-v4-flash": { "in": 109821, "cacheRead": 1404923, "out": 36361, "req": 67 },
+    "claude-fable-5":    { "in": 109600, "cacheRead": 1413700, "out": 36500, "req": 67 }
+  },
+  "hours": {
+    "09": { "in": 12807, "cacheRead": 165141, "out": 5787, "req": 9 },
+    "10": { "in": 13900, "cacheRead": 155700, "out": 4800, "req": 8 }
+  },
+  "cover": { "from": "2026-09-01T00:00:00Z", "to": "2026-09-01T23:59:00Z", "files": 42, "records": 200, "status": "available" },
+  "quota": { "plan": "pro", "credits": 12.5, "windows": [{ "kind": "5h", "used": 42, "resetAt": "2026-09-01T23:00:00Z" }] }
+}
+```
+
+**How two copies merge.** The rule is what makes the document safe to resend and to grow in place:
+
+| Section | Merge rule |
+| --- | --- |
+| `tot`, `models.*`, `hours.*` | Field-wise addition; the same request counted once |
+| `cover` | Earliest `from`, latest `to`, maximum `files`/`records`, strongest `status` |
+| `quota` | The observation with the latest `resetAt`/check wins; it is a snapshot, not a sum |
+| `ext` | Optional provider-specific counters, added the same way; unknown keys never force a schema bump |
+
+**Idempotence.** Every upload carries the document's previous `rev` and a `batchId`. The server keeps
+the last 32 batch ids per document, ignores a replay, and answers a stale `rev` with its stored copy —
+the same conflict contract the app already handles. A retried save therefore adds nothing twice,
+without per-request ids.
+
+**What is no longer uploaded.** Per-request timestamps, session and project ids, and reported model
+names. The dashboard only reads day, hour, model and provider totals, so those stay in a seven-day
+local raw buffer for diagnostics and for provider discovery, then roll up into the day document.
+
+### Measured on fake data
+
+5 providers × 30 days × 200 requests, 3 models and 12 hourly buckets per day, plus 6 collection and
+1 capacity observation per provider-day (what the app writes today):
+
+| Encoding | Rows | Payload | Avg row |
+| --- | ---: | ---: | ---: |
+| Today: one observation per request/scan/check | 31,050 | 30.1 MB | 969 B |
+| One day document per provider | 150 | 0.29 MB | 1,957 B |
+
+That is **1.0 % of today's payload** and **207× fewer rows**, so the indexes that mirror every row
+shrink by the same factor. On this profile — 2,670 observations in a 7.9 MiB database — the same
+roll-up is roughly 15 documents near 2 KB, and with the archive already bounded to 20 versions per
+record the file lands around **0.5 MiB**, about one sixteenth of today.
+
+### Acceptance for 0.4.0
+
+- 1,000 requests saved in the compact format occupy **at most one third** of the bytes the current
+  ledger uses, with identical totals, hourly buckets and per-model splits after a restore.
+- Replaying a batch does not change any total; a stale `rev` returns the stored document instead of
+  overwriting it.
+- A migration from the current ledger runs once per account, keeps a rollback copy for seven days,
+  and loses no token.
+
+## Providers on the way
+
+The 0.4.0 discovery catalog targets the tools people already run, each with the place its token
+counts are expected to live. `Supported` means a reader ships today; `planned` means a catalog entry
+and a schema probe, not a hand-written parser per tool.
+
+| Provider | Expected local store | State |
+| --- | --- | --- |
+| Cline | VS Code `globalStorage/saoudrizwan.claude-dev/tasks/*/ui_messages.json` | planned |
+| Roo Code | `globalStorage/rooveterinaryinc.roo-cline/tasks/*/ui_messages.json` | planned |
+| Continue | `~/.continue/sessions/*.json` | planned |
+| Aider | `~/.aider/analytics.jsonl` | planned |
+| Gemini CLI | `~/.gemini/tmp/<project>/chats/*.json` | planned |
+| Qwen Code | `~/.qwen/tmp/<project>/chats/*.json` | planned |
+| Kilo Code | `globalStorage/kilocode.kilo-code/tasks/*/ui_messages.json` | supported |
+| Amp, Warp, Kimi, Copilot, Factory, Qoder, z.ai | CLI or app state under the user profile | supported |
+
+A planned provider is only marked supported once an offline probe finds a store whose schema really
+contains token counts — the same rule the 0.4.0 discovery goal tests.
+
 ## What 0.4.0 aims for
 
 Concrete, checkable goals for the next minor release. Each one is done only when its acceptance
-criterion is met in a build this fork publishes.
+criterion is met in a build this fork publishes. **0.3.9 is the last release before 0.4.0**: code
+lands on `main` as it is written, but no 0.4.0 build ships until every box below is checked.
 
 - [ ] **Find usage stores for providers nobody mapped yet.** Ship a catalog of at least 250 AI
   providers (name, CLI or app, expected config roots) and, for a provider with no reader, generate
@@ -85,10 +182,11 @@ criterion is met in a build this fork publishes.
   token counts with a confidence score. Acceptance: an unknown provider added by name is either
   located with a passing schema probe or reported as "no local store found" in under two seconds,
   without network access, and the result survives a move of the config directory.
-- [ ] **Compact cloud saves.** Adopt the storage sample the upstream author shares, encode repeated
-  model and provider names once per save, and migrate existing saves without losing a request.
-  Acceptance: a save that currently uploads 1 MB uploads at most 500 KB with identical restored
-  totals, and the migration runs once per account with a rollback path.
+- [ ] **Compact cloud saves.** Adopt the day document described under *Storage budget*: one JSON
+  per provider and day, merged additively, with the current ledger migrated and readable. Acceptance:
+  a save that currently uploads 1 MB uploads at most 333 KB with identical restored totals, the
+  document matches the merge table above, and the migration runs once per account with a rollback
+  path.
 - [ ] **Appearance that goes further.** A free accent colour picker, per-section density
   (comfortable / compact), adjustable background dimming, and theme import/export as a small JSON
   file. Acceptance: a theme exported on one computer reproduces the same font, scale, ink, accent,

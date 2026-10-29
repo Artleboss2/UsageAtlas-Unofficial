@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1200" height="1100" viewBox="0 0 1200 1100" role="img" aria-labelledby="title desc">
   <title id="title">UsageAtlas unofficial fork — shipped releases and the 0.4.0 plan</title>
-  <desc id="desc">Timeline of every 0.3 release, from the Freebuff reader in 0.3.0 to the cloud-save and notification fixes in 0.3.8, followed by the seven checkable goals of 0.4.0.</desc>
+  <desc id="desc">Timeline of every 0.3 release, from the Freebuff reader in 0.3.0 to the cloud-counter and local-archive fixes in 0.3.9, followed by the seven checkable goals of 0.4.0.</desc>
   <defs>
     <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
       <stop offset="0" stop-color="#17171a"/>
@@ -34,7 +34,7 @@
     <g font-size="13" fill="#a1a1a6">
       <rect x="64" y="40" width="150" height="26" rx="13" fill="#ffffff" fill-opacity="0.06" stroke="#ffffff" stroke-opacity="0.10"/>
       <text x="139" y="57" text-anchor="middle" font-size="11" font-weight="600" fill="#f5f5f7" letter-spacing="0.4">UNOFFICIAL FORK</text>
-      <text x="1136" y="58" text-anchor="end" font-size="12" letter-spacing="0.2">shipped through 0.3.8 · 28 Oct 2026</text>
+      <text x="1136" y="58" text-anchor="end" font-size="12" letter-spacing="0.2">shipped through 0.3.9 · 28 Oct 2026</text>
     </g>
     <text x="64" y="122" font-size="40" font-weight="700" fill="#f5f5f7" letter-spacing="-1.2">UsageAtlas</text>
     <text x="64" y="152" font-size="15" fill="#a1a1a6">What this fork already changed, and what 0.4.0 has to prove.</text>
@@ -122,8 +122,8 @@
     <text x="954" y="446" font-size="10.5" fill="#30d158">27 Oct 2026</text>
 
     <!-- Shipped row 2 -->
-    <text x="64" y="514" font-size="12" font-weight="600" fill="#30d158" letter-spacing="1.6">SHIPPED · 0.3.5 → 0.3.8</text>
-    <rect x="64" y="592" width="768" height="2" rx="1" fill="url(#spine)"/>
+    <text x="64" y="514" font-size="12" font-weight="600" fill="#30d158" letter-spacing="1.6">SHIPPED · 0.3.5 → 0.3.9</text>
+    <rect x="64" y="592" width="986" height="2" rx="1" fill="url(#spine)"/>
 
     <!-- 0.3.5 -->
     <circle cx="64" cy="593" r="7" fill="#101012" stroke="#30d158" stroke-width="2.5"/>
@@ -172,7 +172,6 @@
     <text x="718" y="572" font-size="12" font-weight="650" fill="#f5f5f7">0.3.8</text>
     <g filter="url(#shadow)">
       <rect x="718" y="620" width="196" height="154" rx="16" fill="#ffffff" fill-opacity="0.045" stroke="#ffffff" stroke-opacity="0.10"/>
-      <rect x="718" y="620" width="196" height="154" rx="16" fill="none" stroke="#30d158" stroke-opacity="0.55"/>
     </g>
     <text x="736" y="650" font-size="14" font-weight="650" fill="#f5f5f7">All of it, in one save</text>
     <g font-size="11.5" fill="#a1a1a6">
@@ -180,7 +179,22 @@
       <text x="736" y="692">Taskbar and shortcut icons</text>
       <text x="736" y="710">In-app alert banner</text>
     </g>
-    <text x="736" y="752" font-size="10.5" fill="#30d158">this release</text>
+    <text x="736" y="752" font-size="10.5" fill="#30d158">28 Oct 2026</text>
+
+    <!-- 0.3.9 -->
+    <circle cx="936" cy="593" r="7" fill="#101012" stroke="#30d158" stroke-width="2.5"/>
+    <text x="936" y="572" font-size="12" font-weight="650" fill="#f5f5f7">0.3.9</text>
+    <g filter="url(#shadow)">
+      <rect x="936" y="620" width="196" height="154" rx="16" fill="#ffffff" fill-opacity="0.045" stroke="#ffffff" stroke-opacity="0.10"/>
+      <rect x="936" y="620" width="196" height="154" rx="16" fill="none" stroke="#30d158" stroke-opacity="0.55"/>
+    </g>
+    <text x="954" y="650" font-size="14" font-weight="650" fill="#f5f5f7">Storage diet</text>
+    <g font-size="11.5" fill="#a1a1a6">
+      <text x="954" y="674">Counter counts real saves</text>
+      <text x="954" y="692">Archive bounded to 20</text>
+      <text x="954" y="710">One instance, ICO taskbar</text>
+    </g>
+    <text x="954" y="752" font-size="10.5" fill="#30d158">this release</text>
 
     <!-- Next -->
     <rect x="64" y="812" width="1072" height="1" fill="#ffffff" fill-opacity="0.10"/>
@@ -221,7 +235,7 @@
     <g font-size="10.5" fill="#a1a1a6">
       <text x="82" y="946">250 providers, offline probe,</text>
       <text x="82" y="961">confidence score under 2 s.</text>
-      <text x="354" y="946">Half the bytes, lossless</text>
+      <text x="354" y="946">A third of the bytes, lossless</text>
       <text x="354" y="961">migration, one run per account.</text>
       <text x="626" y="946">Free accent, density, dimming,</text>
       <text x="626" y="961">theme import and export.</text>
