@@ -11,6 +11,11 @@ const { MakerZIP } = require("@electron-forge/maker-zip");
 const { MakerAppImage } = require("@reforged/maker-appimage");
 
 const resources = path.join(__dirname, "resources");
+// Electron ships a `locales` pak for every language it knows (47 MB in 0.4.0).
+// The interface is translated into five, so the rest is dead weight in every
+// installer and portable archive. `en-US` must survive: Chromium loads it as the
+// fallback whenever a requested catalog is missing.
+const KEPT_ELECTRON_LOCALES = new Set(["en-US", "fr", "es", "zh-CN", "hi"]);
 // Every file in `icons` ships twice: `extraResource` copies the directory into
 // the packaged app and the renderer serves it as its Vite `publicDir`. Only the
 // PNG and the ICO are read at runtime, so build-only artwork lives in
@@ -59,6 +64,15 @@ class CurrentFusesPlugin extends PluginBase {
           resetAdHocDarwinSignature: applePlatform && arch === "arm64" && !osxSign,
           ...this.config
         });
+        const locales = path.join(basePath, "locales");
+        try {
+          for (const file of fs.readdirSync(locales)) {
+            if (file.endsWith(".pak") && !KEPT_ELECTRON_LOCALES.has(file.slice(0, -4)))
+              fs.rmSync(path.join(locales, file));
+          }
+        } catch {
+          // A platform layout without a locales folder keeps all of them.
+        }
       }
     };
   }

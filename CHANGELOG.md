@@ -3,7 +3,7 @@
 All notable UsageAtlas desktop changes are recorded here. This build starts from the open-source
 UsageAtlas app; see [README.md](README.md) for what it adds and what it is not.
 
-## Unreleased
+## 0.4.1 — 2026-10-29
 
 ### Added
 
