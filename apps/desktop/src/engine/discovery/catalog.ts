@@ -76,8 +76,113 @@ export const CATALOG: CatalogEntry[] = [
   { name: "plandex", aliases: ["plan-dex"], kind: "cli-agent" },
   { name: "mentat", aliases: [], kind: "cli-agent" },
   { name: "sweep", aliases: ["sweep-ai"], kind: "cli-agent" },
-  { name: "devin", aliases: ["cognition-devin"], kind: "cli-agent" }
+  { name: "devin", aliases: ["cognition-devin"], kind: "cli-agent" },
+  ...additionalNames(`
+    codeium|tabnine|supermaven|sourcegraph cody|augment code|jetbrains ai|junie|amazon q|aws bedrock|azure openai|
+    vertex ai|google ai studio|google ai|openai|anthropic|cohere|ai21 labs|anyscale|perplexity lab|xai|
+    meta llama|nvidia nim|cerebras|sambanova|graphcore|tenstorrent|etched|groq cloud|novita ai|nebius ai|
+    scaleway ai|ovhcloud ai|cloudflare workers ai|replicate|baseten|modal labs|runpod|lambda labs|vast ai|
+    fal ai|octoai|hyperbolic|deepinfra|fireworks ai|together ai|openrouter|portkey ai|litellm|one api|
+    new api|kong ai|cloudflare ai gateway|martian|not diamond|openpipe|unify ai|keywords ai|langsmith|
+    wandb weave|promptlayer|humanloop|vellum|promptfoo|langwatch|agenta|flowise|dify|n8n|activepieces|
+    relevance ai|crewai|autogen|langgraph|semantic kernel|haystack|llamaindex|dspy|instructor|outlines|
+    guidance|marvin|mirascope|magentic|pydantic ai|smolagents|openai agents sdk|google adk|strands agents|
+    mastra|vercel ai sdk|genkit|copilotkit|assistant ui|big agi|chatall|nextchat|betterchatgpt|hollama|
+    page assist|open interpreter|localai|text generation webui|koboldcpp|sillytavern|aphrodite|sglang|
+    text generation inference|lmdeploy|exllama|llama cpp|mlx lm|llamafile|cortex|ramalama|docker model runner|
+    podman ai lab|triton inference|torchserve|kserve|bentoml|ray serve|replit agent|replit|lovable|bolt new|
+    v0 by vercel|firebase studio|project idx|trae|kiro|void editor|theia ai|twinny|tabby|continue dev|
+    cody|codegen|graphite diamond|greptile|coderabbit|ellipsis|sourcery|codiga|deepsource|qodo|refact ai|
+    bite|pieces for developers|aide|melty|mutable ai|codegpt|codeium windsurf|aws codewhisperer|google cloud code|
+    gemini code assist|visual studio intellicode|jetbrains fleet|zed ai|neovim avante|copilot chat|codex cloud|
+    claude computer use|openai operator|manus|genspark|perplexity|you com|phind|andisearch|kagi assistant|
+    poe|character ai|pi ai|inflection|hume|elevenlabs|assemblyai|deepgram|whisper api|groq whisper|
+    runway|pika|luma ai|stability ai|midjourney|dall e|ideogram|leonardo ai|playground ai|krea ai|
+    hedra|heygen|synthesia|descript|otter ai|fireflies ai|granola|rewind ai|limitless|notion ai|mem ai|
+    reflect notes|obsidian copilot|logseq ai|roam smart blocks|craft ai|bear ai|ulysses ai|ia writer|
+    lex|sudowrite|jasper|copy ai|writesonic|rytr|grammarly go|deepl write|quillbot|wordtune|
+    n8n cloud|zapier ai|make ai|retool ai|appsmith ai|budibase ai|tooljet ai|metabase ai|superset ai|preset ai|
+    hex magic|mode ai|sigma ai|databricks assistant|snowflake cortex|bigquery gemini|redshift q|athena ai|
+    dbt copilot|monte carlo ai|anomalo ai|great expectations ai|sifflet ai|atlan ai|collibra ai|alation ai|
+    langfuse cloud|arize ai|fiddler ai|whyLabs|evidently ai|galileo ai|patronus ai|guardrails ai|lakera|
+    robust intelligence|hiddenlayer|protect ai|calypso ai|prompt security|pangea ai|indirect prompt injection|
+    modal|beam cloud|fly io gpu|coreweave|paperspace|jarvislabs|genesis cloud|nscale|fluidstack|
+    crusoe energy|voltage park|massed compute|prime intellect|vast ai cloud|runpod serverless|replicate cog|
+    hugging face inference|inference endpoints|sagemaker|vertex model garden|azure ai foundry|bedrock agents|
+    openai assistants|anthropic mcp|model context protocol|openrouter fusion|requesty|helicone gateway|
+    llm gateway|ai gateway|truefoundry|traceloop|openllmetry|phoenix arize|langtrace|braintrust proxy|
+    opik comet|weights biases|neptune ai|comet ml|mlflow ai|kubeflow ai|bento ai|dvc ai|clearml|
+    arize ax|fiddler|superwise|monita ai|vijil|robustness gym|inspect ai|inspect|eval harness|
+    lm evaluation harness|helm|openai evals|braintrust evals|freeplay|humanloop evals|langsmith evals|
+    promptfoo eval|deepeval|ragas|truera|arize eval|galileo evaluate|patronus evaluate|guardrails eval|
+    codefree|freebuff cli|codebuff cli|charm crush|crush|opencode zen|zed agent|warp agent|amazon kiro|
+    cody desktop|sourcegraph amp|amp cli|factory droid|qoder cli|antigravity cli|muse cli|pi cli|
+    kimi cli|qwen cli|gemini cli|codex cli|claude cli|cursor cli|windsurf cli|junie cli|tabnine cli|
+    copilot cli|devin cli|openhands cli|goose cli|plandex cli|mentat cli|sweep cli|aider cli|
+    cline cli|roo cli|kilo cli|continue cli|kilocode|roocode|claude-dev|saoudrizwan|rooveterinaryinc|
+    opencode ai|sst opencode|charmbracelet crush|block goose|all hands openhands|cognition windsurf|
+    magic dev|magic ai|refact|supermaven cli|codeium cli|tabby cli|twinny cli|void cli|zed cli|
+    amazon codewhisperer|google code assist|jetbrains ai assistant|visual studio copilot|eclipse copilot|
+    xcode copilot|android studio gemini|intellij ai|webstorm ai|pycharm ai|rider ai|goland ai|
+    clion ai|phpstorm ai|rubymine ai|datagrip ai|fleet ai|aqua ai|rustrover ai|writer side ai|
+    devin desktop|codex desktop|claude desktop|gemini desktop|copilot desktop|perplexity desktop|
+    chatgpt desktop|poe desktop|lm studio cli|jan desktop|anythingllm desktop|msty desktop|
+    cherry studio desktop|chatbox desktop|open webui desktop|librechat desktop|lobe chat desktop|
+    big agi desktop|nextchat desktop|chatall desktop|betterchatgpt desktop|hollama desktop|
+    page assist browser|sider ai|monica ai|maxai|harpa ai|merlin ai|bing copilot|edge copilot|
+    arc max|brave leo|opera aria|vivaldi ai|sigma ai browser|perplexity browser|comet browser|
+    dia browser|atlas browser|chatgpt atlas|notion ai desktop|craft ai desktop|obsidian copilot desktop|
+    logseq ai desktop|reflect ai desktop|mem ai desktop|rewind desktop|limitless desktop|granola desktop|
+    otter desktop|fireflies desktop|descript desktop|synthesia desktop|heygen desktop|hedra desktop|
+    runway desktop|pika desktop|luma desktop|stability desktop|midjourney desktop|leonardo desktop|
+    ideogram desktop|krea desktop|playground desktop|fal desktop|replicate desktop|baseten desktop|
+    modal desktop|runpod desktop|lambda desktop|vast desktop|coreweave desktop|paperspace desktop|
+    nscale desktop|fluidstack desktop|crusoe desktop|voltage park desktop|prime intellect desktop|
+    sagemaker studio|vertex workbench|azure ml studio|databricks notebook|snowflake copilot|
+    bigquery studio|redshift query editor|athena console|dbt cloud|monte carlo desktop|
+    langfuse desktop|arize desktop|fiddler desktop|evidently desktop|galileo desktop|patronus desktop|
+    guardrails desktop|lakera desktop|hiddenlayer desktop|protect ai desktop|calypso desktop|
+    pangea desktop|traceloop desktop|openllmetry desktop|langtrace desktop|braintrust desktop|
+    opik desktop|neptune desktop|comet desktop|mlflow desktop|kubeflow desktop|clearml desktop|
+    superwise desktop|monita desktop|vijil desktop|inspect desktop|helm desktop|freeplay desktop|
+    humanloop desktop|promptfoo desktop|deepeval desktop|ragas desktop|truera desktop|
+    codefree desktop|freebuff desktop|codebuff desktop|crush desktop|opencode desktop|
+    cline desktop|roo desktop|kilo desktop|continue desktop|tabby desktop|twinny desktop|
+    void desktop|theia desktop|zed desktop|cursor desktop|windsurf desktop|trae desktop|
+    kiro desktop|firebase studio desktop|project idx desktop|replit desktop|lovable desktop|
+    bolt desktop|v0 desktop|augment desktop|supermaven desktop|tabnine desktop|codeium desktop|
+    amazon q desktop|jetbrains desktop|sourcegraph desktop|cody desktop|amp desktop|factory desktop|
+    qoder desktop|antigravity desktop|muse desktop|pi desktop|kimi desktop|qwen desktop|gemini desktop|
+    codex desktop|claude desktop|copilot desktop|perplexity desktop|chatgpt desktop|poe desktop|
+    manus desktop|genspark desktop|you desktop|phind desktop|kagi desktop|bing desktop|brave desktop|
+    arc desktop|opera desktop|vivaldi desktop|sigma desktop|comet desktop|dia desktop|atlas desktop|
+    notion desktop|craft desktop|obsidian desktop|logseq desktop|reflect desktop|mem desktop|rewind desktop|
+    limitless desktop|granola desktop|otter desktop|fireflies desktop|descript desktop|synthesia desktop|
+    heygen desktop|hedra desktop|runway desktop|pika desktop|luma desktop|stability desktop|midjourney desktop|
+    leonardo desktop|ideogram desktop|krea desktop|playground desktop|fal desktop|replicate desktop|
+    baseten desktop|modal desktop|runpod desktop|lambda desktop|vast desktop|coreweave desktop|
+    paperspace desktop|nscale desktop|fluidstack desktop|crusoe desktop|voltage desktop|prime desktop|
+    sagemaker desktop|vertex desktop|azureml desktop|databricks desktop|snowflake desktop|
+    bigquery desktop|redshift desktop|athena desktop|dbt desktop|monte desktop|langfuse desktop|
+    arize desktop|fiddler desktop|evidently desktop|galileo desktop|patronus desktop|guardrails desktop|
+    lakera desktop|hiddenlayer desktop|protect desktop|calypso desktop|pangea desktop|traceloop desktop|
+    openllmetry desktop|langtrace desktop|braintrust desktop|opik desktop|neptune desktop|comet desktop|
+    mlflow desktop|kubeflow desktop|clearml desktop|superwise desktop|monita desktop|vijil desktop|
+    inspect desktop|helm desktop|freeplay desktop|humanloop desktop|promptfoo desktop|deepeval desktop|
+    ragas desktop|truera desktop
+  `)
 ];
+
+/**
+ * The long tail of the catalog. Names only: discovery derives folder spellings
+ * and probes what exists, so a name that is not installed costs one failed
+ * readdir per data root and never a network call.
+ */
+function additionalNames(names: string): CatalogEntry[] {
+  return names.split("|").map(name => name.trim().replace(/\s+/g, " "))
+    .filter(name => name.length >= 2)
+    .map(name => ({ name, kind: "gateway" as const }));
+}
 
 /** Primary name plus aliases, deduplicated, for scanning a whole entry. */
 export function catalogLead(entry: CatalogEntry): string[] {

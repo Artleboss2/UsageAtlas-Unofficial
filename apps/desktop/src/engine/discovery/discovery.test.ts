@@ -8,6 +8,7 @@ import { candidateFileKind } from "./patterns";
 import { probeFile } from "./probe";
 import { candidateRoots } from "./roots";
 import { discoverProviderUsage } from "./route";
+import { CATALOG } from "./catalog";
 
 const now = new Date("2026-10-26T18:00:00Z");
 
@@ -52,6 +53,26 @@ describe("provider discovery", () => {
     expect(namesRelated("CodeFree Studio", "codefree")).toBe(true);
     expect(namesRelated("ai", "z.ai")).toBe(false); // too short to be evidence
     expect(namesRelated("Code", "codefree")).toBe(false); // a shared prefix is not the same product
+  });
+
+  it("offers a catalog of at least 250 distinct providers", () => {
+    const names = new Set(CATALOG.map(entry => entry.name));
+    expect(names.size).toBeGreaterThanOrEqual(250);
+    for (const entry of CATALOG) expect(nameVariants(entry.name).slug.length).toBeGreaterThan(1);
+  });
+
+  it("reports an unknown provider with no store in under two seconds, offline", async () => {
+    const directory = await home();
+    const started = performance.now();
+    const result = await discoverProviderUsage("zzz-not-installed-9981", now, {
+      homeDirectory: directory,
+      environment: {} as NodeJS.ProcessEnv,
+      cacheDirectory: null,
+      maxEntries: 4_000
+    });
+    expect(result.files).toEqual([]);
+    expect(performance.now() - started).toBeLessThan(2_000);
+    await rm(directory, { recursive: true, force: true });
   });
 
   it("offers a config root per platform data folder", () => {
