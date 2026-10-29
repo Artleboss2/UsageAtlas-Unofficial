@@ -244,7 +244,9 @@ function createWindow(route: AppRoute = "day"): BrowserWindow {
     show: false,
     autoHideMenuBar: true,
     backgroundColor: chrome.backgroundColor,
-    icon: loadAppMark(preferences.get().appearance.mark),
+    // Windows draws the window and taskbar button from an ICO; handing it a PNG
+    // leaves the Electron atom in place on some builds.
+    icon: loadAppMark(preferences.get().appearance.mark, process.platform === "win32" ? "ico" : "png"),
     roundedCorners: true,
     // macOS keeps its traffic lights; every other platform draws its own controls
     // in the renderer's title bar, next to the window buttons the app already had.
@@ -761,7 +763,20 @@ async function registerApplicationProtocol(): Promise<void> {
   });
 }
 
-if (squirrelStartup) {
+/*
+ * One copy of the app per computer. Squirrel leaves the previous version running
+ * after an update, and several builds sharing this profile fight over the history
+ * database and keep the old build's taskbar icon in front of the new one.
+ */
+const hasSingleInstanceLock = squirrelStartup || app.requestSingleInstanceLock();
+app.on("second-instance", () => {
+  if (!mainWindow || mainWindow.isDestroyed()) return;
+  if (mainWindow.isMinimized()) mainWindow.restore();
+  mainWindow.show();
+  mainWindow.focus();
+});
+
+if (squirrelStartup || !hasSingleInstanceLock) {
   app.quit();
 } else void app.whenReady().then(async () => {
   if (process.platform === "darwin") app.dock?.setIcon(loadAppMark("datamosh"));
