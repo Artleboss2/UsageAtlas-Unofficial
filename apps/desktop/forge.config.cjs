@@ -21,6 +21,7 @@ const KEPT_ELECTRON_LOCALES = new Set(["en-US", "fr", "es", "zh-CN", "hi"]);
 // PNG and the ICO are read at runtime, so build-only artwork lives in
 // `installer` alongside the DMG background instead.
 const iconDirectory = path.join(resources, "icons");
+const windowsDirectory = path.join(resources, "windows");
 const installerDirectory = path.join(resources, "installer");
 const macIcon = path.join(installerDirectory, "usageatlas.icns");
 const platformIcon = process.platform === "win32"
@@ -96,7 +97,7 @@ module.exports = {
     appCategoryType: "public.app-category.developer-tools",
     appCopyright: "Copyright UsageAtlas contributors",
     executableName: "UsageAtlas",
-    extraResource: [iconDirectory],
+    extraResource: [iconDirectory, windowsDirectory],
     icon: platformIcon,
     name: "UsageAtlas",
     osxSign,

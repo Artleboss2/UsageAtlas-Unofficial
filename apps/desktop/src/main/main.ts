@@ -3,7 +3,7 @@ import { ProviderCredentialStore, configureProviderCredentials } from "./provide
 import { isQuotaProvider, validateProviderCredential } from "../shared/quota-providers";
 import { validateReportPlans } from "../shared/report-plans";
 import type { DashboardSnapshot } from "@usageatlas/contracts";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { createCipheriv, createDecipheriv, randomBytes } from "node:crypto";
 import {
   app,
@@ -56,7 +56,7 @@ import { PublicLeaderboard } from "./public-leaderboard";
 import { DesktopTelemetry } from "./telemetry";
 import { trayLimitLabels } from "./tray-limits";
 import { configureAutoUpdates, type DesktopUpdater } from "./updates";
-import { resolveUpdateSource } from "./update-feed";
+import { compareVersions, newerInstalledVersion, resolveUpdateSource } from "./update-feed";
 import {
   createTokenAlertNotification,
   createUsageAlertNotification,
@@ -193,6 +193,21 @@ function startMenuShortcutPaths(): string[] {
   ];
 }
 
+/** Start Menu and an existing taskbar pin both carry the artwork Windows shows. */
+function applicationShortcutPaths(): string[] {
+  const shortcuts = startMenuShortcutPaths();
+  const pinned = path.join(app.getPath("appData"), "Microsoft", "Internet Explorer", "Quick Launch", "User Pinned", "TaskBar");
+  try {
+    for (const entry of readdirSync(pinned)) {
+      if (!entry.toLowerCase().endsWith(".lnk") || !/usage\s*atlas/iu.test(entry)) continue;
+      shortcuts.push(path.join(pinned, entry));
+    }
+  } catch {
+    // This account has never pinned the app.
+  }
+  return shortcuts;
+}
+
 function devShortcutPath(): string {
   return path.join(app.getPath("appData"), "Microsoft", "Windows", "Start Menu", "Programs", "UsageAtlas Dev.lnk");
 }
@@ -207,7 +222,7 @@ function devShortcutPath(): string {
  */
 function applyShortcutMark(mark: AppMark): void {
   if (process.platform !== "win32" || process.env.USAGEATLAS_SMOKE_TEST === "1") return;
-  const shortcuts = app.isPackaged ? startMenuShortcutPaths() : [devShortcutPath()];
+  const shortcuts = app.isPackaged ? applicationShortcutPaths() : [devShortcutPath()];
   const stub = path.resolve(process.execPath, "..", "..", "UsageAtlas.exe");
   const target = app.isPackaged && existsSync(stub) ? stub : process.execPath;
   for (const shortcut of shortcuts) {
@@ -512,28 +527,30 @@ function expandWidget(): void {
 /**
  * Squirrel leaves the previous build running. Two windows under one AppUserModelID
  * share one taskbar button, and Explorer can keep showing the old build's artwork.
- * Retiring every other `app-*` build leaves one icon and one history database.
+ * `refresh-install.ps1` stops those processes, deletes their folders and drops the
+ * shell icon cache, so an update always ends on one build with one icon.
  */
 function retirePreviousBuilds(): void {
   if (process.platform !== "win32" || !app.isPackaged || process.env.USAGEATLAS_SMOKE_TEST === "1") return;
-  const current = path.resolve(process.execPath);
-  const script = [
-    "$current = $env:USAGEATLAS_CURRENT_EXE;",
-    "Get-CimInstance Win32_Process -Filter \"Name='UsageAtlas.exe'\" |",
-    "Where-Object { $_.ExecutablePath -and $_.ExecutablePath -ne $current -and $_.ExecutablePath -like '*\\UsageAtlas\\app-*\\UsageAtlas.exe' } |",
-    "ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }"
-  ].join(" ");
+  const script = path.join(process.resourcesPath, "windows", "refresh-install.ps1");
+  if (!existsSync(script)) return;
   try {
-    const child = spawn("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", script], {
-      env: { ...process.env, USAGEATLAS_CURRENT_EXE: current },
+    const child = spawn("powershell.exe", [
+      "-NoProfile",
+      "-NonInteractive",
+      "-ExecutionPolicy", "Bypass",
+      "-File", script,
+      "-InstallRoot", path.resolve(path.dirname(process.execPath), ".."),
+      "-CurrentExe", process.execPath
+    ], {
       windowsHide: true,
       detached: true,
       stdio: "ignore"
     });
     child.unref();
   } catch {
-    // An older build that stays alive is not fatal; the single-instance lock still
-    // keeps a second copy of this build from starting.
+    // An older build that stays alive is not fatal; the single-instance hand-off
+    // still keeps a second copy of this build from taking the window.
   }
 }
 
@@ -1479,8 +1496,30 @@ async function registerApplicationProtocol(): Promise<void> {
  * after an update, and several builds sharing this profile fight over the history
  * database and keep the old build's taskbar icon in front of the new one.
  */
-const hasSingleInstanceLock = squirrelStartup || app.requestSingleInstanceLock();
-app.on("second-instance", () => {
+/**
+ * A newer build that cannot take the lock asks the running copy to step aside.
+ * Without this hand-off, Squirrel's update installs a new `app-*` folder while
+ * the previous version keeps the window, the database and the old taskbar icon.
+ */
+const hasSingleInstanceLock = squirrelStartup || app.requestSingleInstanceLock({
+  takeoverVersion: app.getVersion()
+});
+app.on("second-instance", (_event, _argv, _workingDirectory, additionalData) => {
+  const takeoverVersion = (additionalData as { takeoverVersion?: string } | undefined)?.takeoverVersion;
+  if (takeoverVersion && compareVersions(takeoverVersion, app.getVersion()) > 0) {
+    const newer = newerInstalledVersion(process.execPath, app.getVersion());
+    const build = newer
+      ? path.resolve(path.dirname(process.execPath), "..", `app-${newer}`, "UsageAtlas.exe")
+      : null;
+    if (build && existsSync(build)) {
+      // Relaunch after this process releases the lock, not before: two copies
+      // starting at once would only repeat the same hand-off.
+      isQuitting = true;
+      app.relaunch({ execPath: build, args: [] });
+      app.quit();
+      return;
+    }
+  }
   if (!mainWindow || mainWindow.isDestroyed()) return;
   if (mainWindow.isMinimized()) mainWindow.restore();
   mainWindow.show();
@@ -1490,6 +1529,20 @@ app.on("second-instance", () => {
 if (squirrelStartup || !hasSingleInstanceLock) {
   app.quit();
 } else void app.whenReady().then(async () => {
+  // Launching an older executable directly (a stale desktop shortcut, Explorer's
+  // recent list) still lands on the newest installed build. The stub would do
+  // this by itself; this covers the paths around it.
+  const installedAhead = process.platform === "win32" && app.isPackaged
+    ? newerInstalledVersion(process.execPath, app.getVersion())
+    : null;
+  if (installedAhead) {
+    const build = path.resolve(path.dirname(process.execPath), "..", `app-${installedAhead}`, "UsageAtlas.exe");
+    if (existsSync(build)) {
+      app.relaunch({ execPath: build, args: [] });
+      app.exit(0);
+      return;
+    }
+  }
   if (process.platform === "darwin") app.dock?.setIcon(loadAppMark("datamosh"));
   session.defaultSession.setPermissionRequestHandler((_webContents, _permission, callback) => callback(false));
   session.defaultSession.setPermissionCheckHandler(() => false);
