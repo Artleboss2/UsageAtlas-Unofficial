@@ -385,6 +385,8 @@ export interface UsageCloudState {
    * and that no Attribution rule renames. Capitalized display names.
    */
   heldBack: string[];
+  /** Pending observations `heldBack` covers. `pending` includes them, so subtract. */
+  heldBackCount: number;
   conflicts: { recordId: string; provider: string; day: string | null; localTokens: number | null; cloudTokens: number | null }[];
 }
 /**

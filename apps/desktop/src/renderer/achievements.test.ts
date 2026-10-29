@@ -52,6 +52,7 @@ function cloud(state: CloudStatus["profile"]["state"], automatic = true): CloudS
     automatic,
     busy: false,
     heldBack: [],
+    heldBackCount: 0,
     conflicts: [],
     error: null,
     lastCompleted: null,

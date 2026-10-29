@@ -21,6 +21,13 @@ export interface LocalRecord extends PendingRecord {
   savedVersion: number;
   conflict: CloudRecord | null;
 }
+/**
+ * Archived copies kept per record. The archive is write-only — nothing reads it
+ * back — and every collection pass used to file another copy of each day, which
+ * made it the largest table in the local database (4 MB of 8 MB on a two-day-old
+ * profile). Keeping the newest versions bounds it without losing recent history.
+ */
+const ARCHIVED_VERSIONS_PER_RECORD = 20;
 const SCHEMA = `
 CREATE TABLE IF NOT EXISTS usage_record (
   owner TEXT NOT NULL DEFAULT '',
@@ -55,6 +62,33 @@ export class UsageStore {
     if (!db.all("PRAGMA table_info(usage_record)").some((column) => column.name === "save_error"))
       db.exec("ALTER TABLE usage_record ADD COLUMN save_error TEXT");
     this.repair();
+    this.pruneArchive();
+  }
+  /**
+   * Returns the archive to its bound and hands freed pages back to the file
+   * system, so an existing oversized database shrinks on the next launch
+   * instead of waiting for the next write to reuse a few pages.
+   */
+  private pruneArchive(): void {
+    this.db.run(
+      `DELETE FROM usage_record_history WHERE rowid NOT IN (
+        SELECT rowid FROM (
+          SELECT rowid, ROW_NUMBER() OVER (
+            PARTITION BY owner, id ORDER BY archived_at DESC, rowid DESC
+          ) AS rank FROM usage_record_history
+        ) WHERE rank <= ?
+      )`,
+      [ARCHIVED_VERSIONS_PER_RECORD]
+    );
+    const freed = Number(this.db.get("PRAGMA freelist_count")?.freelist_count ?? 0);
+    if (freed < 64) return;
+    try {
+      // Another connection (the background writer) can hold the file; the
+      // deleted rows stay reusable either way.
+      this.db.exec("VACUUM");
+    } catch {
+      // Reclaiming space is best effort; the archive is already bounded.
+    }
   }
   get owner(): string {
     return this.setting("owner") ?? "";
@@ -293,6 +327,30 @@ export class UsageStore {
       .all("SELECT DISTINCT provider FROM usage_record WHERE owner IN (?, '') AND local_version > saved_version AND conflict IS NULL AND save_error IS NULL ORDER BY provider", [this.owner])
       .map((row) => String(row.provider));
   }
+  /**
+   * Pending rows for the given providers, including the ones a save has to skip
+   * (conflicts and unreadable payloads), so a caller can subtract what the server
+   * will never take from the total it reports.
+   */
+  pendingCount(providers: readonly string[]): number {
+    if (!providers.length) return 0;
+    const scope = providers.map(() => "?").join(", ");
+    const row = this.db.get(
+      `SELECT COUNT(*) AS count FROM usage_record WHERE owner IN (?, '') AND local_version > saved_version AND provider IN (${scope})`,
+      [this.owner, ...providers]
+    );
+    return Number(row?.count ?? 0);
+  }
+  /** Pending rows a save would actually send for the given providers. */
+  uploadableCount(providers: readonly string[]): number {
+    if (!providers.length) return 0;
+    const scope = providers.map(() => "?").join(", ");
+    const row = this.db.get(
+      `SELECT COUNT(*) AS count FROM usage_record WHERE owner IN (?, '') AND local_version > saved_version AND conflict IS NULL AND save_error IS NULL AND provider IN (${scope})`,
+      [this.owner, ...providers]
+    );
+    return Number(row?.count ?? 0);
+  }
   counts(): { pending: number; conflicts: number; invalid: number } {
     const row = this.db.get(
       "SELECT COALESCE(SUM(local_version > saved_version), 0) AS pending, COALESCE(SUM(conflict IS NOT NULL AND save_error IS NULL), 0) AS conflicts, COALESCE(SUM(local_version > saved_version AND save_error IS NOT NULL), 0) AS invalid FROM usage_record WHERE owner IN (?, '')",
@@ -387,6 +445,15 @@ export class UsageStore {
     this.db.run("INSERT OR IGNORE INTO usage_record_history VALUES (?,?,?,?,?,?)", [
       local.owner, local.record.recordId, fingerprint, payload, local.details, new Date().toISOString()
     ]);
+    // Bound the archive as it is written, not only on the next launch: a session
+    // that keeps collecting must not grow this table without limit.
+    this.db.run(
+      `DELETE FROM usage_record_history WHERE owner = ? AND id = ? AND rowid NOT IN (
+        SELECT rowid FROM usage_record_history WHERE owner = ? AND id = ?
+        ORDER BY archived_at DESC, rowid DESC LIMIT ?
+      )`,
+      [local.owner, local.record.recordId, local.owner, local.record.recordId, ARCHIVED_VERSIONS_PER_RECORD]
+    );
   }
   transaction<T>(operation: () => T): T {
     this.db.exec("BEGIN IMMEDIATE");

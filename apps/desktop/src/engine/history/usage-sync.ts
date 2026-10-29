@@ -71,6 +71,7 @@ export class UsageSync {
       progress: this.progress ? { ...this.progress } : null,
       lastCompleted: this.lastCompleted,
       heldBack: [...this.heldBack],
+      heldBackCount: this.heldBackPending(),
       error: this.error ?? (counts.invalid
         ? `${counts.invalid} invalid local usage ${counts.invalid === 1 ? "record was" : "records were"} skipped. Other records can still be saved. Refresh usage to retry.`
         : null),
@@ -143,6 +144,21 @@ export class UsageSync {
   /** Records the local sources with pending usage the server would reject as-is. */
   private reportHeldBack(providers: readonly string[]): void {
     this.heldBack = [...providers];
+  }
+  /**
+   * Usage that no save can upload yet because the server models no such source
+   * and no rule renames it. It is counted apart from `pending` so a source the
+   * user has not mapped never reads as a save that keeps failing.
+   */
+  private heldBackPending(): number {
+    const held = this.unsupportedProviders(this.uploadableProviders());
+    if (!held.length) return 0;
+    return this.store.pendingCount(held) + this.store.statistics.pendingCount(held);
+  }
+  /** Rows a save would send right now, counting the server's own sources only. */
+  private uploadablePending(): number {
+    const providers = this.uploadableProviders();
+    return this.store.uploadableCount(providers) + this.store.statistics.pendingCount(providers);
   }
   /**
    * Renames one pending observation for upload. Its id is the hash of its content,
@@ -354,8 +370,9 @@ export class UsageSync {
   }
   private schedule(): void {
     if (!this.automatic || !this.cloud || this.closed || this.stopping || this.timer || this.running) return;
-    const counts = this.store.counts();
-    if (counts.pending <= counts.conflicts + counts.invalid) return;
+    // A source the server refuses without a rule must not keep an hourly save
+    // running forever: only what a save can actually upload wakes the timer.
+    if (this.uploadablePending() === 0) return;
     this.timer = setTimeout(() => {
       this.timer = null;
       void this.save().catch(() => undefined);

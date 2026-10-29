@@ -503,12 +503,32 @@ describe("usage cloud storage", () => {
     expect(service.status().error).toBeNull();
     expect(service.status().heldBack).toEqual(["freebuff"]);
     expect(local.statistics.pendingCount()).toBe(2);
+    // The unsaved observations are reported apart from the counter, so a source
+    // with no rule never reads as a save that keeps failing.
+    expect(service.status().pending).toBe(2);
+    expect(service.status().heldBackCount).toBe(2);
     // The same rule then lets the held-back observations through.
     service.setReportPlans([{ source: "freebuff", targets: [{ reportAs: "codex", model: "gpt-5.3-codex", weight: 100 }] }]);
     await service.save();
     expect(facts).toEqual(["codex", "codex"]);
     expect(local.statistics.pendingCount()).toBe(0);
     expect(service.status().heldBack).toEqual([]);
+    expect(service.status().heldBackCount).toBe(0);
+    expect(service.status().pending).toBe(0);
+  });
+
+  it("keeps the automatic timer idle while only unmapped sources are pending", async () => {
+    vi.useFakeTimers();
+    const local = store();
+    local.statistics.collect("freebuff", "local", "replica", analytics());
+    const cloud = remoteCloud();
+    const saveFacts = vi.fn(async (facts: { id: string }[]) => facts.map(fact => fact.id));
+    cloud.saveFacts = saveFacts;
+    const service = sync(local);
+    await service.configure("a", cloud);
+    await vi.advanceTimersByTimeAsync(2 * HOUR);
+    expect(saveFacts).not.toHaveBeenCalled();
+    expect(service.status()).toMatchObject({ pending: 2, heldBackCount: 2, busy: false });
   });
 
   it("inserts a record that only exists in the cloud under the provider it was stored as", async () => {

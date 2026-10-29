@@ -171,8 +171,14 @@ export class StatisticsStore {
   acknowledge(ids: string[]): void {
     for (const id of ids) this.db.run("UPDATE usage_fact SET saved = 1 WHERE owner = ? AND id = ?", [this.owner(), id]);
   }
-  pendingCount(): number {
-    return Number(this.db.get("SELECT COUNT(*) AS count FROM usage_fact WHERE owner IN (?, '') AND saved = 0", [this.owner()])?.count ?? 0);
+  pendingCount(providers?: readonly string[]): number {
+    // An explicitly empty scope means nothing is uploadable, not everything.
+    if (providers && !providers.length) return 0;
+    const scope = providers ? ` AND provider IN (${providers.map(() => "?").join(",")})` : "";
+    return Number(this.db.get(
+      `SELECT COUNT(*) AS count FROM usage_fact WHERE owner IN (?, '') AND saved = 0${scope}`,
+      [this.owner(), ...(providers ?? [])]
+    )?.count ?? 0);
   }
   /** Providers of the observations still waiting to be saved, in stable order. */
   pendingProviders(): string[] {
