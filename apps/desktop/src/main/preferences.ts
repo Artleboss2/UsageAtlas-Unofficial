@@ -20,7 +20,6 @@ import {
 } from "../shared/desktop-api";
 import { DEFAULT_LANGUAGE, sanitizeLanguage } from "../shared/languages";
 import { cloneUsageAlertPreferences, sanitizeUsageAlertPreferences } from "../shared/usage-alerts";
-import { planFromLegacyAliases, validateReportPlans } from "../shared/report-plans";
 
 type ProfileState = "missing" | "private" | "public";
 
@@ -46,7 +45,6 @@ function defaultPreferences(): StoredPreferences {
     trayLimits: {},
     usageAlerts: {},
     tokenAlerts: { ...DEFAULT_TOKEN_ALERTS },
-    reportPlans: [],
     anonymousAnalytics: true,
     analyticsInstallationId: randomUUID(),
     backgroundDefaultGeneration: BACKGROUND_DEFAULT_GENERATION,
@@ -81,8 +79,7 @@ export class PreferenceStore {
       limitOrder: [...this.values.limitOrder],
       trayLimits: { ...this.values.trayLimits },
       usageAlerts: cloneUsageAlertPreferences(this.values.usageAlerts),
-      tokenAlerts: { ...this.values.tokenAlerts },
-      reportPlans: this.values.reportPlans.map(plan => ({ source: plan.source, targets: plan.targets.map(target => ({ ...target })) }))
+      tokenAlerts: { ...this.values.tokenAlerts }
     };
   }
 
@@ -132,9 +129,6 @@ export class PreferenceStore {
     if (patch.tokenAlerts && typeof patch.tokenAlerts === "object") {
       next.tokenAlerts = sanitizeTokenAlerts(patch.tokenAlerts);
     }
-    if (Array.isArray(patch.reportPlans)) {
-      next.reportPlans = validateReportPlans(patch.reportPlans);
-    }
     this.values = next;
     this.persist();
     this.applyLoginItemSetting(next.launchAtLogin);
@@ -180,10 +174,6 @@ export class PreferenceStore {
           trayLimits: sanitizeTrayLimits(parsed.trayLimits),
           usageAlerts: sanitizeUsageAlertPreferences(parsed.usageAlerts),
           tokenAlerts: sanitizeTokenAlerts(parsed.tokenAlerts),
-          // Single-target rules from earlier builds become one-target plans.
-          reportPlans: validateReportPlans(parsed.reportPlans ?? []).length
-            ? validateReportPlans(parsed.reportPlans)
-            : planFromLegacyAliases((parsed as { reportAliases?: unknown }).reportAliases),
           backgroundDefaultGeneration: rolled.appliedGeneration,
           lastProfile: isLastProfile(parsed.lastProfile) ? parsed.lastProfile : null
         },

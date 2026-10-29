@@ -38,9 +38,9 @@ under `%APPDATA%`, `~/Library/Application Support` or `~/.config`. `CLINE_GLOBAL
 ## Publishing to the cloud
 
 The hosted service only models the official providers. A source it does not model — Freebuff, z.ai,
-Gemini CLI, Qwen, Cline, Roo and anything added later — is **kept on this computer** unless an
-Attribution rule renames it to an official provider and model. That is deliberate: uploading an
-unknown id fails the whole save, and relabelling without the user asking would be worse.
+Gemini CLI, Qwen, Cline, Roo and anything added later — is **kept on this computer** and named in
+Settings. It is never uploaded under another provider's name: a relabel would make the cloud history
+claim usage that never happened.
 
 ## Sources
 

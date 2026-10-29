@@ -9,7 +9,6 @@ export const en = {
   "nav.alerts": "Usage alerts",
   "nav.profile": "Public profile",
   "nav.diagnostics": "Diagnostics",
-  "nav.attribution": "Attribution",
   "nav.settings": "Settings",
 
   "window.minimize": "Minimize",

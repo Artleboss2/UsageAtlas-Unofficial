@@ -164,8 +164,8 @@ export function CloudSettings(): React.JSX.Element {
                     ? `${status.heldBackCount.toLocaleString()} ${status.heldBackCount === 1 ? "change" : "changes"} from `
                     : ""}
                   {heldBack.join(", ")} {heldBack.length === 1 ? "stays" : "stay"} on this
-                  computer: the server does not accept {heldBack.length === 1 ? "that source" : "those sources"} yet.
-                  Add a rule on the Attribution page to report {heldBack.length === 1 ? "it" : "them"} as an official provider.
+                  computer: the server does not model {heldBack.length === 1 ? "that source" : "those sources"} yet.
+                  It is never uploaded under another provider's name.
                 </p>
               )}
             </div>

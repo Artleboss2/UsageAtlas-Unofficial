@@ -69,7 +69,6 @@ const preferences: DesktopPreferences = {
     animate: true
   },
   tokenAlerts: { enabled: true, thresholdTokens: 100_000 },
-  reportPlans: [],
   language: "system",
   updateChannel: "fork",
     updateRepository: "",

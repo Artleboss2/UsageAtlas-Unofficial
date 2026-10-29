@@ -7,7 +7,6 @@ export const es: Messages = {
   "nav.alerts": "Alertas de uso",
   "nav.profile": "Perfil público",
   "nav.diagnostics": "Diagnóstico",
-  "nav.attribution": "Atribución",
   "nav.settings": "Ajustes",
 
   "window.minimize": "Minimizar",

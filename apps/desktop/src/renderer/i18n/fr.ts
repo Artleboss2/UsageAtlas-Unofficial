@@ -7,7 +7,6 @@ export const fr: Messages = {
   "nav.alerts": "Alertes d'usage",
   "nav.profile": "Profil public",
   "nav.diagnostics": "Diagnostics",
-  "nav.attribution": "Attribution",
   "nav.settings": "Réglages",
 
   "window.minimize": "Réduire",

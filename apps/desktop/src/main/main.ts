@@ -545,14 +545,6 @@ function registerIPC(): void {
     preferences.update({ providerEnabled: { ...current, [providerID]: enabled } });
     return dashboard.setProviderEnabled(providerID, enabled);
   });
-  ipcMain.handle(IPC.setReportPlans, async (event) => {
-    assertTrustedSender(event);
-    // Cloud saves report the provider that actually produced the usage. The old
-    // relabelling rules are cleared so no stored rule survives an upgrade.
-    const next = preferences.update({ reportPlans: [] });
-    await engine.setReportPlans([]);
-    return next;
-  });
   ipcMain.handle(IPC.minimizeWindow, (event) => {
     assertTrustedSender(event);
     BrowserWindow.fromWebContents(event.sender)?.minimize();
@@ -839,13 +831,9 @@ if (squirrelStartup || !hasSingleInstanceLock) {
   await configureProviderCredentials(providerCredentials, engine);
   engine.onStatus(status => {
     if (status === "ready") void configureProviderCredentials(providerCredentials, engine).then(() => engine.applyProviderPreferences(preferences.get().providerEnabled))
-      .then(() => engine.setReportPlans([]))
       .then(() => cloudAccount.reconnect()).catch(() => undefined);
   });
   await engine.applyProviderPreferences(preferences.get().providerEnabled);
-  // No relabelling: an unsupported source stays on this computer instead of
-  // being uploaded under another provider's name.
-  await engine.setReportPlans([]);
   dashboard.activate();
   registerIPC();
   createTray();

@@ -137,39 +137,11 @@ export class UsageStore {
       } catch {
         // The local payload itself is unreadable; keep the flags for recovery.
       }
-      if (row.conflict !== null) {
-        if (!conflict) this.db.run("UPDATE usage_record SET conflict = NULL WHERE owner = ? AND id = ?", [owner, id]);
-        else if (local && conflict.record.providerId !== local.providerId) {
-          // The same record was reported under another provider when the wheel was
-          // weighted differently. This machine's own earlier upload becomes the
-          // label, and the local copy continues from the revision it reached.
-          this.setAttribution(`record:${id}`, attributionOf(conflict.record));
-          this.db.run("UPDATE usage_record SET cloud_revision = ?, conflict = NULL WHERE owner = ? AND id = ?", [
-            conflict.revision,
-            owner,
-            id
-          ]);
-        }
-      }
+      if (row.conflict !== null && !conflict)
+        this.db.run("UPDATE usage_record SET conflict = NULL WHERE owner = ? AND id = ?", [owner, id]);
       if (row.save_error !== null && local)
         this.db.run("UPDATE usage_record SET save_error = NULL WHERE owner = ? AND id = ?", [owner, id]);
     }
-  }
-  /**
-   * The attribution (`provider\0model`) a record was already reported as. The
-   * reporting wheel may be re-weighted between runs, but a record the server
-   * already holds under one provider must keep it: the server refuses the same
-   * record under another provider at the same revision.
-   */
-  attribution(key: string): string | null {
-    return this.setting(`attribution:${key}`);
-  }
-  setAttribution(key: string, value: string): void {
-    this.setSetting(`attribution:${key}`, value);
-  }
-  /** Keeps the first attribution this machine used for a record. */
-  rememberAttribution(key: string, value: string): void {
-    if (this.attribution(key) === null) this.setAttribution(key, value);
   }
   get(id: string, owner = this.owner): LocalRecord | null {
     const row = this.db.get("SELECT * FROM usage_record WHERE owner = ? AND id = ?", [owner, id]);
@@ -352,12 +324,8 @@ export class UsageStore {
       [sent.localVersion, remote.revision, this.owner, sent.record.recordId, remote.revision]
     );
   }
-  /**
-   * `localize` maps a cloud copy back onto the local record it came from. A record
-   * uploaded under another provider (see `report-plans`) must not rename the row
-   * counted here when it comes back down.
-   */
-  merge(remote: CloudRecord, localize?: (incoming: UsageRecord, local: UsageRecord) => UsageRecord): void {
+  /** Merges one cloud copy into the local ledger. */
+  merge(remote: CloudRecord): void {
     validateUsageRecord(remote.record);
     if (!Number.isSafeInteger(remote.revision) || remote.revision < 1)
       throw new Error("Invalid cloud revision.");
@@ -365,11 +333,7 @@ export class UsageStore {
       if (remote.record.kind === "usage_day" && remote.record.timeZone)
         this.setSetting(`timezone:${this.owner}:${remote.record.sourceId}`, remote.record.timeZone);
       const local = this.get(remote.record.recordId);
-      const incoming = local && localize ? localize(remote.record, local.record) : remote.record;
-      // The cloud copy carries the label this machine reported the record under, and
-      // the server refuses that record under any other provider from now on.
-      if (local && remote.record.providerId !== local.record.providerId)
-        this.setAttribution(`record:${remote.record.recordId}`, attributionOf(remote.record));
+      const incoming = remote.record;
       if (!local) {
         const inserted = this.put(incoming, null);
         this.acknowledge(inserted, remote);
@@ -380,15 +344,6 @@ export class UsageStore {
       } else if (local.localVersion === local.savedVersion) {
         const updated = this.put(incoming, this.compatibleDetails(local, incoming));
         this.acknowledge(updated, remote);
-      } else if (this.reportedAs(remote.record, local.record)) {
-        // Same day, same attribution, newer local usage: this machine is simply
-        // ahead of its own earlier upload. Continue from the revision the server
-        // holds instead of leaving the record pending forever.
-        this.db.run("UPDATE usage_record SET cloud_revision = ? WHERE owner = ? AND id = ?", [
-          remote.revision,
-          this.owner,
-          local.record.recordId
-        ]);
       } else if (remote.revision !== local.revision) {
         this.db.run("UPDATE usage_record SET conflict = ? WHERE owner = ? AND id = ?", [
           JSON.stringify({ ...remote, record: incoming }),
@@ -407,8 +362,6 @@ export class UsageStore {
         const updated = this.put(remote.record, local ? this.compatibleDetails(local, remote.record) : null);
         this.acknowledge(updated, remote);
       } else {
-        if (remote.record.providerId !== local.record.providerId)
-          this.rememberAttribution(`record:${id}`, attributionOf(remote.record));
         this.db.run(
           "UPDATE usage_record SET cloud_revision = ?, conflict = NULL WHERE owner = ? AND id = ?",
           [remote.revision, this.owner, id]
@@ -416,9 +369,6 @@ export class UsageStore {
       }
     });
     this.onChange?.();
-  }
-  private reportedAs(remote: UsageRecord, local: UsageRecord): boolean {
-    return this.attribution(`record:${local.recordId}`) === attributionOf(remote);
   }
   private compatibleDetails(local: LocalRecord, incoming: UsageRecord): string | null {
     if (incoming.kind !== "usage_day" || local.record.kind !== "usage_day") return null;
@@ -437,22 +387,6 @@ export class UsageStore {
       throw error;
     }
   }
-}
-/**
- * Separates a stored label's provider from its model. A NUL byte cannot be used:
- * the SQLite binding truncates strings at it, which silently dropped the model.
- */
-export const ATTRIBUTION_SEPARATOR = "|";
-/** How one uploaded record is labelled: the provider the server sees and its model. */
-export function attributionOf(record: UsageRecord): string {
-  const models = record.kind === "usage_day" ? record.models : null;
-  return `${record.providerId}${ATTRIBUTION_SEPARATOR}${models?.[0]?.modelKey ?? ""}`;
-}
-export function parseAttribution(value: string): { reportAs: string; model: string } {
-  const cut = value.indexOf(ATTRIBUTION_SEPARATOR);
-  return cut === -1
-    ? { reportAs: value, model: "" }
-    : { reportAs: value.slice(0, cut), model: value.slice(cut + 1) };
 }
 function decode(row: Record<string, unknown>): LocalRecord {
   const conflict = readConflict(row.conflict);

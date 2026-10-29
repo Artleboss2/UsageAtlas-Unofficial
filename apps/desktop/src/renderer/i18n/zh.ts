@@ -7,7 +7,6 @@ export const zh: Messages = {
   "nav.alerts": "用量提醒",
   "nav.profile": "公开资料",
   "nav.diagnostics": "诊断",
-  "nav.attribution": "来源归属",
   "nav.settings": "设置",
 
   "window.minimize": "最小化",

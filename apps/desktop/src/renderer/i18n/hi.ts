@@ -7,7 +7,6 @@ export const hi: Messages = {
   "nav.alerts": "उपयोग अलर्ट",
   "nav.profile": "सार्वजनिक प्रोफ़ाइल",
   "nav.diagnostics": "निदान",
-  "nav.attribution": "श्रेय",
   "nav.settings": "सेटिंग्स",
 
   "window.minimize": "छोटा करें",

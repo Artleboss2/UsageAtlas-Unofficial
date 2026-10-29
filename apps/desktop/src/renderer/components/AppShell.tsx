@@ -42,7 +42,6 @@ const routeTitleKeys: Record<AppRoute, MessageKey> = {
   limits: "nav.history",
   alerts: "nav.alerts",
   profile: "nav.profile",
-  attribution: "nav.settings",
   diagnostics: "nav.diagnostics",
   settings: "nav.settings"
 };
@@ -55,9 +54,8 @@ const routeOrder: Record<AppRoute, number> = {
   limits: 3,
   alerts: 4,
   profile: 5,
-  attribution: 6,
-  diagnostics: 7,
-  settings: 8
+  diagnostics: 6,
+  settings: 7
 };
 
 export function AppShell({ route, engineStatus, noticeCount, onNavigate, profileBadge = false, appMarkUrl = null, previousRoute = null,  activityControl,

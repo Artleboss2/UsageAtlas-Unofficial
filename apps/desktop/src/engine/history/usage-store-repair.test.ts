@@ -1,12 +1,8 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { openWritableSqlite } from "../platform/sqlite";
 import { UsageStore } from "./usage-store";
-import { UsageSync, type UsageCloud } from "./usage-sync";
 import {
-  sameUsage,
   validateUsageRecord,
-  type CloudRecord,
-  type PendingRecord,
   type UsageDay,
   type UsageProvider
 } from "@usageatlas/contracts/usage";
@@ -45,66 +41,6 @@ function day(tokens: number, providerId: UsageProvider = "freebuff"): UsageDay {
 function withModel(record: UsageDay): UsageDay {
   return { ...record, models: [{ modelKey: "deepseek-v4-flash", totals: record.totals! }] };
 }
-
-function cloudWith(rows: CloudRecord[]): UsageCloud {
-  return {
-    async read() {
-      return { records: rows, next: null };
-    },
-    async save(sent: PendingRecord[]) {
-      return sent.map(row => ({ ...row, status: "saved" as const }));
-    }
-  };
-}
-
-describe("cloud copies of renamed days", () => {
-  it("adopts the label and revision of a cloud copy instead of building a hybrid", async () => {
-    const store = openStore();
-    store.selectAccount("a");
-    const local = withModel(day(200));
-    store.put(local);
-    // The server still holds this machine's earlier copy of the day: same record
-    // id, smaller totals, and the label it was reported under.
-    const remote = { record: { ...day(50, "codex"), recordId: local.recordId, models: null }, revision: 3 };
-    const sync = new UsageSync(store);
-    resources.push(() => sync.close());
-    await sync.configure("a", cloudWith([remote]));
-    sync.setAutomatic(false);
-    sync.setReportPlans([{ source: "freebuff", targets: [{ reportAs: "claude", model: "claude-fable-5", weight: 100 }] }]);
-
-    await sync.restore();
-
-    const stored = store.get(local.recordId)!;
-    // Nothing to choose: the local row is this machine's newer copy of that day.
-    expect(stored.conflict).toBeNull();
-    expect(stored.revision).toBe(3);
-    expect(stored.record.kind === "usage_day" ? stored.record.totals : null).toMatchObject({ totalTokens: 200 });
-    // The label the server already holds wins over today's wheel.
-    expect(store.attribution(`record:${local.recordId}`)).toBe("codex|");
-    expect(store.counts().invalid).toBe(0);
-    expect(store.records()).toHaveLength(1);
-  });
-
-  it("still restores the local breakdown when the cloud copy counts the same usage", async () => {
-    const store = openStore();
-    store.selectAccount("a");
-    const local = withModel(day(200));
-    store.put(local);
-    const remote = { record: { ...day(200, "codex"), recordId: local.recordId, models: null }, revision: 1 };
-    const sync = new UsageSync(store);
-    resources.push(() => sync.close());
-    await sync.configure("a", cloudWith([remote]));
-    sync.setAutomatic(false);
-    sync.setReportPlans([{ source: "freebuff", targets: [{ reportAs: "codex", model: "gpt-5.3-codex", weight: 100 }] }]);
-
-    await sync.restore();
-
-    const stored = store.get(local.recordId);
-    expect(stored?.record.providerId).toBe("freebuff");
-    expect(stored?.conflict).toBeNull();
-    expect(stored?.record.kind === "usage_day" ? stored.record.models : undefined).toEqual(local.models);
-  });
-});
 
 describe("records an older build left invalid", () => {
   it("drops the unreadable cloud copy and makes the local record uploadable again", () => {
@@ -152,48 +88,4 @@ describe("records an older build left invalid", () => {
     expect(reopened.pending()).toEqual([]);
   });
 
-  it("retries a conflict under the label the server holds instead of stalling", async () => {
-    const store = openStore();
-    store.selectAccount("a");
-    const local = withModel(day(200));
-    store.put(local);
-    const remoteRecord = { ...day(50, "claude"), recordId: local.recordId, models: null };
-    // Like the real server: another label for a record it already holds conflicts,
-    // while the label it holds is accepted and stored as the next revision.
-    let revision = 4;
-    const cloud: UsageCloud = {
-      async read() {
-        return { records: [], next: null };
-      },
-      async save(sent) {
-        return sent.map(row => {
-          if (row.record.providerId !== remoteRecord.providerId)
-            return { record: remoteRecord, revision, status: "conflict" as const };
-          revision += 1;
-          return { record: structuredClone(row.record), revision, status: "saved" as const };
-        });
-      },
-      async readFacts() {
-        return { facts: [], cursor: "0", more: false };
-      },
-      async saveFacts(facts: { id: string }[]) {
-        return facts.map(fact => fact.id);
-      }
-    };
-    const sync = new UsageSync(store);
-    resources.push(() => sync.close());
-    await sync.configure("a", cloud);
-    sync.setAutomatic(false);
-    sync.setReportPlans([{ source: "freebuff", targets: [{ reportAs: "codex", model: "gpt-5.3-codex", weight: 100 }] }]);
-
-    await sync.save();
-
-    expect(sync.status().error).toBeNull();
-    expect(sync.status().conflicts).toEqual([]);
-    expect(sync.status().pending).toBe(0);
-    expect(store.records()).toHaveLength(1);
-    expect(store.get(local.recordId)?.revision).toBe(5);
-    expect(store.attribution(`record:${local.recordId}`)).toBe("claude|");
-    expect(sameUsage(store.get(local.recordId)!.record, local)).toBe(true);
-  });
 });

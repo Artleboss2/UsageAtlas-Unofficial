@@ -1,10 +1,9 @@
 import type { DashboardSnapshot } from "@usageatlas/contracts";
 import type { GrowthEvent, GrowthEventProperties } from "./growth-events";
 import type { ProviderCredential, ProviderCredentialStatus, QuotaProviderId } from "./quota-providers";
-import type { ReportPlan } from "./report-plans";
 import type { Language } from "./languages";
 
-export type AppRoute = "day" | "trends" | "insights" | "limits" | "alerts" | "profile" | "attribution" | "settings" | "diagnostics";
+export type AppRoute = "day" | "trends" | "insights" | "limits" | "alerts" | "profile" | "settings" | "diagnostics";
 export type EngineStatus = "starting" | "ready" | "degraded" | "stopped";
 
 export interface DesktopUpdateState {
@@ -234,8 +233,6 @@ export interface DesktopPreferences {
   usageAlerts: UsageAlertPreferences;
   /** Daily per-source token warning, independent of provider quota windows. */
   tokenAlerts: TokenAlertPreferences;
-  /** Local provider → the official providers and models its cloud save is reported as. */
-  reportPlans: ReportPlan[];
 }
 
 export interface BackgroundImageSelection {
@@ -326,7 +323,6 @@ export interface UsageAtlasDesktopAPI {
   getSnapshot(): Promise<DashboardState>;
   refreshAll(): Promise<DashboardState>;
   setProviderEnabled(providerID: string, enabled: boolean): Promise<DashboardState>;
-  setReportPlans(plans: ReportPlan[]): Promise<DesktopPreferences>;
   getPreferences(): Promise<DesktopPreferences>;
   updatePreferences(patch: Partial<DesktopPreferences>): Promise<DesktopPreferences>;
   getDiagnostics(): Promise<EngineDiagnostics>;
@@ -360,7 +356,6 @@ export const IPC = {
   snapshot: "dashboard:snapshot",
   refreshAll: "dashboard:refresh-all",
   setProviderEnabled: "dashboard:set-provider-enabled",
-  setReportPlans: "settings:set-report-plans",
   getPreferences: "preferences:get",
   updatePreferences: "preferences:update",
   getDiagnostics: "engine:diagnostics",
@@ -391,8 +386,8 @@ export interface UsageCloudState {
   lastCompleted: "save" | "restore" | null;
   error: string | null;
   /**
-   * Sources with usage waiting on this computer that the server does not model,
-   * and that no Attribution rule renames. Capitalized display names.
+   * Sources with usage waiting on this computer that the server does not model.
+   * Capitalized display names.
    */
   heldBack: string[];
   /** Pending observations `heldBack` covers. `pending` includes them, so subtract. */

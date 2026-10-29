@@ -13,8 +13,8 @@ export function checkFact(fact: unknown): UsageFact {
   return fingerprint(fact).fact;
 }
 /**
- * False when a fact's content no longer matches its id — an observation that was
- * relabelled for upload (see `report-plans`) before it left this computer.
+ * False when a fact's content no longer matches its id, which means the payload
+ * was edited after it was fingerprinted.
  */
 export function hasValidFingerprint(value: unknown): boolean {
   try {
