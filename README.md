@@ -1,20 +1,30 @@
 <p align="center">
   <img src="branding/usageatlas-logo.png" width="144" height="144" alt="UsageAtlas app icon">
 </p>
-<h1 align="center">UsageAtlas</h1>
+
+<h1 align="center">UsageAtlas <sub>unofficial fork</sub></h1>
+
 <p align="center">
-One desktop dashboard for your AI coding usage.<br>
-Track local AI history, allowances and balances, and keep a copy in the cloud when you want one.
-</p>
-<p align="center">
-<a href="https://github.com/Artleboss2/UsageAtlas-Unofficial/releases/latest"><strong>Download for Windows</strong></a>
-·
-<a href="https://github.com/Artleboss2/UsageAtlas-Unofficial/releases">All releases</a>
+  One desktop dashboard for your AI coding usage.<br>
+  Track AI coding history, allowances, and balances across the tools you actually use. No UsageAtlas
+  account required.
 </p>
 
-> This build starts from the open-source [UsageAtlas](https://github.com/SRX9/UsageAtlas) app and
-> adds the readers, storage work and interface changes described below. It is not endorsed by the
-> original project; the UsageAtlas name and logo remain theirs (see [TRADEMARKS.md](TRADEMARKS.md)).
+<p align="center">
+  <a href="https://github.com/Artleboss2/UsageAtlas-Unofficial/releases/latest"><strong>Download for Windows</strong></a>
+  ·
+  <a href="https://github.com/Artleboss2/UsageAtlas-Unofficial/releases">All releases</a>
+</p>
+
+<p align="center">
+  <img src="https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-lightgrey" alt="Windows, macOS, and Linux">
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="MIT license"></a>
+</p>
+
+> This repository is a fork of the open-source [UsageAtlas](https://github.com/SRX9/UsageAtlas) app.
+> It is **not** the official app and is **not** endorsed by the original project. The UsageAtlas
+> name and logo remain theirs — see [TRADEMARKS.md](TRADEMARKS.md). Everything below starts from the
+> upstream documentation and marks what this fork adds.
 
 ## Timeline: 0.4.0 → 0.5.0
 
@@ -23,12 +33,14 @@ Track local AI history, allowances and balances, and keep a copy in the cloud wh
 Earlier 0.3.x cards are in the [previous timeline](docs/timeline.svg). A 0.5.0 goal only moves to
 *shipped* when its acceptance test passes in a build published from this repository.
 
-## What 0.4.0 ships
+## What this fork adds
 
-**The truth of the usage, with no relabelling.** A cloud save now carries the provider that actually
-produced the request. The old attribution wheel is gone: no source is uploaded under another
-provider's name, and a source the hosted service does not model stays on this computer with a clear
-notice instead of a fake label.
+### 0.4.0 — the truth of the usage
+
+**No relabelling.** A cloud save now carries the provider that actually produced the request. The
+old attribution page, its weighted wheel and the settings that rewrote uploaded providers are gone.
+A source the hosted service does not model stays on this computer with a clear notice instead of a
+fake label.
 
 **A compact local ledger.** The database used to keep one observation per request, one `collection`
 row per scan and one `capacity` row per quota check, plus a write-only archive of every replaced
@@ -64,18 +76,10 @@ offers a one-click **Roll back to <version>**, relaunching the newest older buil
 untouched. The existing restart badge and the check that never reports "latest" for an older window
 remain.
 
-## What this build reads
+### Private and unlisted providers
 
-UsageAtlas reads local activity and reuses supported tool sign-ins. Providers that need an API key or
-session can be connected in **Settings → Sources**.
+The 0.3.x line added readers the upstream build does not ship:
 
-- **Codex** — talks to the installed, signed-in Codex CLI through its official local app-server API.
-- **Claude** — reads `CLAUDE_CODE_OAUTH_TOKEN` or `.credentials.json` in the Claude config directory.
-- **Cursor** — reuses the signed-in desktop session for limits plus 90 days of per-request history.
-- **OpenCode** — reads the local database for per-step token, request, project and model analytics.
-- **Antigravity** — reads local CLI conversation databases.
-- **Pi / OMP** — reads local JSONL sessions, including cache tokens and projects.
-- **Muse Code** — reads local inference and review events.
 - **Freebuff** — reads the Desktop app's per-project `desktop-v2.db` (`messages.metrics_json`), with
   the CLI transcripts as a fallback. The path planner finds the database wherever Freebuff installed
   it, verifies its schema and re-plans when it moves. Opaque `m-<digest>` model ids are resolved
@@ -84,68 +88,25 @@ session can be connected in **Settings → Sources**.
 - **Gemini CLI, Qwen Code, Cline, Roo Code** — read the token objects their own transcripts already
   contain.
 
-Warp, Kimi Code, Kilo Code, GitHub Copilot, Factory / Droid, Amp and Qoder supply current allowances
-and balances. The seven quota readers do not provide token history, so they never enter daily totals.
-See [provider setup](docs/LOCAL_PROVIDERS.md), [quota providers](docs/QUOTA_PROVIDERS.md) and the
-[source survey](docs/PROVIDER_USAGE_SOURCES.md).
+These are ordinary providers: they are stored under their own names and sent to the cloud service
+under their own names. When the hosted service does not know one of them, the app says so rather than
+pretending the request came from Codex or Claude.
 
-## Highlights
+### Interface and appearance
 
-- Today view with capacity meters, reset times, plan details, credits and hourly activity
-- History and insights across 7, 30 and 90 days by project, session, model and tool
-- Usage alerts with a native notification and an in-app inbox
-- A daily token alert that says exactly `You used 128,400 tokens on Freebuff today.`
-- Appearance that stays Apple-quiet: six bundled variable fonts, a type scale, ink colour, accent
-  tint, glass or solid surfaces, motion, number style, app mark and background
-- Full figures by default (`1,284,930`, not `1.3M`), with short units available for charts
-- Pages glide in from the side they were reached from, and the rail highlight slides between pages
-- Tray presence, launch at login, system/light/dark themes
-- One app instance and one taskbar identity, so a stale build never keeps the old icon
-- Local tracking with no account required
-- Optional free account to save history and restore it on another computer
-- Sealed local history and a sandboxed renderer with an allowlisted preload API, ASAR integrity and
-  Electron fuses
+- Six bundled variable fonts, a type scale, ink colour, accent tint, glass or solid surfaces,
+  motion, number style, app mark and background.
+- Full figures by default (`1,284,930`, not `1.3M`), with short units available for charts.
+- Pages glide in from the side they were reached from, and the rail highlight slides between pages.
+- English, French, Spanish, Chinese and Hindi translations.
+- One app instance and one taskbar identity, so a stale build never keeps the old icon.
 
-## Privacy
+## Screenshots
 
-Provider data is read from local files and provider APIs. Completed-day usage and capacity snapshots
-are stored in a local SQLite history database in the app data directory. Without signing in, that
-history stays on this computer.
-
-If you choose a free account, cloud saves store day totals, estimated costs, hourly activity, model
-breakdowns, limits and plan information. They also retain per-request timestamps, model identifiers,
-numeric token and cost measurements, and opaque project and session identifiers. Project and session
-names, paths, prompts, responses, transcripts and coding-tool credentials are never included. A source
-the hosted service does not model is held on this computer and named in Settings; it is not relabelled.
-
-The optional anonymous install count is separate from cloud save. It never includes usage figures,
-your account name or email, and can be switched off in Settings. Diagnostics are redacted before they
-are shown or copied. See the [privacy policy](https://usageatlas.com/privacy) and
-[terms of use](https://usageatlas.com/terms).
-
-## Optional free cloud save
-
-1. Open **Settings → Cloud save**.
-2. Sign in with Google or GitHub to create or use a free UsageAtlas account.
-3. Pending usage saves automatically once an hour while the app is running. Turn off **Save
-   automatically** to save only when you press **Save to cloud**.
-4. On another computer, sign in to the same account and choose **Restore from cloud**.
-
-Only successfully saved history can be restored. Signing out stops future saves but does not delete
-existing cloud history. A source the server refuses appears under "waiting to be saved" with its own
-name, never as another provider.
-
-## Storage
-
-The local database is written by `apps/desktop/src/engine/history`. The day record is the source of
-truth for every screen; `usage_fact` is an upload outbox and a 30-day idempotence window. The
-compaction runs once per database version and is safe to interrupt: deletions are committed before
-`VACUUM`, and a file locked by the background writer is compacted on the next launch.
-
-On the measured profile the ledger occupied 3.7 MB of 4.61 MB and the write-only archive 0.75 MB.
-After compaction the whole file is 0.856 MB. Tokens, costs, hourly buckets and per-model splits are
-identical; only superseded scan and quota snapshots and already-uploaded request payloads are gone.
-[STATISTICS_STORAGE.md](docs/STATISTICS_STORAGE.md) documents the tables and the recovery rules.
+<p align="center">
+  <a href="docs/images/usageatlas-today.png"><img src="docs/images/usageatlas-today.png" width="49%" alt="Today view with total tokens, capacity meters for each tool, and hourly activity"></a>
+  <a href="docs/images/usageatlas-week.png"><img src="docs/images/usageatlas-week.png" width="49%" alt="Insights view with a heatmap of a typical week in two-hour blocks"></a>
+</p>
 
 ## Install
 
@@ -160,6 +121,127 @@ macOS and Linux are not built here. Build the fork yourself with the commands be
 additions is Windows-specific. Every release carries `SHA256SUMS`, and Windows releases also carry
 the Squirrel `RELEASES` feed and `-full.nupkg` that the in-app updater reads.
 
+The upstream instructions remain valid for the official app: get an installer from
+[usageatlas.com](https://usageatlas.com/#download) or the
+[upstream releases page](https://github.com/SRX9/UsageAtlas/releases), run the `.exe` on Windows,
+drag the signed and notarized `.dmg` into Applications on macOS, or run the `.AppImage`, `.deb` or
+`.rpm` on Linux.
+
+## What it reads
+
+UsageAtlas reads local activity and reuses supported tool sign-ins. Providers that require an API key
+or session can be connected in **Settings → Sources**.
+
+- **Codex** — talks to the installed, signed-in Codex CLI through its official local app-server API.
+  The OAuth token is never read.
+- **Claude** — reads `CLAUDE_CODE_OAUTH_TOKEN` or `.credentials.json` in your Claude config
+  directory, then queries the OAuth usage endpoint.
+- **Cursor** — reuses the signed-in desktop session from Cursor's local state database for account
+  limits plus 90 days of per-request token, model, and cost history.
+- **OpenCode** — reads the local OpenCode database for per-step token, request, project, model, and
+  cost analytics.
+- **Antigravity** — reads local CLI conversation databases for timestamped tokens, requests, models,
+  sessions, and API-price estimates.
+- **Pi / OMP** — reads local JSONL sessions for Anthropic and OpenAI Codex backend usage, including
+  cache tokens, projects, and API-price estimates.
+- **Muse Code** — reads local inference and automated-review events for token, request, model, and
+  session history. Monetary costs remain unknown.
+
+Antigravity, Pi / OMP, and Muse Code collect local history without credentials. They do not collect
+subscription quotas. See [provider setup and field mappings](docs/LOCAL_PROVIDERS.md) for supported
+locations and limitations.
+
+Seven more integrations read current provider allowances and balances:
+
+- **Warp** reads monthly and add-on credits, with workspace pools kept separate.
+- **Kimi Code** reads five-hour, weekly, and monthly allowances for the selected region.
+- **Kilo Code** reads active credit blocks, balances, and Kilo Pass usage for a personal or
+  organization scope.
+- **GitHub Copilot** reads reported premium, chat, and completion quotas, plus seat credit usage
+  where available.
+- **Factory / Droid** reads Standard and Core limits, extra usage balances, and supported legacy
+  billing counters.
+- **Amp** reads Free and Agent allowances, Orb hours, and personal and workspace balances.
+- **Qoder** reads personal and shared credits for the selected region.
+
+These seven do not provide token, request, project, or cost history through these integrations.
+Missing allowances stay unknown. Credentials saved in Settings use the operating system's encrypted
+storage and never enter cloud saves. See [quota provider setup](docs/QUOTA_PROVIDERS.md) for
+credentials, supported formats, and limitations.
+
+This fork additionally reads **Freebuff**, **z.ai / GLM**, **Gemini CLI**, **Qwen Code**, **Cline**
+and **Roo Code** as described above. The [source survey](docs/PROVIDER_USAGE_SOURCES.md) lists every
+known token store.
+
+## Highlights
+
+- Today view with capacity meters, reset times, plan details, credits, and hourly activity
+- History and insights across 7, 30, and 90 days by project, session, model, and tool
+- Usage alerts that fire a native notification before you run into a limit
+- A notification inbox with the last 50 alerts, kept across restarts
+- A daily token alert that says exactly `You used 128,400 tokens on Freebuff today.`
+- A 250-provider discovery catalog for providers nobody mapped yet
+- Appearance that stays Apple-quiet: bundled variable fonts, a type scale, ink colour, accent tint,
+  glass or solid surfaces, motion, number style, app mark and background
+- Full figures by default, with short units available for charts
+- Tray presence, launch at login, and system/light/dark themes
+- One app instance and one taskbar identity
+- Local tracking with no account required
+- Optional free account to save usage history to the cloud and restore it on another computer
+- One-click rollback to the previous Squirrel build
+- Sealed local history: completed days are stored on disk so past usage survives restarts and
+  provider outages
+- Sandboxed renderer with no Node.js access, an allowlisted preload API, ASAR integrity, and
+  Electron fuses
+
+## Privacy
+
+Provider data is read from local files and provider APIs. Completed-day usage and capacity
+snapshots are stored in a local history database in the app data directory. Without signing in to
+UsageAtlas, your usage history stays on your computer.
+
+If you choose a free account, cloud saves store usage totals, estimated costs, hourly activity, model
+breakdowns, and limits and plan information under that account. They also retain per-request
+timestamps, model identifiers (including private model names), numeric token and cost measurements,
+collection metadata, and opaque project and session identifiers. Project and session names, file
+paths, prompts, responses, raw transcript logs, and coding-tool credentials are not included.
+Restoring cloud history does not restore local project paths or session names. Providers are saved
+under their real names; a source the hosted service does not model stays on this computer.
+
+The optional anonymous install count is separate from cloud save. It never includes usage figures or
+your account name or email, and you can switch it off in Settings. Diagnostics are redacted before
+they are shown or copied. See the upstream [privacy policy](https://usageatlas.com/privacy) and
+[terms of use](https://usageatlas.com/terms).
+
+## Optional free cloud save
+
+1. Open **Settings → Cloud save** in the desktop app.
+2. Sign in with Google or GitHub to create or use a free UsageAtlas account.
+3. Pending usage saves automatically once an hour while the app is running. You can turn off **Save
+   automatically** and use **Save to cloud** whenever you want. A previous automatic-save choice is
+   remembered on this computer.
+4. On another computer, sign in to the same account and choose **Restore from cloud**.
+
+Only successfully saved history can be restored. Check that saving has completed before removing
+local app data or replacing your computer. Signing out stops future saves but does not delete
+existing cloud history. To request account and cloud-history deletion, email
+[privacy@usageatlas.com](mailto:privacy@usageatlas.com).
+
+A source the hosted service refuses appears under "waiting to be saved" with its own name, never as
+another provider.
+
+## Storage
+
+The local database is written by `apps/desktop/src/engine/history`. The day record is the source of
+truth for every screen; `usage_fact` is an upload outbox and a 30-day idempotence window. The
+compaction runs once per database version and is safe to interrupt: deletions are committed before
+`VACUUM`, and a file locked by the background writer is compacted on the next launch.
+
+On the measured profile the ledger occupied 3.7 MB of 4.61 MB and the write-only archive 0.75 MB.
+After compaction the whole file is 0.856 MB. Tokens, costs, hourly buckets and per-model splits are
+identical; only superseded scan and quota snapshots and already-uploaded request payloads are gone.
+[STATISTICS_STORAGE.md](docs/STATISTICS_STORAGE.md) documents the tables and the recovery rules.
+
 ## Build from source
 
 Requirements: Bun 1.3.14 and Node.js 22.13+.
@@ -171,13 +253,13 @@ bun ci
 bun run desktop:start
 ```
 
-`bun run check` runs lint, typecheck, tests and the renderer build. `bun run desktop:make` produces
+`bun run check` runs lint, typecheck, tests, and the renderer build. `bun run desktop:make` produces
 installers for the current platform with Electron Forge; unsigned builds need no credentials.
 `bun run desktop:make -- --platform=win32 --arch=x64 --targets squirrel zip` produces the Windows
 installer, update feed and portable zip used by this repository's releases.
 
-The repository is a Bun + Turborepo workspace: the Electron app in `apps/desktop`, shared schemas and
-fixtures in `packages/contracts`, build helpers in `tooling`.
+The repository is a Bun + Turborepo workspace: the Electron app lives in `apps/desktop`, shared
+schemas and fixtures in `packages/contracts`, and build helpers in `tooling`.
 
 ## Releases
 
@@ -185,6 +267,9 @@ Bump `apps/desktop/package.json`, update [CHANGELOG.md](CHANGELOG.md), then buil
 and publish the installer, `-full.nupkg`, portable zip, `RELEASES` and `SHA256SUMS` under
 `desktop-v<version>`. The release workflow performs the same steps on `windows-2022`; a manual run
 builds without publishing unless **publish** is enabled.
+
+The upstream workflow remains the reference for signed macOS and Linux builds; this fork only
+publishes Windows artifacts.
 
 ## 0.5.0 goals
 
