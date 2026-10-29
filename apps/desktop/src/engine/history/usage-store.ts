@@ -10,6 +10,8 @@ import {
   USAGE_MAX_BYTES,
   type CloudRecord,
   type PendingRecord,
+  type StoredTotals,
+  type UsageDay,
   type UsageRecord
 } from "@usageatlas/contracts/usage";
 import type { WritableSqliteDatabase } from "../platform/sqlite";
@@ -124,6 +126,26 @@ export class UsageStore {
   }
   get owner(): string {
     return this.setting("owner") ?? "";
+  }
+  /**
+   * Rewrites every stored day and its display detail at one blended rate, in
+   * USD per million tokens. Catalog prices on private model names are not the
+   * invoice, so history recorded before the rate was chosen has to move too;
+   * otherwise the total keeps the old estimate while new requests use the new
+   * one. Returns how many rows changed.
+   */
+  repriceDayCosts(ratePerMillion: number): number {
+    if (!Number.isFinite(ratePerMillion) || ratePerMillion <= 0) return 0;
+    let changed = 0;
+    for (const local of this.records()) {
+      if (local.record.kind !== "usage_day") continue;
+      const record = repriceUsageDay(local.record, ratePerMillion);
+      const details = local.details ? repriceDetails(local.details, ratePerMillion) : null;
+      if (record === local.record && details === local.details) continue;
+      this.put(record, details, local.owner);
+      changed += 1;
+    }
+    return changed;
   }
   /**
    * Drops day records and observations older than the retention window. The
@@ -564,6 +586,64 @@ function decodeDetails(value: unknown): string | null {
   } catch {
     return null;
   }
+}
+
+function repricedTotals(totals: StoredTotals, ratePerMillion: number): StoredTotals | null {
+  if (totals.totalTokens <= 0) return null;
+  // Micro-dollars are token count times the per-million rate: 1M × 0.54 = 540000.
+  const estimatedCostMicrosUSD = Math.round(totals.totalTokens * ratePerMillion);
+  if (totals.estimatedCostMicrosUSD === estimatedCostMicrosUSD && totals.unpricedTokens === 0) return null;
+  return { ...totals, estimatedCostMicrosUSD, unpricedTokens: 0 };
+}
+
+function repriceUsageDay(record: UsageDay, ratePerMillion: number): UsageDay {
+  const totals = record.totals ? repricedTotals(record.totals, ratePerMillion) : null;
+  const hourly = record.hourly?.map((hour) => {
+    const repriced = repricedTotals(hour.totals, ratePerMillion);
+    return repriced ? { ...hour, totals: repriced } : hour;
+  });
+  const models = record.models?.map((model) => {
+    const repriced = repricedTotals(model.totals, ratePerMillion);
+    return repriced ? { ...model, totals: repriced } : model;
+  });
+  if (!totals && !hourly?.some((hour, index) => hour !== record.hourly?.[index])
+    && !models?.some((model, index) => model !== record.models?.[index])) return record;
+  return {
+    ...record,
+    ...(totals ? { totals } : {}),
+    ...(hourly ? { hourly } : {}),
+    ...(models ? { models } : {})
+  };
+}
+
+function repriceDetails(text: string, ratePerMillion: number): string {
+  let value: unknown;
+  try {
+    value = JSON.parse(text);
+  } catch {
+    return text;
+  }
+  return repriceDetailValue(value, ratePerMillion) ? JSON.stringify(value) : text;
+}
+
+/** Mutates every totals object in a day detail and reports whether anything moved. */
+function repriceDetailValue(value: unknown, ratePerMillion: number): boolean {
+  if (Array.isArray(value)) return value.reduce((changed, entry) => repriceDetailValue(entry, ratePerMillion) || changed, false);
+  if (!value || typeof value !== "object") return false;
+  const row = value as Record<string, unknown>;
+  let changed = false;
+  if (typeof row.totalTokens === "number" && typeof row.estimatedCostMicrosUSD !== "undefined") {
+    const updated = repricedTotals(row as unknown as StoredTotals, ratePerMillion);
+    if (updated) {
+      row.estimatedCostMicrosUSD = updated.estimatedCostMicrosUSD;
+      row.unpricedTokens = updated.unpricedTokens;
+      changed = true;
+    }
+  }
+  for (const entry of Object.values(row)) {
+    if (repriceDetailValue(entry, ratePerMillion)) changed = true;
+  }
+  return changed;
 }
 
 function decode(row: Record<string, unknown>): LocalRecord {

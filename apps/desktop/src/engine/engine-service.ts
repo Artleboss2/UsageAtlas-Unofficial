@@ -150,6 +150,15 @@ export class EngineService {
               ? pricing.blendedCostPerMillion
               : pricing.blendedCostPerMillion === null ? null : undefined
           });
+          // New observations already use the rate. Rewrite what is stored too,
+          // or a 762 M-token history keeps reading as $5.53 after the switch.
+          if (typeof pricing.blendedCostPerMillion === "number" && this.history instanceof SqliteHistoryStore) {
+            const changed = this.history.repriceCosts(pricing.blendedCostPerMillion, this.now().toISOString());
+            if (changed > 0) {
+              this.cached.clear();
+              this.historyChanged?.();
+            }
+          }
           return { pricing: "configured", overrides: overrides.length } as JsonValue;
         }
         if (request.params.scan && typeof request.params.scan === "object" && !Array.isArray(request.params.scan)) {

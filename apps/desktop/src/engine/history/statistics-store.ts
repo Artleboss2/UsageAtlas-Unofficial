@@ -120,6 +120,44 @@ export class StatisticsStore {
       SELECT max(rowid) FROM usage_fact WHERE kind = 'capacity'
       GROUP BY owner, provider, source_id)`);
   }
+  /**
+   * Files a repriced version of every event whose stored estimate does not match
+   * one blended rate. Each version keeps its event id and gets a fresh
+   * observation time, so the cloud replaces the old estimate instead of adding
+   * a second request. Returns how many events changed.
+   */
+  reprice(ratePerMillion: number, observedAt = new Date().toISOString()): number {
+    if (!Number.isFinite(ratePerMillion) || ratePerMillion <= 0) return 0;
+    const rows = this.db.all(
+      `SELECT payload FROM usage_event_latest
+       WHERE json_extract(payload, '$.totals.totalTokens') > 0`
+    );
+    let changed = 0;
+    for (const row of rows) {
+      let fact: UsageEventFact;
+      try {
+        fact = JSON.parse(String(row.payload)) as UsageEventFact;
+      } catch {
+        continue;
+      }
+      if (!fact.totals) continue;
+      const estimatedCostMicrosUSD = Math.round(fact.totals.totalTokens * ratePerMillion);
+      const estimatedCostUSD = estimatedCostMicrosUSD / 1_000_000;
+      if (fact.totals.estimatedCostMicrosUSD === estimatedCostMicrosUSD
+        && fact.totals.unpricedTokens === 0
+        && fact.estimatedCostUSD === estimatedCostUSD) continue;
+      this.put(identifyFact({
+        ...fact,
+        id: "",
+        observedAt,
+        totals: { ...fact.totals, estimatedCostMicrosUSD, unpricedTokens: 0 },
+        estimatedCostUSD,
+        pricingVersion: `blended:${ratePerMillion}`
+      }));
+      changed += 1;
+    }
+    return changed;
+  }
   put(fact: UsageFact, saved = false, owner = this.owner()): void {
     const checked = fingerprint(fact);
     const rowid = this.insert(checked, saved, owner);

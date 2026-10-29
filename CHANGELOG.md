@@ -10,8 +10,9 @@ UsageAtlas app; see [README.md](README.md) for what it adds and what it is not.
 - **A blended cost estimate that matches a real bill.** Provider logs often name a private model whose
   catalog price has nothing to do with the invoice, so the total read **$5.53 for 774 M tokens**.
   Settings → Data now prices every token at one blended rate, on by default at **$0.54 per million
-  tokens** — the same order as the public leaderboard (42.29 B tokens for roughly $23 k). Saving the
-  setting triggers a rescan, which reprices recent facts without changing a token count.
+  tokens** — the same order as the public leaderboard (42.29 B tokens for roughly $23 k). Applying the
+  rate rewrites every stored day and observation as well as new requests, so a measured 762 M-token
+  profile moves from **$82.88 to $411.46** with every token count unchanged.
 - **Active tool capacity for tools without quota windows.** Today's capacity card used to be empty
   when a provider reported tokens but no metered limit, which is what Freebuff and Claude do locally.
   It now lists every enabled tool with today's tokens, estimated cost and plan when known, while
@@ -22,8 +23,10 @@ UsageAtlas app; see [README.md](README.md) for what it adds and what it is not.
 - **The repository carries only the current release.** Roughly 1.2 GB of superseded installers,
   build output, diagnostic scripts and logs were removed; source, tests and the current release
   artifacts remain.
-- The discovery catalog is documented as its real size (63 seeded names), with 250+ verified
-  providers moved to the 0.5.0 contract instead of being claimed early.
+- The discovery catalog is documented as its real size (63 seeded names), with 300+ verified
+  providers moved to the larger 0.5.0 contract instead of being claimed early. The 0.5.0 section now
+  carries seven acceptance-tested outcomes, including a year of history on three machines, bill-exact
+  cost and one million requests that stay instant.
 
 ## 0.4.2 — 2026-10-29
 

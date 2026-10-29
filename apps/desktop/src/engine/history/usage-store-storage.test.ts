@@ -109,6 +109,39 @@ describe("compact local ledger", () => {
     expect(stored.details).toBe(details);
   });
 
+  it("reprices stored days and their details to a blended rate", () => {
+    const db = database();
+    const store = new UsageStore(db);
+    const totals = { inputTokens: 600_000, cachedInputTokens: 0, cacheCreationInputTokens: 0, outputTokens: 400_000, totalTokens: 1_000_000, requests: 2, estimatedCostMicrosUSD: 5_000_000, unpricedTokens: 0 };
+    const day: UsageDay = {
+      schemaVersion: 1,
+      recordId: "33333333-3333-4333-8333-333333333333",
+      sourceId: "11111111-1111-4111-8111-111111111111",
+      providerId: "freebuff",
+      kind: "usage_day",
+      observedAt: "2026-09-23T12:00:00.000Z",
+      localDay: "2026-09-23",
+      timeZone: "UTC",
+      dayState: "complete",
+      collectionMethod: "local_activity",
+      status: "available",
+      totals,
+      hourly: [{ localHour: 2, utcStart: null, totals }],
+      models: [{ modelKey: "m-123", totals }]
+    };
+    const details = JSON.stringify({ totals, models: [{ modelKey: "m-123", totals }] });
+    store.put(day, details);
+
+    expect(store.repriceDayCosts(0.54)).toBe(1);
+    const repriced = store.get(day.recordId)!.record as UsageDay;
+    expect(repriced.totals?.estimatedCostMicrosUSD).toBe(540_000);
+    expect(repriced.hourly?.[0].totals.estimatedCostMicrosUSD).toBe(540_000);
+    expect(repriced.models?.[0].totals.estimatedCostMicrosUSD).toBe(540_000);
+    expect(JSON.parse(store.get(day.recordId)!.details!).models[0].totals.estimatedCostMicrosUSD).toBe(540_000);
+    // A second pass has nothing left to write.
+    expect(store.repriceDayCosts(0.54)).toBe(0);
+  });
+
   it("drops provenance the server already holds", () => {
     const db = database();
     const store = new UsageStore(db);

@@ -28,7 +28,7 @@
 
 ## Timeline: 0.4.0 → 0.5.0
 
-![Timeline: 0.4.0 through 0.4.3 shipped, 0.5.0 carries six large acceptance-tested goals](docs/timeline-0.4-0.5.svg)
+![Timeline: 0.4.0 through 0.4.3 shipped, 0.5.0 carries seven major acceptance-tested goals](docs/timeline-0.4-0.5.svg)
 
 Earlier 0.3.x cards are in the [previous timeline](docs/timeline.svg). A 0.5.0 goal only moves to
 *shipped* when its acceptance test passes in a build published from this repository.
@@ -118,8 +118,10 @@ spinners, and the mini window's budget ring no longer spills “Not set” out o
 **A realistic cost estimate, at last.** Model catalog prices are meaningless for private names such as
 Freebuff's `m-…` ids: the old total said **$5.53 for 774 M tokens**. Settings → Data now has a blended
 estimate, on by default at **$0.54 per million tokens** — the rate at the top of the public
-leaderboard (42.29 B tokens for roughly $23 k). The engine prices new observations at that rate, and a
-save triggers a rescan so recent history is repriced without touching token counts.
+leaderboard (42.29 B tokens for roughly $23 k). The engine reprices every stored day and observation
+when the rate is applied, so existing history moves too: the measured 762 M-token profile now reads
+**$411.46** instead of $82.88, with every token count unchanged. A rescan then keeps new requests at
+the same rate.
 
 **Active tool capacity for tools without quotas.** The Today card used to be empty when a provider
 reported tokens but no metered window — exactly what Freebuff and Claude do locally. It now lists every
@@ -331,29 +333,38 @@ publishes Windows artifacts.
 
 ## 0.5.0 goals
 
-0.5.0 is the release where the app stops needing a mapped provider, a low estimate or a manual
-update. Six large outcomes, each with an acceptance test:
+0.5.0 is the release where the app stops being a tracker and becomes the single source of truth for
+everything a developer spends on AI. Seven hard outcomes, each with an acceptance test:
 
-- **Any AI tool in under 60 seconds.** Type a name, or let the app scan what is installed; it probes
-  the store, proves a first token, and keeps a working route. Acceptance: **250+ verified providers**
-  in the catalog, **95 % of installed tools detected** on a clean Windows profile, the first token
-  shown in **under 60 seconds**, and **zero network requests** during discovery.
-- **Invoice-grade cost.** Blended and per-model estimates reconcile with real provider bills.
-  Acceptance: within **±5 %** of the invoice on three providers for a full month, with currency, tax,
-  per-model overrides, and CSV/JSON export all accounted for.
-- **Zero-loss multi-device cloud.** One compact document per provider and day, merged additively,
-  conflict-free across two computers. Acceptance: restore a year of history in **under 10 seconds**,
-  **no duplicate token** after three interrupted saves, and every fact id verified before upload.
-- **Invisible by default.** Acceptance: cold start to first paint **under 300 ms**, **under 120 MB**
-  resident after an hour idle, **no measurable idle CPU**, and no page switch above **50 ms** on the
-  reference machine.
-- **Private and trusted by construction.** Encrypted local history, signed update feeds, automatic
+- **Every AI tool, found in 30 seconds.** Type a name, or let the app scan what is installed; it
+  probes the store, proves a first token, and keeps a working route that survives a folder move.
+  Acceptance: **300+ verified providers** in the catalog, **98 % of installed tools detected** on a
+  clean Windows and a clean macOS profile, first token in **under 30 seconds**, and **zero network
+  requests** during discovery.
+- **Bill-exact, to the cent.** Blended and per-model estimates reconcile with real provider bills,
+  including cache reads and writes, service tiers, tax, currency and custom rates. Acceptance:
+  within **±2 %** of the invoice on **five providers for 90 days**, a reconciliation report that
+  names every remaining difference, and a monthly CSV/JSON export that totals to the invoice.
+- **A year in one file, on three machines.** One compact document per provider and day, merged
+  additively, conflict-free across three computers. Acceptance: restore **365 days in under 5
+  seconds**, **zero duplicate tokens** after five interrupted saves, and removing a device without
+  losing that device's history.
+- **Invisible under real load.** Acceptance: **under 200 ms** cold first paint, **under 80 MB**
+  resident after an hour idle, **under 0.1 %** idle CPU, page switches **under 30 ms** at one million
+  stored requests, and **under 2 % battery per hour** on the reference laptop.
+- **Trusted by construction.** Encrypted local vault, signed installer and update feed, automatic
   rollback, and no stale build left behind. Acceptance: a tampered package is refused, a failed
-  update returns to the previous build in one launch, and **zero** `app-*` folders other than the
-  running one remain after an update.
-- **World-ready.** Ten languages including one right-to-left catalog, every renderer string
-  translated, and keyboard-only navigation. Acceptance: a missing-key test, a hard-coded English
-  sweep, RTL screenshots, and **WCAG 2.2 AA** on the six main screens.
+  update returns to the previous build in one launch, **zero** `app-*` folders other than the
+  running one remain, and the release publishes an SBOM and a reproducible build hash.
+- **Fluent for everyone.** Acceptance: **twelve languages** including one right-to-left catalog,
+  **100 % of renderer strings** translated, keyboard-only navigation, a screen-reader pass, and
+  **WCAG 2.2 AA** on every main screen.
+- **A million requests, still instant.** Acceptance: one million stored facts searched and filtered
+  in **under 100 ms**, a twelve-month graph that zooms without a freeze, project and session
+  drill-down at that size, and an export/import round-trip with **zero loss**.
+
+0.5.0 is a major step: it may change the local schema and the cloud document format. Migration is
+part of the contract, and a 0.4.x profile must open without a rescan, a duplicate token or a lost day.
 
 ## Acknowledgements
 

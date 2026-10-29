@@ -52,6 +52,24 @@ describe("durable usage observations", () => {
     expect(rows[0].event_id).toBe(rows[1].event_id);
     expect(() => local.statistics.put({ ...fact, totalTokens: 999 })).toThrow();
   });
+  it("files a new event version at one blended rate and keeps the cloud replacing the old one", () => {
+    const local = store();
+    const fact = observe(local, {
+      totalTokens: 1_000_000, inputTokens: 600_000, cachedInputTokens: 0,
+      cacheCreationInputTokens: 0, outputTokens: 400_000
+    });
+    local.statistics.put(fact, true);
+
+    expect(local.statistics.reprice(0.54, "2026-09-23T13:00:00Z")).toBe(1);
+    const latest = JSON.parse(String(local.db.get("SELECT payload FROM usage_event_latest")?.payload)) as UsageEventFact;
+    expect(latest.eventId).toBe(fact.eventId);
+    expect(latest.estimatedCostUSD).toBe(0.54);
+    expect(latest.totals?.estimatedCostMicrosUSD).toBe(540_000);
+    expect(latest.pricingVersion).toBe("blended:0.54");
+    expect(local.statistics.pending()).toHaveLength(1);
+    expect(local.statistics.reprice(0.54)).toBe(0);
+  });
+
   it("adds an event version when its numbers change, not when only the pricing catalog revision does", () => {
     const local = store();
     const scan = (overrides: Partial<UsageRecord>) => local.statistics.collect("codex", "local", "replica", analytics([event(overrides)]));
