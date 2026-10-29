@@ -846,6 +846,10 @@ if (squirrelStartup || !hasSingleInstanceLock) {
   dashboard.activate();
   registerIPC();
   createTray();
+  // Write the shell shortcut before the first window exists: Windows resolves a
+  // taskbar button's identity when it is created, so doing this afterwards would
+  // leave the first launch of a new build on the previous icon.
+  applyAppMark(preferences.get().appearance.mark);
   mainWindow = createWindow();
   applyAppMark(preferences.get().appearance.mark);
   telemetry.capture("desktop_app_opened");
