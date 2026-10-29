@@ -3,6 +3,28 @@
 All notable UsageAtlas desktop changes are recorded here. This build starts from the open-source
 UsageAtlas app; see [README.md](README.md) for what it adds and what it is not.
 
+## 0.4.3 — 2026-10-29
+
+### Added
+
+- **A blended cost estimate that matches a real bill.** Provider logs often name a private model whose
+  catalog price has nothing to do with the invoice, so the total read **$5.53 for 774 M tokens**.
+  Settings → Data now prices every token at one blended rate, on by default at **$0.54 per million
+  tokens** — the same order as the public leaderboard (42.29 B tokens for roughly $23 k). Saving the
+  setting triggers a rescan, which reprices recent facts without changing a token count.
+- **Active tool capacity for tools without quota windows.** Today's capacity card used to be empty
+  when a provider reported tokens but no metered limit, which is what Freebuff and Claude do locally.
+  It now lists every enabled tool with today's tokens, estimated cost and plan when known, while
+  keeping the existing dials for tools that do report limits.
+
+### Changed
+
+- **The repository carries only the current release.** Roughly 1.2 GB of superseded installers,
+  build output, diagnostic scripts and logs were removed; source, tests and the current release
+  artifacts remain.
+- The discovery catalog is documented as its real size (63 seeded names), with 250+ verified
+  providers moved to the 0.5.0 contract instead of being claimed early.
+
 ## 0.4.2 — 2026-10-29
 
 ### Fixed
@@ -64,7 +86,7 @@ UsageAtlas app; see [README.md](README.md) for what it adds and what it is not.
 
 ### Added
 
-- **A 250-provider discovery catalog.** The offline engine now has names for agents, editors,
+- **A 63-provider discovery seed catalog.** The offline engine now has names for agents, editors,
   gateways and local runtimes; an unknown name returns empty in under two seconds with no network.
 - **A notification inbox.** The last 50 alerts are kept with their arrival time in the Notifications
   tab, survive a restart, and can be cleared; the toast title carries the UsageAtlas name.

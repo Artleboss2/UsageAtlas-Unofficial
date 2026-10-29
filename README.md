@@ -28,7 +28,7 @@
 
 ## Timeline: 0.4.0 → 0.5.0
 
-![Timeline: 0.4.0 shipped six changes, 0.5.0 carries seven acceptance-tested goals](docs/timeline-0.4-0.5.svg)
+![Timeline: 0.4.0 through 0.4.3 shipped, 0.5.0 carries six large acceptance-tested goals](docs/timeline-0.4-0.5.svg)
 
 Earlier 0.3.x cards are in the [previous timeline](docs/timeline.svg). A 0.5.0 goal only moves to
 *shipped* when its acceptance test passes in a build published from this repository.
@@ -59,7 +59,7 @@ Measured on a copy of that profile: **4.61 MB → 0.856 MB (18.6 %), 2,856 → 2
 records that feed every screen unchanged. Restoring from the cloud no longer copies the cloud ledger
 back into SQLite.
 
-**Discovery for providers nobody mapped yet.** A catalog of **250 AI providers** (agents, editors,
+**Discovery for providers nobody mapped yet.** A seed catalog of **63 AI providers** (agents, editors,
 gateways, local runtimes) is available to the offline discovery engine. For a name it derives folder
 spellings, probes SQLite and JSON stores for real token counters, and reports the files it found with
 a confidence score. An unknown name comes back empty in **under two seconds**, without network access,
@@ -78,6 +78,56 @@ updating is enough for Explorer to drop the stock Electron artwork.
 offers a one-click **Roll back to <version>**, relaunching the newest older build with local history
 untouched. The existing restart badge and the check that never reports "latest" for an older window
 remain.
+
+### 0.4.1 — every setting, in one place
+
+**The reference spec became real controls.** The compact always-on-top widget got its own settings
+page, and Settings gained switches for the items that had only been constants: extra log roots and
+ignored project fragments, burn-rate and quota-reset alerts with sounds and do-not-disturb, per-provider
+colours, window opacity and blur, density, model price overrides, currency and tax, project redaction,
+a retention window, and scheduled exports. Twenty-eight controls are wired; SSH/remote logs reuse the
+custom-folder path and multi-account aggregation stays a documented limitation.
+
+**Attribution came back while the provider pull request waits.** A source the hosted service does not
+model can be reported as one or more official providers with a share each. Local rows keep the real
+provider; only the uploaded copy is relabelled, and every request keeps the target it first received.
+
+**The local file got smaller again.** Day details are stored deflated, acknowledged collection and
+capacity snapshots are deleted, attribution labels live on their row instead of in a settings table,
+and saved request payloads are kept for a week. On a current profile: **1,380,352 → 704,512 bytes
+(49 % smaller), 606 → 278 fact rows**, with every day, token, cost, hour and model total intact.
+
+### 0.4.2 — updates that actually update
+
+**A newer build now takes the lock from the old one.** Squirrel writes each version to its own
+`app-<version>` folder but leaves the previous process running. That process kept the window, the
+database and — most visibly — the old taskbar icon, so launching the new build only refocused it. A
+newer copy now asks the running one to step aside and relaunches after the lock is released.
+
+**One build, one icon, no leftovers.** `refresh-install.ps1` runs on every packaged launch: it stops
+processes from older `app-*` folders, deletes those folders, rewrites the Start Menu and pinned
+shortcuts with the current ICO, and asks Explorer to drop its icon cache. After installing 0.4.2 the
+machine held only `app-0.4.2`, and every shortcut carried that build's icon.
+
+**The settings screens were repaired.** The widget preview and provider-colour rows had no CSS at all;
+they now use the same card language as the rest of the app. Number fields hide Chromium's Windows
+spinners, and the mini window's budget ring no longer spills “Not set” out of its 46 px dial.
+
+### 0.4.3 — costs that look like a bill
+
+**A realistic cost estimate, at last.** Model catalog prices are meaningless for private names such as
+Freebuff's `m-…` ids: the old total said **$5.53 for 774 M tokens**. Settings → Data now has a blended
+estimate, on by default at **$0.54 per million tokens** — the rate at the top of the public
+leaderboard (42.29 B tokens for roughly $23 k). The engine prices new observations at that rate, and a
+save triggers a rescan so recent history is repriced without touching token counts.
+
+**Active tool capacity for tools without quotas.** The Today card used to be empty when a provider
+reported tokens but no metered window — exactly what Freebuff and Claude do locally. It now lists every
+enabled tool with today's tokens and estimated cost, plus plan when known, and keeps quota dials for
+the tools that do report limits.
+
+**The repository stopped carrying old installers.** 0.4.3 removes roughly **1.2 GB** of superseded
+release assets, build output and logs, keeping only the artifacts for the current release.
 
 ### Private and unlisted providers
 
@@ -183,7 +233,7 @@ known token store.
 - Usage alerts that fire a native notification before you run into a limit
 - A notification inbox with the last 50 alerts, kept across restarts
 - A daily token alert that says exactly `You used 128,400 tokens on Freebuff today.`
-- A 250-provider discovery catalog for providers nobody mapped yet
+- A 63-provider discovery seed catalog for providers nobody mapped yet
 - Appearance that stays Apple-quiet: bundled variable fonts, a type scale, ink colour, accent tint,
   glass or solid surfaces, motion, number style, app mark and background
 - Full figures by default, with short units available for charts
@@ -281,24 +331,29 @@ publishes Windows artifacts.
 
 ## 0.5.0 goals
 
-Each line is an acceptance test, not a wish:
+0.5.0 is the release where the app stops needing a mapped provider, a low estimate or a manual
+update. Six large outcomes, each with an acceptance test:
 
-- **Appearance, deeper.** A free accent picker, per-section density, background dimming, and theme
-  import/export as a small JSON file. A theme exported on one computer reproduces font, scale, ink,
-  accent, surfaces and background on another, with no restart.
-- **Complete translation.** Every renderer string in English, French, Spanish, Chinese and Hindi,
-  including cloud, attribution-free settings and diagnostics. A missing-key test and a hard-coded
-  English sweep pass.
-- **Cheaper idle.** Cold start to first paint under 400 ms, under 250 MB resident after an hour idle,
-  and no page switch above 50 ms on the reference machine.
-- **Discovery in the app.** Type a provider name in Settings, see the probe result, its store and its
-  confidence, and keep the answer when the config folder moves.
-- **Compact cloud format.** One document per provider and day, merged additively, if the hosted
-  service accepts it; otherwise the outbox stays the contract and is documented as such.
-- **Guarded migration.** One run per account, a seven-day rollback copy, and no token lost when a
-  migration is interrupted.
-- **Trusted updates.** Keep the restart badge, one-click rollback and the check that never reports
-  “latest” for an older window, and cover each with a test.
+- **Any AI tool in under 60 seconds.** Type a name, or let the app scan what is installed; it probes
+  the store, proves a first token, and keeps a working route. Acceptance: **250+ verified providers**
+  in the catalog, **95 % of installed tools detected** on a clean Windows profile, the first token
+  shown in **under 60 seconds**, and **zero network requests** during discovery.
+- **Invoice-grade cost.** Blended and per-model estimates reconcile with real provider bills.
+  Acceptance: within **±5 %** of the invoice on three providers for a full month, with currency, tax,
+  per-model overrides, and CSV/JSON export all accounted for.
+- **Zero-loss multi-device cloud.** One compact document per provider and day, merged additively,
+  conflict-free across two computers. Acceptance: restore a year of history in **under 10 seconds**,
+  **no duplicate token** after three interrupted saves, and every fact id verified before upload.
+- **Invisible by default.** Acceptance: cold start to first paint **under 300 ms**, **under 120 MB**
+  resident after an hour idle, **no measurable idle CPU**, and no page switch above **50 ms** on the
+  reference machine.
+- **Private and trusted by construction.** Encrypted local history, signed update feeds, automatic
+  rollback, and no stale build left behind. Acceptance: a tampered package is refused, a failed
+  update returns to the previous build in one launch, and **zero** `app-*` folders other than the
+  running one remain after an update.
+- **World-ready.** Ten languages including one right-to-left catalog, every renderer string
+  translated, and keyboard-only navigation. Acceptance: a missing-key test, a hard-coded English
+  sweep, RTL screenshots, and **WCAG 2.2 AA** on the six main screens.
 
 ## Acknowledgements
 
