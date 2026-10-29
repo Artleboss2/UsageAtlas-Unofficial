@@ -3,6 +3,25 @@
 All notable UsageAtlas desktop changes are recorded here. This build starts from the open-source
 UsageAtlas app; see [README.md](README.md) for what it adds and what it is not.
 
+## 0.4.2 — 2026-10-29
+
+### Fixed
+
+- **An update now ends on the new build, with its icon.** Squirrel installs a new `app-<version>`
+  folder while the previous build keeps running, and that older process holds the single-instance
+  lock — so launching the new build only refocused the old one and kept its taskbar artwork. A newer
+  copy now asks the running one to step aside, and `refresh-install.ps1` stops other builds, deletes
+  their folders and refreshes Explorer's icon cache on every launch. Start Menu and pinned
+  shortcuts are rewritten with the current mark.
+- **Settings → Widget preview** is styled like the floating window again: separate title and model
+  lines, ring gauges with captions, and three labelled stats instead of run-together text.
+- **Provider colour rows** are real chips: the logo is 18px, the name truncates, and the swatch and
+  reset button keep their places instead of overlapping the text.
+- **Number fields** hide Chromium's Windows spinners and right-align their value; selects use a
+  consistent chevron.
+- **The mini window's budget gauge** shows an em dash when no budget is set, so the label no longer
+  spills out of the ring.
+
 ## 0.4.1 — 2026-10-29
 
 ### Added
