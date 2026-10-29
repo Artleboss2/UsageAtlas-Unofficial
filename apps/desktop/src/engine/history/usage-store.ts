@@ -1,3 +1,4 @@
+import { deflateRawSync, inflateRawSync } from "node:zlib";
 import { StatisticsStore } from "./statistics-store";
 import { readHistoryDayPayload } from "./payload";
 import { previewModelRecovery } from "./usage-payload";
@@ -28,6 +29,7 @@ CREATE TABLE IF NOT EXISTS usage_record (
   day TEXT,
   payload TEXT NOT NULL,
   details TEXT,
+  reported TEXT,
   local_version INTEGER NOT NULL DEFAULT 1,
   saved_version INTEGER NOT NULL DEFAULT 0,
   cloud_revision INTEGER NOT NULL DEFAULT 0,
@@ -52,6 +54,8 @@ export class UsageStore {
     this.statistics = new StatisticsStore(db, () => this.owner);
     if (!db.all("PRAGMA table_info(usage_record)").some((column) => column.name === "save_error"))
       db.exec("ALTER TABLE usage_record ADD COLUMN save_error TEXT");
+    if (!db.all("PRAGMA table_info(usage_record)").some((column) => column.name === "reported"))
+      db.exec("ALTER TABLE usage_record ADD COLUMN reported TEXT");
     this.repair();
     this.compact();
   }
@@ -65,21 +69,85 @@ export class UsageStore {
    */
   private compact(): void {
     const removed = this.statistics.compact();
+    this.compressStoredDetails();
+    this.migrateAttributionLabels();
     const version = this.setting("storage-compact");
     const freed = Number(this.db.get("PRAGMA freelist_count")?.freelist_count ?? 0);
-    if (version === "1" && removed === 0 && freed < 64) return;
+    // Bump when a build frees pages without removing rows (dropped indexes,
+    // labels moved onto their rows), so the file is rewritten once on upgrade.
+    const CODE_LAYOUT = "2";
+    if (version === CODE_LAYOUT && removed === 0 && freed < 64) return;
     try {
       // The writer connection can hold the file between batches; the deletions are
       // already committed and VACUUM can run on the next launch.
       this.db.exec("PRAGMA wal_checkpoint(TRUNCATE)");
       this.db.exec("VACUUM");
-      this.setSetting("storage-compact", "1");
+      this.setSetting("storage-compact", CODE_LAYOUT);
     } catch {
       // Reclaiming space is best effort; deleted rows still free their pages.
     }
   }
+  /**
+   * Moves labels an earlier build kept in `usage_setting` onto the rows they
+   * name, then drops the settings rows. Labels whose row is already gone are
+   * simply discarded, which is also what pruning did.
+   */
+  private migrateAttributionLabels(): void {
+    if (this.setting("attribution-columns") === "1") return;
+    this.db.run(`UPDATE usage_fact SET reported = (SELECT value FROM usage_setting
+        WHERE key = 'attribution:fact:' || usage_fact.id)
+      WHERE reported IS NULL AND EXISTS (SELECT 1 FROM usage_setting
+        WHERE key = 'attribution:fact:' || usage_fact.id)`);
+    this.db.run(`UPDATE usage_record SET reported = (SELECT value FROM usage_setting
+        WHERE key = 'attribution:record:' || usage_record.id)
+      WHERE reported IS NULL AND EXISTS (SELECT 1 FROM usage_setting
+        WHERE key = 'attribution:record:' || usage_record.id)`);
+    this.db.run("DELETE FROM usage_setting WHERE key LIKE 'attribution:fact:%' OR key LIKE 'attribution:record:%'");
+    this.setSetting("attribution-columns", "1");
+  }
+
+  /** Rewrites detail rows written by older builds, which stored raw JSON. */
+  private compressStoredDetails(): void {
+    const rows = this.db.all(
+      "SELECT owner, id, details FROM usage_record WHERE details IS NOT NULL AND length(details) >= 160 AND substr(details, 1, 3) <> ? LIMIT 500",
+      [DETAILS_PREFIX]
+    );
+    for (const row of rows) {
+      const encoded = encodeDetails(String(row.details));
+      if (encoded === row.details) continue;
+      this.db.run("UPDATE usage_record SET details = ? WHERE owner = ? AND id = ?", [
+        encoded,
+        String(row.owner),
+        String(row.id)
+      ]);
+    }
+  }
   get owner(): string {
     return this.setting("owner") ?? "";
+  }
+  /**
+   * Drops day records and observations older than the retention window. The
+   * `usage_event_seen` fingerprints stay, so a later rescan cannot resurrect a day
+   * the user chose to forget.
+   */
+  pruneBeforeDays(days: number): number {
+    const cutoffDay = new Date(Date.now() - days * 24 * 60 * 60_000).toISOString().slice(0, 10);
+    const cutoffAt = `${cutoffDay}T00:00:00.000Z`;
+    const before = Number(this.db.get("SELECT COUNT(*) AS count FROM usage_record")?.count ?? 0)
+      + Number(this.db.get("SELECT COUNT(*) AS count FROM usage_fact")?.count ?? 0);
+    this.transaction(() => {
+      this.db.run("DELETE FROM usage_record WHERE day IS NOT NULL AND day < ?", [cutoffDay]);
+      this.db.run("DELETE FROM usage_fact WHERE occurred_at < ?", [cutoffAt]);
+    });
+    try {
+      this.db.exec("PRAGMA wal_checkpoint(TRUNCATE)");
+      this.db.exec("VACUUM");
+    } catch {
+      // Space is reclaimed on the next launch if the writer is holding the file.
+    }
+    const after = Number(this.db.get("SELECT COUNT(*) AS count FROM usage_record")?.count ?? 0)
+      + Number(this.db.get("SELECT COUNT(*) AS count FROM usage_fact")?.count ?? 0);
+    return Math.max(0, before - after);
   }
   setting(key: string): string | null {
     return (this.db.get("SELECT value FROM usage_setting WHERE key = ?", [key])?.value as string) ?? null;
@@ -137,11 +205,51 @@ export class UsageStore {
       } catch {
         // The local payload itself is unreadable; keep the flags for recovery.
       }
-      if (row.conflict !== null && !conflict)
-        this.db.run("UPDATE usage_record SET conflict = NULL WHERE owner = ? AND id = ?", [owner, id]);
+      if (row.conflict !== null) {
+        if (!conflict) this.db.run("UPDATE usage_record SET conflict = NULL WHERE owner = ? AND id = ?", [owner, id]);
+        else if (local && conflict.record.providerId !== local.providerId) {
+          // The same record was reported under another provider when the wheel was
+          // weighted differently. This machine's own earlier upload becomes the
+          // label, and the local copy continues from the revision it reached.
+          this.setAttribution(`record:${id}`, attributionOf(conflict.record));
+          this.db.run("UPDATE usage_record SET cloud_revision = ?, conflict = NULL WHERE owner = ? AND id = ?", [
+            conflict.revision,
+            owner,
+            id
+          ]);
+        }
+      }
       if (row.save_error !== null && local)
         this.db.run("UPDATE usage_record SET save_error = NULL WHERE owner = ? AND id = ?", [owner, id]);
     }
+  }
+  /**
+   * The attribution (`provider|model`) a record was already reported as. The
+   * reporting wheel may be re-weighted between runs, but a record the server
+   * already holds under one provider must keep it: the server refuses the same
+   * record under another provider at the same revision.
+   *
+   * The label lives on the row it describes. A settings row keyed by the record
+   * id cost roughly a hundred bytes each, on a separate table and index, for a
+   * value that can only be useful while its row exists.
+   */
+  attribution(key: string): string | null {
+    const target = attributionRow(key);
+    if (!target) return this.setting(`attribution:${key}`);
+    const row = this.db.get(
+      `SELECT reported FROM ${target.table} WHERE id = ? AND reported IS NOT NULL ORDER BY owner = ? DESC LIMIT 1`,
+      [target.id, this.owner]
+    );
+    return row ? String(row.reported) : null;
+  }
+  setAttribution(key: string, value: string): void {
+    const target = attributionRow(key);
+    if (!target) return this.setSetting(`attribution:${key}`, value);
+    this.db.run(`UPDATE ${target.table} SET reported = ? WHERE id = ?`, [value, target.id]);
+  }
+  /** Keeps the first attribution this machine used for a record. */
+  rememberAttribution(key: string, value: string): void {
+    if (this.attribution(key) === null) this.setAttribution(key, value);
   }
   get(id: string, owner = this.owner): LocalRecord | null {
     const row = this.db.get("SELECT * FROM usage_record WHERE owner = ? AND id = ?", [owner, id]);
@@ -182,7 +290,7 @@ export class UsageStore {
     if (existing && sameUsage(existing.record, record)) {
       if (details !== existing.details || existing.saveError)
         this.db.run("UPDATE usage_record SET details = ?, save_error = NULL WHERE owner = ? AND id = ?", [
-          details,
+          encodeDetails(details),
           owner,
           record.recordId
         ]);
@@ -197,7 +305,7 @@ export class UsageStore {
         record.providerId,
         record.kind === "usage_day" ? record.localDay : null,
         canonicalUsage(record),
-        details,
+        encodeDetails(details),
         existing?.conflict ? JSON.stringify(existing.conflict) : null
       ]
     );
@@ -324,8 +432,12 @@ export class UsageStore {
       [sent.localVersion, remote.revision, this.owner, sent.record.recordId, remote.revision]
     );
   }
-  /** Merges one cloud copy into the local ledger. */
-  merge(remote: CloudRecord): void {
+  /**
+   * Merges one cloud copy into the local ledger. `localize` maps a cloud copy back
+   * onto the local record it came from, so a record uploaded under another
+   * provider does not rename the row counted on this computer.
+   */
+  merge(remote: CloudRecord, localize?: (incoming: UsageRecord, local: UsageRecord) => UsageRecord): void {
     validateUsageRecord(remote.record);
     if (!Number.isSafeInteger(remote.revision) || remote.revision < 1)
       throw new Error("Invalid cloud revision.");
@@ -333,7 +445,11 @@ export class UsageStore {
       if (remote.record.kind === "usage_day" && remote.record.timeZone)
         this.setSetting(`timezone:${this.owner}:${remote.record.sourceId}`, remote.record.timeZone);
       const local = this.get(remote.record.recordId);
-      const incoming = remote.record;
+      const incoming = local && localize ? localize(remote.record, local.record) : remote.record;
+      // The cloud copy carries the label this machine reported the record under, and
+      // the server refuses that record under any other provider from now on.
+      if (local && remote.record.providerId !== local.record.providerId)
+        this.setAttribution(`record:${remote.record.recordId}`, attributionOf(remote.record));
       if (!local) {
         const inserted = this.put(incoming, null);
         this.acknowledge(inserted, remote);
@@ -344,6 +460,15 @@ export class UsageStore {
       } else if (local.localVersion === local.savedVersion) {
         const updated = this.put(incoming, this.compatibleDetails(local, incoming));
         this.acknowledge(updated, remote);
+      } else if (this.reportedAs(remote.record, local.record)) {
+        // Same day, same attribution, newer local usage: this machine is simply
+        // ahead of its own earlier upload. Continue from the revision the server
+        // holds instead of leaving the record pending forever.
+        this.db.run("UPDATE usage_record SET cloud_revision = ? WHERE owner = ? AND id = ?", [
+          remote.revision,
+          this.owner,
+          local.record.recordId
+        ]);
       } else if (remote.revision !== local.revision) {
         this.db.run("UPDATE usage_record SET conflict = ? WHERE owner = ? AND id = ?", [
           JSON.stringify({ ...remote, record: incoming }),
@@ -362,6 +487,8 @@ export class UsageStore {
         const updated = this.put(remote.record, local ? this.compatibleDetails(local, remote.record) : null);
         this.acknowledge(updated, remote);
       } else {
+        if (remote.record.providerId !== local.record.providerId)
+          this.rememberAttribution(`record:${id}`, attributionOf(remote.record));
         this.db.run(
           "UPDATE usage_record SET cloud_revision = ?, conflict = NULL WHERE owner = ? AND id = ?",
           [remote.revision, this.owner, id]
@@ -369,6 +496,9 @@ export class UsageStore {
       }
     });
     this.onChange?.();
+  }
+  private reportedAs(remote: UsageRecord, local: UsageRecord): boolean {
+    return this.attribution(`record:${local.recordId}`) === attributionOf(remote);
   }
   private compatibleDetails(local: LocalRecord, incoming: UsageRecord): string | null {
     if (incoming.kind !== "usage_day" || local.record.kind !== "usage_day") return null;
@@ -388,6 +518,54 @@ export class UsageStore {
     }
   }
 }
+/**
+ * Separates a stored label's provider from its model. A NUL byte cannot be used:
+ * the SQLite binding truncates strings at it, which silently dropped the model.
+ */
+export const ATTRIBUTION_SEPARATOR = "|";
+/** The row a stored attribution label describes; labels never stand alone. */
+const ATTRIBUTION_TABLES = { fact: "usage_fact", record: "usage_record" } as const;
+function attributionRow(key: string): { table: string; id: string } | null {
+  const cut = key.indexOf(":");
+  if (cut < 1) return null;
+  const table = ATTRIBUTION_TABLES[key.slice(0, cut) as keyof typeof ATTRIBUTION_TABLES];
+  return table ? { table, id: key.slice(cut + 1) } : null;
+}
+/** How one uploaded record is labelled: the provider the server sees and its model. */
+export function attributionOf(record: UsageRecord): string {
+  const models = record.kind === "usage_day" ? record.models : null;
+  return `${record.providerId}${ATTRIBUTION_SEPARATOR}${models?.[0]?.modelKey ?? ""}`;
+}
+export function parseAttribution(value: string): { reportAs: string; model: string } {
+  const cut = value.indexOf(ATTRIBUTION_SEPARATOR);
+  return cut === -1
+    ? { reportAs: value, model: "" }
+    : { reportAs: value.slice(0, cut), model: value.slice(cut + 1) };
+}
+/**
+ * A day's display detail is a large JSON object read only when the day is shown.
+ * It is stored deflated so a long history keeps its breakdowns without paying for
+ * pretty-printed JSON on disk. Existing plain rows still read.
+ */
+const DETAILS_PREFIX = "z1:";
+
+function encodeDetails(value: string | null): string | null {
+  if (value === null || value.length < 160 || value.startsWith(DETAILS_PREFIX)) return value;
+  const compressed = `${DETAILS_PREFIX}${deflateRawSync(value, { level: 9 }).toString("base64")}`;
+  return compressed.length < value.length ? compressed : value;
+}
+
+function decodeDetails(value: unknown): string | null {
+  if (value === null || value === undefined) return null;
+  const stored = String(value);
+  if (!stored.startsWith(DETAILS_PREFIX)) return stored;
+  try {
+    return inflateRawSync(Buffer.from(stored.slice(DETAILS_PREFIX.length), "base64")).toString("utf8");
+  } catch {
+    return null;
+  }
+}
+
 function decode(row: Record<string, unknown>): LocalRecord {
   const conflict = readConflict(row.conflict);
   return {
@@ -396,7 +574,7 @@ function decode(row: Record<string, unknown>): LocalRecord {
     revision: Number(row.cloud_revision),
     localVersion: Number(row.local_version),
     savedVersion: Number(row.saved_version),
-    details: row.details === null ? null : String(row.details),
+    details: decodeDetails(row.details),
     saveError: row.save_error === null ? null : String(row.save_error),
     conflict
   };

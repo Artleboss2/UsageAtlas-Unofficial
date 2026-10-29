@@ -4,6 +4,8 @@ import { openWritableSqlite } from "../platform/sqlite";
 import { UsageStore } from "./usage-store";
 import { identifyFact } from "./statistics-store";
 import type { UsageEventFact } from "@usageatlas/contracts/statistics";
+import { validateUsageRecord, type UsageDay } from "@usageatlas/contracts/usage";
+import fixtures from "@usageatlas/contracts/fixtures/usage-record-v1.json";
 
 const opened: { close(): Promise<void> }[] = [];
 afterEach(async () => {
@@ -73,6 +75,82 @@ describe("compact local ledger", () => {
     store.statistics.capacity("codex", "local", "replica", { ...live, updatedAt: "2026-09-23T11:00:00Z" });
     const rows = db.all("SELECT occurred_at FROM usage_fact WHERE kind = 'capacity'");
     expect(rows).toEqual([{ occurred_at: "2026-09-23T11:00:00Z" }]);
+  });
+
+  it("compresses a day's display detail and returns it unchanged", () => {
+    const db = database();
+    const store = new UsageStore(db);
+    const details = JSON.stringify({
+      models: Array.from({ length: 80 }, (_, index) => ({ id: `model-${index}`, label: `Model ${index}`, totalTokens: 1_234 })),
+      hourly: Array.from({ length: 24 }, (_, hour) => ({ hour, totalTokens: 4_321 }))
+    });
+    const day: UsageDay = {
+      schemaVersion: 1,
+      recordId: "22222222-2222-4222-8222-222222222222",
+      sourceId: "11111111-1111-4111-8111-111111111111",
+      providerId: "codex",
+      kind: "usage_day",
+      observedAt: "2026-09-23T12:00:00.000Z",
+      localDay: "2026-09-23",
+      timeZone: "UTC",
+      dayState: "complete",
+      collectionMethod: "local_activity",
+      status: "available",
+      totals: { inputTokens: 10, cachedInputTokens: 0, cacheCreationInputTokens: 0, outputTokens: 10, totalTokens: 20, requests: 1, estimatedCostMicrosUSD: 0, unpricedTokens: 0 },
+      hourly: null,
+      models: null
+    };
+    const stored = store.put(day, details);
+
+    const raw = String(db.get("SELECT details FROM usage_record WHERE id = ?", [day.recordId])?.details);
+    expect(raw.startsWith("z1:")).toBe(true);
+    expect(raw.length).toBeLessThan(details.length / 3);
+    expect(store.get(day.recordId)?.details).toBe(details);
+    expect(stored.details).toBe(details);
+  });
+
+  it("drops provenance the server already holds", () => {
+    const db = database();
+    const store = new UsageStore(db);
+    store.selectAccount("a");
+    const facts = [...store.statistics.observations("codex", "local", "replica", analytics())];
+    for (const fact of facts) store.statistics.put(fact, true);
+    expect(facts.some(fact => fact.kind === "collection")).toBe(true);
+    expect(db.all("SELECT id FROM usage_fact WHERE kind = 'collection'")).toHaveLength(1);
+
+    store.statistics.compact();
+    expect(db.all("SELECT id FROM usage_fact WHERE kind IN ('collection', 'capacity')")).toEqual([]);
+  });
+
+  it("keeps an attribution label on the row it names instead of a settings row", () => {
+    const db = database();
+    const store = new UsageStore(db);
+    const fact = [...store.statistics.observations("codex", "local", "replica", analytics())][0] as UsageEventFact;
+    store.statistics.put(fact);
+    store.setAttribution(`fact:${fact.id}`, "codex|gpt-5.3-codex");
+    expect(store.attribution(`fact:${fact.id}`)).toBe("codex|gpt-5.3-codex");
+    expect(db.get("SELECT reported FROM usage_fact WHERE id = ?", [fact.id])?.reported).toBe("codex|gpt-5.3-codex");
+
+    const record = validateUsageRecord(structuredClone(fixtures[0])) as UsageDay;
+    store.put(record);
+    store.setAttribution(`record:${record.recordId}`, "claude|claude-opus-5");
+    expect(store.attribution(`record:${record.recordId}`)).toBe("claude|claude-opus-5");
+    expect(db.get("SELECT reported FROM usage_record WHERE id = ?", [record.recordId])?.reported).toBe("claude|claude-opus-5");
+    expect(db.all("SELECT key FROM usage_setting WHERE key LIKE 'attribution:%'")).toEqual([]);
+  });
+
+  it("moves labels written by earlier builds onto their rows", () => {
+    const db = database();
+    const store = new UsageStore(db);
+    const fact = [...store.statistics.observations("codex", "local", "replica", analytics())][0] as UsageEventFact;
+    store.statistics.put(fact);
+    // What 0.4.x wrote: one settings row per labelled fact.
+    store.setSetting(`attribution:fact:${fact.id}`, "claude|claude-opus-5");
+    db.run("DELETE FROM usage_setting WHERE key = 'attribution-columns'");
+
+    const reopened = new UsageStore(db);
+    expect(reopened.attribution(`fact:${fact.id}`)).toBe("claude|claude-opus-5");
+    expect(db.all("SELECT key FROM usage_setting WHERE key LIKE 'attribution:%'")).toEqual([]);
   });
 
   it("drops saved events past the window but remembers their content", () => {

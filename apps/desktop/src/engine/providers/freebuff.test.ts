@@ -65,7 +65,9 @@ async function chatFixture(home: string, messages: unknown[], name = "chat"): Pr
   const directory = path.join(home, ".config", "manicode", "projects", "app", "chats", name);
   await mkdir(directory, { recursive: true });
   await writeFile(path.join(directory, "chat-messages.json"), JSON.stringify(messages));
-  await utimes(path.join(directory, "chat-messages.json"), now, now);
+  // Availability asks whether the transcript was touched recently, using the real
+  // clock, so the fixture's mtime has to be current rather than the frozen `now`.
+  await utimes(path.join(directory, "chat-messages.json"), new Date(), new Date());
   return directory;
 }
 

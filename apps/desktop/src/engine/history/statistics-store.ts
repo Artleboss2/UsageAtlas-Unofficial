@@ -39,9 +39,11 @@ function fingerprint(value: unknown): Fingerprinted {
 /**
  * How long a saved observation keeps its payload. Past this, the event is only
  * remembered by its content id, which is all a rescan needs to avoid uploading
- * it a second time. The day record already holds its totals.
+ * it a second time. The day record already holds its totals, so a week of
+ * request detail is enough to answer "what just ran" without keeping a second
+ * full history.
  */
-const SAVED_EVENT_RETENTION_MS = 30 * 24 * 60 * 60 * 1_000;
+const SAVED_EVENT_RETENTION_MS = 7 * 24 * 60 * 60 * 1_000;
 
 /** Immutable numeric observations, independently recoverable from display summaries. */
 export class StatisticsStore {
@@ -56,14 +58,12 @@ export class StatisticsStore {
         kind TEXT NOT NULL, provider TEXT NOT NULL, occurred_at TEXT NOT NULL,
         event_id TEXT, model TEXT, project_id TEXT, session_id TEXT,
         payload TEXT NOT NULL, saved INTEGER NOT NULL DEFAULT 0 CHECK (saved IN (0,1)),
-        content_id TEXT,
+        content_id TEXT, reported TEXT,
         PRIMARY KEY(owner,id)
       );
       CREATE INDEX IF NOT EXISTS usage_fact_pending ON usage_fact(owner,id) WHERE saved = 0;
       CREATE INDEX IF NOT EXISTS usage_fact_time ON usage_fact(owner,provider,occurred_at);
-      CREATE INDEX IF NOT EXISTS usage_fact_model ON usage_fact(owner,model,occurred_at);
       CREATE INDEX IF NOT EXISTS usage_fact_event ON usage_fact(owner,event_id);
-      CREATE INDEX IF NOT EXISTS usage_fact_project ON usage_fact(owner,project_id,occurred_at);
       CREATE VIEW IF NOT EXISTS usage_event_latest AS
         SELECT * FROM (
           SELECT f.*, COUNT(*) OVER (PARTITION BY owner,event_id) AS observation_versions,
@@ -74,6 +74,12 @@ export class StatisticsStore {
     `);
     if (!db.all("PRAGMA table_info(usage_fact)").some(column => column.name === "content_id"))
       db.exec("ALTER TABLE usage_fact ADD COLUMN content_id TEXT");
+    if (!db.all("PRAGMA table_info(usage_fact)").some(column => column.name === "reported"))
+      db.exec("ALTER TABLE usage_fact ADD COLUMN reported TEXT");
+    // Two indexes indexed columns no query in this app filters on, and together
+    // they weighed more than the facts they pointed at. The documented view stays
+    // the way to read history by model or project.
+    db.exec("DROP INDEX IF EXISTS usage_fact_model; DROP INDEX IF EXISTS usage_fact_project");
   }
   /**
    * Keeps the ledger an outbox rather than a second history.
@@ -97,6 +103,10 @@ export class StatisticsStore {
       `DELETE FROM usage_fact WHERE kind = 'usage_event' AND saved = 1 AND content_id IS NOT NULL AND occurred_at < ?`,
       [cutoff]
     );
+    // Provenance is upload-only: once the server holds a collection or capacity
+    // snapshot, keeping a second copy here only grows the local file. A failed
+    // save leaves saved = 0, so nothing is lost before it is acknowledged.
+    this.db.run("DELETE FROM usage_fact WHERE kind IN ('collection', 'capacity') AND saved = 1");
     this.pruneProvenance();
     const after = Number(this.db.get("SELECT COUNT(*) AS count FROM usage_fact")?.count ?? 0);
     return before - after;
