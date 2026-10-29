@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import type { DashboardProvider } from "@usageatlas/contracts";
 import { Button, Card } from "@heroui/react";
 import type { DesktopPreferences } from "../../shared/desktop-api";
@@ -11,6 +11,7 @@ import {
   type ReportTarget
 } from "../../shared/report-plans";
 import { defaultReportedModel, modelOptions } from "../../shared/report-models";
+import { previewPlan, wheelTarget } from "../../shared/report-wheel";
 
 interface AttributionProps {
   providers: DashboardProvider[];
@@ -34,13 +35,15 @@ export function Attribution({ providers, preferences, saving, onSave }: Attribut
   const [edited, setEdited] = useState<ReportPlan[] | null>(null);
   const [status, setStatus] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const draft = edited ?? preferences?.reportPlans ?? [];
+  const draft = useMemo(() => edited ?? preferences?.reportPlans ?? [], [edited, preferences?.reportPlans]);
 
   const sources = providers.map(provider => ({ id: provider.id, name: provider.name }));
   const used = new Set<string>(draft.map(plan => plan.source));
   const available = sources.filter(source => !used.has(source.id));
   const invalid = draft.some(plan => !plan.targets.length || duplicateTarget(plan)
     || plan.targets.some(target => !target.model.trim() || !(target.weight >= 1 && target.weight <= MAX_WEIGHT)));
+  // Same wheel, same keys: this is the distribution the next save will produce.
+  const previews = useMemo(() => draft.map(plan => previewPlan(plan)), [draft]);
 
   function edit(next: ReportPlan[]): void {
     setEdited(next);
@@ -239,6 +242,34 @@ export function Attribution({ providers, preferences, saving, onSave }: Attribut
                     </Button>
                   </div>
                 ))}
+
+                <div className="atlas-plan-preview" data-drift={previews[planIndex].driftPoints > 2 || undefined}>
+                  <p className="text-xs text-muted">
+                    Over {previews[planIndex].sampleSize.toLocaleString()} sample requests, the wheel lands
+                    within {previews[planIndex].driftPoints.toFixed(2)} points of the shares above.
+                  </p>
+                  <ul className="atlas-plan-preview__rows">
+                    {previews[planIndex].targets.map((target) => (
+                      <li key={`${target.reportAs}-${target.model}`}>
+                        <span
+                          aria-hidden="true"
+                          className="atlas-plan-preview__bar"
+                          style={{ width: `${Math.max(2, target.sampled * 100)}%` }}
+                        />
+                        <span className="atlas-plan-preview__label">
+                          {target.reportAs} · {target.model}
+                        </span>
+                        <span className="atlas-plan-preview__value">
+                          {(target.sampled * 100).toFixed(1)}% ({target.requests})
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                  <p className="atlas-plan-preview__sample text-xs text-muted">
+                    First upload in the sample: {wheelTarget(plan, "preview-0")?.reportAs ?? "none"} ·{" "}
+                    {wheelTarget(plan, "preview-0")?.model ?? "none"}
+                  </p>
+                </div>
 
                 <Button
                   isDisabled={plan.targets.length >= MAX_PLAN_TARGETS}

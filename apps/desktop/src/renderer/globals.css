@@ -3229,6 +3229,63 @@ html[data-appearance-font="geist"] {
   white-space: nowrap;
 }
 
+.atlas-update-settings__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+/* The distribution the wheel will produce, drawn from the same sample the tests use. */
+.atlas-plan-preview {
+  display: grid;
+  gap: 8px;
+  padding-top: 10px;
+  border-top: 1px solid var(--separator);
+}
+
+.atlas-plan-preview__rows {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.atlas-plan-preview__rows li {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  padding: 5px 8px;
+  overflow: hidden;
+  border-radius: 8px;
+  background: color-mix(in oklch, var(--surface) 55%, transparent);
+  font-size: 0.75rem;
+}
+
+.atlas-plan-preview__bar {
+  position: absolute;
+  inset: 0 auto 0 0;
+  background: color-mix(in oklch, var(--accent) 16%, transparent);
+  border-radius: inherit;
+}
+
+.atlas-plan-preview__label,
+.atlas-plan-preview__value {
+  position: relative;
+  z-index: 1;
+}
+
+.atlas-plan-preview__value {
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.atlas-plan-preview[data-drift] .atlas-plan-preview__sample {
+  color: var(--warning, #b45309);
+}
+
 @media (max-width: 760px) {
   .atlas-alias-row {
     grid-template-columns: minmax(0, 1fr);

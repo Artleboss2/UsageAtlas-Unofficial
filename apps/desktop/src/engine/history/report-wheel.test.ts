@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { ReportPlan } from "../../shared/report-plans";
 import { spinTarget } from "./report-wheel";
+import { previewPlan } from "../../shared/report-wheel";
 
 const wheel: ReportPlan = {
   source: "freebuff" as ReportPlan["source"],
@@ -52,6 +53,14 @@ describe("report wheel", () => {
 
     // Different sources are independent wheels: one is not a rotation of the other.
     expect(here).not.toEqual(there);
+  });
+
+  it("previews the shares a save will produce within two points", () => {
+    const preview = previewPlan(wheel, 1_000);
+    expect(preview.targets.reduce((sum, target) => sum + target.requests, 0)).toBe(1_000);
+    expect(preview.driftPoints).toBeLessThanOrEqual(2);
+    // The preview is the upload: the first sampled request takes the same label.
+    expect(previewPlan(wheel, 1).targets.find(target => target.requests === 1)).toBeDefined();
   });
 
   it("reports nothing without a plan or with no weight", () => {
