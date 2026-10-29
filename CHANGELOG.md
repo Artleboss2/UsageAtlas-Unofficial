@@ -1,7 +1,37 @@
 # Changelog
 
-All notable UsageAtlas desktop changes are recorded here. This is an unofficial fork; see
-[README.md](README.md) for what it adds and what it is not.
+All notable UsageAtlas desktop changes are recorded here. This build starts from the open-source
+UsageAtlas app; see [README.md](README.md) for what it adds and what it is not.
+
+## 0.4.0 — 2026-10-29
+
+### Changed
+
+- **Cloud saves report the real provider.** The attribution page and its weighted wheel are removed.
+  A source the hosted service does not model is kept on this computer and named in Settings; nothing
+  is uploaded under another provider's name.
+- **The local ledger is compact.** Saved request rows older than 30 days keep only a content
+  fingerprint, superseded scan and quota snapshots collapse to their newest copy, the write-only
+  archive is dropped, and one `VACUUM` returns the pages. On a real profile: 4.61 MB / 2,856 rows →
+  0.856 MB / 285 rows, with day totals, hours, models and costs unchanged. Restore no longer copies
+  the cloud ledger into SQLite.
+- **The README is rebuilt from the upstream document**, with the 0.4.0 measurements, the added
+  readers, the storage contract and the 0.4.0 → 0.5.0 timeline.
+
+### Added
+
+- **A 250-provider discovery catalog.** The offline engine now has names for agents, editors,
+  gateways and local runtimes; an unknown name returns empty in under two seconds with no network.
+- **A notification inbox.** The last 50 alerts are kept with their arrival time in the Notifications
+  tab, survive a restart, and can be cleared; the toast title carries the UsageAtlas name.
+- **A taskbar and toast identity.** The Start Menu shortcut matching the process's AppUserModelID is
+  written on every launch, including development runs, with the chosen ICO before the first window.
+- **One-click rollback.** Settings relaunches the newest older Squirrel build with local history
+  untouched.
+
+### Removed
+
+- The Attribution page, its wheel and the report-plan settings that rewrote uploaded providers.
 
 ## 0.3.9 — 2026-10-28
 

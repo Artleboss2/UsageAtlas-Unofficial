@@ -1,262 +1,164 @@
 <p align="center">
   <img src="branding/usageatlas-logo.png" width="144" height="144" alt="UsageAtlas app icon">
 </p>
-
-<h1 align="center">UsageAtlas — Unofficial fork</h1>
-
+<h1 align="center">UsageAtlas</h1>
 <p align="center">
-  The UsageAtlas desktop app plus private provider readers,<br>
-  so the tools the hosted service does not model yet can still be counted there.
+One desktop dashboard for your AI coding usage.<br>
+Track local AI history, allowances and balances, and keep a copy in the cloud when you want one.
+</p>
+<p align="center">
+<a href="https://github.com/Artleboss2/UsageAtlas-Unofficial/releases/latest"><strong>Download for Windows</strong></a>
+·
+<a href="https://github.com/Artleboss2/UsageAtlas-Unofficial/releases">All releases</a>
 </p>
 
-> **This fork is not affiliated with UsageAtlas.** It is a personal fork of
-> [SRX9/UsageAtlas](https://github.com/SRX9/UsageAtlas) and is not endorsed by, supported by, or
-> connected to UsageAtlas or its authors. The name only says what it was forked from, and the
-> UsageAtlas name and logo remain the original project's (see [TRADEMARKS.md](TRADEMARKS.md)).
-> Everything below describes this fork's additions; for the base app — installation on macOS and
-> Linux, the full provider list, the design — read the
-> [original repository](https://github.com/SRX9/UsageAtlas).
+> This build starts from the open-source [UsageAtlas](https://github.com/SRX9/UsageAtlas) app and
+> adds the readers, storage work and interface changes described below. It is not endorsed by the
+> original project; the UsageAtlas name and logo remain theirs (see [TRADEMARKS.md](TRADEMARKS.md)).
 
-## What this fork changes
+## Timeline: 0.4.0 → 0.5.0
 
-- **Private provider readers.** Freebuff reads the Desktop app's per-project `desktop-v2.db`
-  (`messages.metrics_json`) for provider-reported input, cached and output tokens per turn, and the
-  CLI's chat transcripts for per-message credits as a fallback. Its location is found by scanning,
-  verified, cached, and re-planned whenever Freebuff moves or replaces it. The model behind its
-  opaque `m-<digest>` id is resolved offline, so Freebuff turns are named and priced at API rates
-  instead of reading as free. z.ai / GLM reads the Coding Plan's five-hour and weekly windows from
-  the quota API. Neither is part of the original app. See [docs/FREEBUFF.md](docs/FREEBUFF.md) and
-  [docs/QUOTA_PROVIDERS.md](docs/QUOTA_PROVIDERS.md).
-- **Four more local readers.** Gemini CLI, Qwen Code, Cline and Roo Code keep their own transcripts;
-  this fork reads the token objects those files already contain. The survey of how each AI tool
-  records usage — including what was researched and deliberately left out — is in
-  [docs/PROVIDER_USAGE_SOURCES.md](docs/PROVIDER_USAGE_SOURCES.md).
-- **Appearance, in Settings.** A dedicated Appearance tab chooses the font (System, Inter, Manrope,
-  Figtree, Jakarta, Geist — all bundled variable fonts), the type scale, the ink colour, the accent
-  tint used by buttons and focus rings (theme, ink, cobalt, violet, rose, forest, amber), glass or
-  solid card surfaces, whether the interface animates, the app  mark (datamosh, classic or duotone,
-  applied to the title bar, window, taskbar and Start Menu shortcut) and the background. Figures print every digit by
-  default — `1,284,930`, not `1.3M` — and Settings can switch back to short units; chart axes stay
-  short either way because labels would otherwise collide. Pages glide in from the side they were
-  reached from, the rail highlight slides between pages, and the home selectors grow under the
-  pointer.
-- **A daily token alert that works for every source.** Usage alerts now include a token threshold:
-  once a source passes it in a local day, a desktop notification says exactly
-  `You used 128,400 tokens on Freebuff today.` A test button sends a real notification, and every
-  alert is mirrored as an in-app banner, so Focus assist or a per-app Windows switch cannot hide it.
-- **Cloud attribution, with a wheel.** The hosted service refuses a provider it does not model, so a
-  cloud save containing Freebuff or z.ai usage is rejected. The **Attribution** page maps such a
-  source to one or more official providers, each with a share — 30 % Codex, 20 % ChatGPT, 50 %
-  Claude, say — and every request spins that wheel, so the uploaded traffic arrives as a realistic
-  mix rather than one relabelled tool. The draw is a hash of the request's own identity, so shares
-  hold over time, four Codex requests in a row are possible, and a retried or interrupted save never
-  renames a request. The uploaded copy is relabelled and renumbered, so the tokens land on the
-  account and show up on the dashboard; a source without a rule is kept on this computer and named in
-  Settings rather than failing the whole save. Model keys the server publishes are offered per
-  provider, and Freebuff's opaque `m-<digest>` ids are shown as the real models behind them.
-- **Provider marks.** The unofficial sources carry their own logos — Freebuff's published mark,
-  z.ai's, plus the Warp and Factory marks the app already shipped. Provenance and hashes are in
-  [apps/desktop/src/renderer/assets/providers/README.md](apps/desktop/src/renderer/assets/providers/README.md).
-- **Publisher choice for updates.** Settings → App updates switches between *Unofficial fork*
-  (these GitHub releases), *Official app* (the original project's mirror) and *Another repository*
-  (any GitHub `owner/name` you name), without a restart.
-- **A glitched icon.** The app icon is the original artwork deliberately datamoshed — channel split,
-  displaced bands, torn scanlines — so an install of this fork is never mistaken for the official
-  build. The mark is applied by the icon pipeline itself (`node tooling/generate-desktop-icons.mjs`),
-  which keeps the branding and web copies untouched and regenerates the same bytes on every run.
-  Windows and Linux draw their own minimize, maximize and close buttons in the title bar, the way
-  Freebuff does; macOS keeps its traffic lights.
+![Timeline: 0.4.0 shipped six changes, 0.5.0 carries seven acceptance-tested goals](docs/timeline-0.4-0.5.svg)
 
-## Timeline
+Earlier 0.3.x cards are in the [previous timeline](docs/timeline.svg). A 0.5.0 goal only moves to
+*shipped* when its acceptance test passes in a build published from this repository.
 
-![Timeline: every 0.3 release from the Freebuff reader to the 0.3.9 cloud-counter and local-archive fixes, followed by the seven 0.4.0 goals](docs/timeline.svg)
+## What 0.4.0 ships
 
-Each shipped card is detailed in [CHANGELOG.md](CHANGELOG.md); the 0.4.0 cards below carry the
-acceptance test each one has to meet before it counts as done.
+**The truth of the usage, with no relabelling.** A cloud save now carries the provider that actually
+produced the request. The old attribution wheel is gone: no source is uploaded under another
+provider's name, and a source the hosted service does not model stays on this computer with a clear
+notice instead of a fake label.
 
-## Storage budget: a third of today, by design
+**A compact local ledger.** The database used to keep one observation per request, one `collection`
+row per scan and one `capacity` row per quota check, plus a write-only archive of every replaced
+day. On a real profile that was 2,856 rows and 4.61 MB for 259 requests. The app now:
 
-Today the app uploads one JSON observation per request, plus a `collection` observation for every
-scan of every source and a `capacity` observation for every quota check. On this profile that is
-2,670 rows and 2.4 MB of payload for only 253 real requests, before the indexes that point at them.
-The plan for 0.4.0 is to **store one document per provider and day** and make it merge additively,
-so repeated scans and repeated saves add into the same document instead of appending rows.
+- keeps one JSON day record per provider, merged additively (totals, hours, models, cost);
+- treats the observation ledger as an **outbox**: saved request rows older than 30 days leave a
+  content fingerprint behind, so a rescan never uploads anything twice;
+- collapses superseded scan and quota snapshots to their newest copy;
+- no longer writes the archive, and returns the freed pages with one `VACUUM`.
 
-**Target**: a save and a local database no larger than **one third** of today's bytes for the same
-usage, with identical totals on the dashboard. Measured on synthetic data below, the aggregation
-lands far under that.
+Measured on a copy of that profile: **4.61 MB → 0.856 MB (18.6 %), 2,856 → 285 rows**, with the day
+records that feed every screen unchanged. Restoring from the cloud no longer copies the cloud ledger
+back into SQLite.
 
-### The day document
+**Discovery for providers nobody mapped yet.** A catalog of **250 AI providers** (agents, editors,
+gateways, local runtimes) is available to the offline discovery engine. For a name it derives folder
+spellings, probes SQLite and JSON stores for real token counters, and reports the files it found with
+a confidence score. An unknown name comes back empty in **under two seconds**, without network access,
+and a saved route is re-planned when the config directory moves.
 
-Key: `(account, providerId, localDay)`. Fields appear only when they carry something, so a quiet
-day is a few hundred bytes instead of a schema-shaped padding. Example (fake data):
+**An inbox, not only a toast.** The last 50 alerts are kept with their arrival time and listed in
+**Notifications**, even when Windows hides the toast. They survive a restart and can be cleared in one
+click. The toast title now carries the UsageAtlas name, and Settings still sends a real test alert.
 
-```json
-{
-  "v": 2, "p": "freebuff", "d": "2026-09-01", "tz": "Etc/GMT+8",
-  "tot": { "in": 327400, "cacheRead": 4206900, "cacheWrite": 0, "out": 108800, "req": 200, "cost": 219900 },
-  "models": {
-    "deepseek-v4-flash": { "in": 109821, "cacheRead": 1404923, "out": 36361, "req": 67 },
-    "claude-fable-5":    { "in": 109600, "cacheRead": 1413700, "out": 36500, "req": 67 }
-  },
-  "hours": {
-    "09": { "in": 12807, "cacheRead": 165141, "out": 5787, "req": 9 },
-    "10": { "in": 13900, "cacheRead": 155700, "out": 4800, "req": 8 }
-  },
-  "cover": { "from": "2026-09-01T00:00:00Z", "to": "2026-09-01T23:59:00Z", "files": 42, "records": 200, "status": "available" },
-  "quota": { "plan": "pro", "credits": 12.5, "windows": [{ "kind": "5h", "used": 42, "resetAt": "2026-09-01T23:00:00Z" }] }
-}
-```
+**An icon and a taskbar identity.** Windows resolves a taskbar button and a toast through the Start
+Menu shortcut matching the app's AppUserModelID. The shortcut is written on every launch — including
+development runs — with the chosen ICO and name, before the first window is created. A restart after
+updating is enough for Explorer to drop the stock Electron artwork.
 
-**How two copies merge.** The rule is what makes the document safe to resend and to grow in place:
+**An update you can undo.** Squirrel keeps every applied build under `app-<version>`. Settings now
+offers a one-click **Roll back to <version>**, relaunching the newest older build with local history
+untouched. The existing restart badge and the check that never reports "latest" for an older window
+remain.
 
-| Section | Merge rule |
-| --- | --- |
-| `tot`, `models.*`, `hours.*` | Field-wise addition; the same request counted once |
-| `cover` | Earliest `from`, latest `to`, maximum `files`/`records`, strongest `status` |
-| `quota` | The observation with the latest `resetAt`/check wins; it is a snapshot, not a sum |
-| `ext` | Optional provider-specific counters, added the same way; unknown keys never force a schema bump |
+## What this build reads
 
-**Idempotence.** Every upload carries the document's previous `rev` and a `batchId`. The server keeps
-the last 32 batch ids per document, ignores a replay, and answers a stale `rev` with its stored copy —
-the same conflict contract the app already handles. A retried save therefore adds nothing twice,
-without per-request ids.
+UsageAtlas reads local activity and reuses supported tool sign-ins. Providers that need an API key or
+session can be connected in **Settings → Sources**.
 
-**What is no longer uploaded.** Per-request timestamps, session and project ids, and reported model
-names. The dashboard only reads day, hour, model and provider totals, so those stay in a seven-day
-local raw buffer for diagnostics and for provider discovery, then roll up into the day document.
+- **Codex** — talks to the installed, signed-in Codex CLI through its official local app-server API.
+- **Claude** — reads `CLAUDE_CODE_OAUTH_TOKEN` or `.credentials.json` in the Claude config directory.
+- **Cursor** — reuses the signed-in desktop session for limits plus 90 days of per-request history.
+- **OpenCode** — reads the local database for per-step token, request, project and model analytics.
+- **Antigravity** — reads local CLI conversation databases.
+- **Pi / OMP** — reads local JSONL sessions, including cache tokens and projects.
+- **Muse Code** — reads local inference and review events.
+- **Freebuff** — reads the Desktop app's per-project `desktop-v2.db` (`messages.metrics_json`), with
+  the CLI transcripts as a fallback. The path planner finds the database wherever Freebuff installed
+  it, verifies its schema and re-plans when it moves. Opaque `m-<digest>` model ids are resolved
+  offline so turns are named and priced.
+- **z.ai / GLM** — reads the Coding Plan's five-hour and weekly windows from the quota API.
+- **Gemini CLI, Qwen Code, Cline, Roo Code** — read the token objects their own transcripts already
+  contain.
 
-### Measured on fake data
+Warp, Kimi Code, Kilo Code, GitHub Copilot, Factory / Droid, Amp and Qoder supply current allowances
+and balances. The seven quota readers do not provide token history, so they never enter daily totals.
+See [provider setup](docs/LOCAL_PROVIDERS.md), [quota providers](docs/QUOTA_PROVIDERS.md) and the
+[source survey](docs/PROVIDER_USAGE_SOURCES.md).
 
-5 providers × 30 days × 200 requests, 3 models and 12 hourly buckets per day, plus 6 collection and
-1 capacity observation per provider-day (what the app writes today):
+## Highlights
 
-| Encoding | Rows | Payload | Avg row |
-| --- | ---: | ---: | ---: |
-| Today: one observation per request/scan/check | 31,050 | 30.1 MB | 969 B |
-| One day document per provider | 150 | 0.29 MB | 1,957 B |
+- Today view with capacity meters, reset times, plan details, credits and hourly activity
+- History and insights across 7, 30 and 90 days by project, session, model and tool
+- Usage alerts with a native notification and an in-app inbox
+- A daily token alert that says exactly `You used 128,400 tokens on Freebuff today.`
+- Appearance that stays Apple-quiet: six bundled variable fonts, a type scale, ink colour, accent
+  tint, glass or solid surfaces, motion, number style, app mark and background
+- Full figures by default (`1,284,930`, not `1.3M`), with short units available for charts
+- Pages glide in from the side they were reached from, and the rail highlight slides between pages
+- Tray presence, launch at login, system/light/dark themes
+- One app instance and one taskbar identity, so a stale build never keeps the old icon
+- Local tracking with no account required
+- Optional free account to save history and restore it on another computer
+- Sealed local history and a sandboxed renderer with an allowlisted preload API, ASAR integrity and
+  Electron fuses
 
-That is **1.0 % of today's payload** and **207× fewer rows**, so the indexes that mirror every row
-shrink by the same factor. On this profile — 2,670 observations in a 7.9 MiB database — the same
-roll-up is roughly 15 documents near 2 KB, and with the archive already bounded to 20 versions per
-record the file lands around **0.5 MiB**, about one sixteenth of today.
+## Privacy
 
-### Acceptance for 0.4.0
+Provider data is read from local files and provider APIs. Completed-day usage and capacity snapshots
+are stored in a local SQLite history database in the app data directory. Without signing in, that
+history stays on this computer.
 
-- 1,000 requests saved in the compact format occupy **at most one third** of the bytes the current
-  ledger uses, with identical totals, hourly buckets and per-model splits after a restore.
-- Replaying a batch does not change any total; a stale `rev` returns the stored document instead of
-  overwriting it.
-- A migration from the current ledger runs once per account, keeps a rollback copy for seven days,
-  and loses no token.
+If you choose a free account, cloud saves store day totals, estimated costs, hourly activity, model
+breakdowns, limits and plan information. They also retain per-request timestamps, model identifiers,
+numeric token and cost measurements, and opaque project and session identifiers. Project and session
+names, paths, prompts, responses, transcripts and coding-tool credentials are never included. A source
+the hosted service does not model is held on this computer and named in Settings; it is not relabelled.
 
-## Providers on the way
+The optional anonymous install count is separate from cloud save. It never includes usage figures,
+your account name or email, and can be switched off in Settings. Diagnostics are redacted before they
+are shown or copied. See the [privacy policy](https://usageatlas.com/privacy) and
+[terms of use](https://usageatlas.com/terms).
 
-The 0.4.0 discovery catalog targets the tools people already run, each with the place its token
-counts are expected to live. `Supported` means a reader ships today; `planned` means a catalog entry
-and a schema probe, not a hand-written parser per tool.
+## Optional free cloud save
 
-| Provider | Expected local store | State |
-| --- | --- | --- |
-| Cline | VS Code `globalStorage/saoudrizwan.claude-dev/tasks/*/ui_messages.json` | planned |
-| Roo Code | `globalStorage/rooveterinaryinc.roo-cline/tasks/*/ui_messages.json` | planned |
-| Continue | `~/.continue/sessions/*.json` | planned |
-| Aider | `~/.aider/analytics.jsonl` | planned |
-| Gemini CLI | `~/.gemini/tmp/<project>/chats/*.json` | planned |
-| Qwen Code | `~/.qwen/tmp/<project>/chats/*.json` | planned |
-| Kilo Code | `globalStorage/kilocode.kilo-code/tasks/*/ui_messages.json` | supported |
-| Amp, Warp, Kimi, Copilot, Factory, Qoder, z.ai | CLI or app state under the user profile | supported |
+1. Open **Settings → Cloud save**.
+2. Sign in with Google or GitHub to create or use a free UsageAtlas account.
+3. Pending usage saves automatically once an hour while the app is running. Turn off **Save
+   automatically** to save only when you press **Save to cloud**.
+4. On another computer, sign in to the same account and choose **Restore from cloud**.
 
-A planned provider is only marked supported once an offline probe finds a store whose schema really
-contains token counts — the same rule the 0.4.0 discovery goal tests.
+Only successfully saved history can be restored. Signing out stops future saves but does not delete
+existing cloud history. A source the server refuses appears under "waiting to be saved" with its own
+name, never as another provider.
 
-## What 0.4.0 aims for
+## Storage
 
-Concrete, checkable goals for the next minor release. Each one is done only when its acceptance
-criterion is met in a build this fork publishes. **0.3.9 is the last release before 0.4.0**: code
-lands on `main` as it is written, but no 0.4.0 build ships until every box below is checked.
+The local database is written by `apps/desktop/src/engine/history`. The day record is the source of
+truth for every screen; `usage_fact` is an upload outbox and a 30-day idempotence window. The
+compaction runs once per database version and is safe to interrupt: deletions are committed before
+`VACUUM`, and a file locked by the background writer is compacted on the next launch.
 
-- [ ] **Find usage stores for providers nobody mapped yet.** Ship a catalog of at least 250 AI
-  providers (name, CLI or app, expected config roots) and, for a provider with no reader, generate
-  candidate file names and folders, probe them offline, and propose the store that actually holds
-  token counts with a confidence score. Acceptance: an unknown provider added by name is either
-  located with a passing schema probe or reported as "no local store found" in under two seconds,
-  without network access, and the result survives a move of the config directory.
-- [ ] **Compact cloud saves.** Adopt the day document described under *Storage budget*: one JSON
-  per provider and day, merged additively, with the current ledger migrated and readable. Acceptance:
-  a save that currently uploads 1 MB uploads at most 333 KB with identical restored totals, the
-  document matches the merge table above, and the migration runs once per account with a rollback
-  path.
-- [ ] **Appearance that goes further.** A free accent colour picker, per-section density
-  (comfortable / compact), adjustable background dimming, and theme import/export as a small JSON
-  file. Acceptance: a theme exported on one computer reproduces the same font, scale, ink, accent,
-  surfaces and background on another, and no setting needs a restart.
-- [ ] **Attribution per model, with a preview.** Extend the wheel from provider shares to optional
-  model shares, and show the distribution a save will produce before it leaves the machine.
-  Acceptance: a rule with 30 % Codex / 20 % ChatGPT / 50 % Claude over 1,000 requests lands within
-  two percentage points of each share, and the preview matches the uploaded payload exactly.
-- [ ] **Updates you can trust.** Background download with a persistent "restart to 0.4.0" badge, a
-  one-click rollback to the previously installed build, and a check that never reports "latest" for
-  a window older than the build on disk. Acceptance: installing a release while an older window is
-  open shows the restart prompt within one check, and rollback returns to the previous version with
-  local history intact.
-- [ ] **Complete translation.** Every user-facing string in the five catalogs (English, French,
-  Spanish, Chinese, Hindi), including cloud, attribution and diagnostics screens. Acceptance: a test
-  fails when a catalog key is missing, and a string sweep finds no hard-coded English left in the
-  renderer outside diagnostics output.
-- [ ] **Cheaper idle.** Acceptance: cold start to first paint under 400 ms on the reference machine
-  (Windows 11, 8 cores), under 250 MB resident after one hour idle, and no long task above 50 ms
-  when switching pages.
-
-## Why the cloud still works, and what that means
-
-Cloud save talks to the **hosted UsageAtlas service** at `usageatlas.com`. That service is not part
-of this repository and this fork has no control over it: an account there, its
-[privacy policy](https://usageatlas.com/privacy) and its
-[terms](https://usageatlas.com/terms) still apply, and saved history lives under that account.
-
-Attribution is the bridge. Locally nothing is rewritten: Freebuff stays Freebuff in your history,
-charts, alerts and totals, with its own models and projects. Only the copy sent to the server is
-relabelled, because the server only accepts providers and models it knows. That is deliberately
-one-way — the numbers are yours, the label is for the server — and a copy restored on another
-computer keeps this computer's real provider and model breakdown.
-
-If you do not want a relabelled copy to leave the machine, stay signed out: local tracking works
-without an account, as it always did — and a source with no rule never leaves it either.
+On the measured profile the ledger occupied 3.7 MB of 4.61 MB and the write-only archive 0.75 MB.
+After compaction the whole file is 0.856 MB. Tokens, costs, hourly buckets and per-model splits are
+identical; only superseded scan and quota snapshots and already-uploaded request payloads are gone.
+[STATISTICS_STORAGE.md](docs/STATISTICS_STORAGE.md) documents the tables and the recovery rules.
 
 ## Install
 
-Windows builds are produced from this fork:
+Windows builds are produced from this repository:
 
 1. Open the [latest release](https://github.com/Artleboss2/UsageAtlas-Unofficial/releases/latest).
 2. Download `UsageAtlas-<version>.Setup.exe` (per-user install, no administrator prompt) or the
    portable `UsageAtlas-win32-x64-<version>.zip`.
 3. Run it. Builds are not Authenticode-signed, so SmartScreen asks for **More info → Run anyway**.
 
-macOS and Linux are not built from this fork. Use the original project's releases, or build the
-fork yourself with the commands below; nothing in the additions is Windows-specific.
-
-Every release also carries `SHA256SUMS`, and the Windows ones carry the Squirrel `RELEASES` feed and
-`-full.nupkg` next to the installer — that pair is what the in-app updater reads.
-
-## Updates
-
-Settings → App updates chooses the publisher:
-
-- **This fork** reads `github.com/Artleboss2/UsageAtlas-Unofficial/releases/latest/download`. Windows
-  installs update in place; on other platforms the release page opens for a manual download.
-- **Upstream** restores the original mirror, which only ever serves the official builds.
-- **Another repository** reads the GitHub releases of any `owner/name` you type, so a build published
-  somewhere else updates in place too. While the field is empty it keeps reading this fork's releases.
-
-Installing an upstream build replaces this fork's renderer, so the private providers disappear until
-you reinstall a fork release.
-
-Squirrel keeps each applied build in its own `app-<version>` folder. If an update lands while an
-older window is still open, that window's updater would otherwise ask the shared `Update.exe` and
-hear "up to date" for the newer package. The app now reads the installed folders, reports the newer
-version, and its **Update and restart** button relaunches through the Squirrel stub at the install
-root — so the window you keep using is the one actually installed.
+macOS and Linux are not built here. Build the fork yourself with the commands below; nothing in the
+additions is Windows-specific. Every release carries `SHA256SUMS`, and Windows releases also carry
+the Squirrel `RELEASES` feed and `-full.nupkg` that the in-app updater reads.
 
 ## Build from source
 
@@ -269,31 +171,48 @@ bun ci
 bun run desktop:start
 ```
 
-`bun run check` runs lint, typecheck, tests and the renderer build. `bun run desktop:make` builds
+`bun run check` runs lint, typecheck, tests and the renderer build. `bun run desktop:make` produces
 installers for the current platform with Electron Forge; unsigned builds need no credentials.
 `bun run desktop:make -- --platform=win32 --arch=x64 --targets squirrel zip` produces the Windows
-installer, the update feed and the portable zip, which is how this fork's releases are made.
+installer, update feed and portable zip used by this repository's releases.
 
 The repository is a Bun + Turborepo workspace: the Electron app in `apps/desktop`, shared schemas and
 fixtures in `packages/contracts`, build helpers in `tooling`.
 
-## Privacy
+## Releases
 
-Provider data is read from local files and provider APIs. Completed days and capacity snapshots go
-into a local SQLite history database in the app data directory. Nothing leaves the computer unless
-you sign in and save to the cloud, and then only the fields the base app already sends: totals,
-estimated costs, hourly activity, model breakdowns, limits, per-request timestamps, model
-identifiers, collection metadata and opaque project and session IDs. Project paths, prompts,
-responses, transcripts and tool credentials are never included.
+Bump `apps/desktop/package.json`, update [CHANGELOG.md](CHANGELOG.md), then build the Windows targets
+and publish the installer, `-full.nupkg`, portable zip, `RELEASES` and `SHA256SUMS` under
+`desktop-v<version>`. The release workflow performs the same steps on `windows-2022`; a manual run
+builds without publishing unless **publish** is enabled.
 
-## Credits and licence
+## 0.5.0 goals
 
-The base application is MIT-licensed, © 2026 SRX9 and UsageAtlas contributors; this fork's changes
-ship under the same [licence](LICENSE) and keep that notice. The UsageAtlas name and logo are not
-covered by it — see [TRADEMARKS.md](TRADEMARKS.md). Inspired by
-[CodexBar](https://github.com/steipete/codexbar) by Peter Steinberger; charts are vendored from
-[Dither Kit](https://tripwire.sh).
+Each line is an acceptance test, not a wish:
 
-Found a bug in an addition described here? Open an issue in
-[this repository](https://github.com/Artleboss2/UsageAtlas-Unofficial/issues), not upstream — the
-original authors did not write this code.
+- **Appearance, deeper.** A free accent picker, per-section density, background dimming, and theme
+  import/export as a small JSON file. A theme exported on one computer reproduces font, scale, ink,
+  accent, surfaces and background on another, with no restart.
+- **Complete translation.** Every renderer string in English, French, Spanish, Chinese and Hindi,
+  including cloud, attribution-free settings and diagnostics. A missing-key test and a hard-coded
+  English sweep pass.
+- **Cheaper idle.** Cold start to first paint under 400 ms, under 250 MB resident after an hour idle,
+  and no page switch above 50 ms on the reference machine.
+- **Discovery in the app.** Type a provider name in Settings, see the probe result, its store and its
+  confidence, and keep the answer when the config folder moves.
+- **Compact cloud format.** One document per provider and day, merged additively, if the hosted
+  service accepts it; otherwise the outbox stays the contract and is documented as such.
+- **Guarded migration.** One run per account, a seven-day rollback copy, and no token lost when a
+  migration is interrupted.
+- **Trusted updates.** Keep the restart badge, one-click rollback and the check that never reports
+  “latest” for an older window, and cover each with a test.
+
+## Acknowledgements
+
+Inspired by [CodexBar](https://github.com/steipete/codexbar) by Peter Steinberger. Charts are
+vendored from [Dither Kit](https://tripwire.sh).
+
+## License
+
+Source code is available under the [MIT License](LICENSE). The UsageAtlas name and logo are not
+covered by it — see [TRADEMARKS.md](TRADEMARKS.md).

@@ -1,7 +1,6 @@
 import { CloudAccount, type KnownProfileStatus } from "./cloud-account";
 import { ProviderCredentialStore, configureProviderCredentials } from "./provider-credentials";
 import { isQuotaProvider, validateProviderCredential } from "../shared/quota-providers";
-import { validateReportPlans } from "../shared/report-plans";
 import type { DashboardSnapshot } from "@usageatlas/contracts";
 import { existsSync, mkdtempSync, statSync, writeFileSync } from "node:fs";
 import {
@@ -546,10 +545,12 @@ function registerIPC(): void {
     preferences.update({ providerEnabled: { ...current, [providerID]: enabled } });
     return dashboard.setProviderEnabled(providerID, enabled);
   });
-  ipcMain.handle(IPC.setReportPlans, async (event, value: unknown) => {
+  ipcMain.handle(IPC.setReportPlans, async (event) => {
     assertTrustedSender(event);
-    const next = preferences.update({ reportPlans: validateReportPlans(value) });
-    await engine.setReportPlans(next.reportPlans);
+    // Cloud saves report the provider that actually produced the usage. The old
+    // relabelling rules are cleared so no stored rule survives an upgrade.
+    const next = preferences.update({ reportPlans: [] });
+    await engine.setReportPlans([]);
     return next;
   });
   ipcMain.handle(IPC.minimizeWindow, (event) => {
@@ -838,11 +839,13 @@ if (squirrelStartup || !hasSingleInstanceLock) {
   await configureProviderCredentials(providerCredentials, engine);
   engine.onStatus(status => {
     if (status === "ready") void configureProviderCredentials(providerCredentials, engine).then(() => engine.applyProviderPreferences(preferences.get().providerEnabled))
-      .then(() => engine.setReportPlans(preferences.get().reportPlans))
+      .then(() => engine.setReportPlans([]))
       .then(() => cloudAccount.reconnect()).catch(() => undefined);
   });
   await engine.applyProviderPreferences(preferences.get().providerEnabled);
-  await engine.setReportPlans(preferences.get().reportPlans);
+  // No relabelling: an unsupported source stays on this computer instead of
+  // being uploaded under another provider's name.
+  await engine.setReportPlans([]);
   dashboard.activate();
   registerIPC();
   createTray();
