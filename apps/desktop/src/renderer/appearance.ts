@@ -72,7 +72,19 @@ export function applyAppearance(appearance: AppearancePreferences): void {
   root.dataset.appearanceFont = appearance.font;
   root.dataset.appearanceSurface = appearance.surface;
   root.dataset.appearanceMotion = appearance.animate ? "on" : "off";
+  root.dataset.appearanceDensity = appearance.density;
   root.style.setProperty("--atlas-font-scale", String(appearance.fontScale));
+  root.style.setProperty("--atlas-glass-blur", `${appearance.blur}px`);
+  root.style.setProperty("--atlas-overlay-blur", `${Math.min(40, appearance.blur + 6)}px`);
+
+  // Provider tints are per-key custom properties so a logo, a row or a chart mark
+  // can read one without threading preferences through every component.
+  for (const property of Array.from(root.style)) {
+    if (property.startsWith("--atlas-provider-")) root.style.removeProperty(property);
+  }
+  for (const [providerID, color] of Object.entries(appearance.providerColors)) {
+    root.style.setProperty(`--atlas-provider-${providerID}`, color);
+  }
   if (appearance.textColor) root.style.setProperty("--foreground", appearance.textColor);
   else root.style.removeProperty("--foreground");
 

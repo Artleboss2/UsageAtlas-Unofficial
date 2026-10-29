@@ -5,20 +5,25 @@ import path from "node:path";
 import { sanitizeLimitOrder, sanitizeTrayLimits } from "../shared/capacity-model";
 import {
   BACKGROUND_DEFAULT_GENERATION,
+  DEFAULT_ADVANCED_PREFERENCES,
   DEFAULT_APPEARANCE,
   DEFAULT_BACKGROUND_IMAGE,
   DEFAULT_UPDATE_CHANNEL,
+  DEFAULT_WIDGET_PREFERENCES,
   isBackgroundImagePreference,
   rollForwardBackgroundDefault,
   DEFAULT_TOKEN_ALERTS,
+  sanitizeAdvancedPreferences,
   sanitizeAppearance,
   sanitizeBackgroundImage,
   sanitizeTokenAlerts,
   sanitizeUpdateChannel,
   sanitizeUpdateRepository,
+  sanitizeWidgetPreferences,
   type DesktopPreferences
 } from "../shared/desktop-api";
 import { DEFAULT_LANGUAGE, sanitizeLanguage } from "../shared/languages";
+import { planFromLegacyAliases, validateReportPlans } from "../shared/report-plans";
 import { cloneUsageAlertPreferences, sanitizeUsageAlertPreferences } from "../shared/usage-alerts";
 
 type ProfileState = "missing" | "private" | "public";
@@ -45,6 +50,13 @@ function defaultPreferences(): StoredPreferences {
     trayLimits: {},
     usageAlerts: {},
     tokenAlerts: { ...DEFAULT_TOKEN_ALERTS },
+    reportPlans: [],
+    startMinimized: false,
+    hotkey: "CommandOrControl+Shift+U",
+    pricingSyncHours: 24,
+    powerSaving: true,
+    widget: { ...DEFAULT_WIDGET_PREFERENCES },
+    advanced: { ...DEFAULT_ADVANCED_PREFERENCES },
     anonymousAnalytics: true,
     analyticsInstallationId: randomUUID(),
     backgroundDefaultGeneration: BACKGROUND_DEFAULT_GENERATION,
@@ -61,7 +73,7 @@ export class PreferenceStore {
     const loaded = this.readStored();
     this.values = loaded.values;
     if (loaded.persist) this.persist();
-    this.applyLoginItemSetting(this.values.launchAtLogin);
+    this.applyLoginItemSetting(this.values.launchAtLogin, this.values.startMinimized);
   }
 
   get(): DesktopPreferences {
@@ -79,7 +91,22 @@ export class PreferenceStore {
       limitOrder: [...this.values.limitOrder],
       trayLimits: { ...this.values.trayLimits },
       usageAlerts: cloneUsageAlertPreferences(this.values.usageAlerts),
-      tokenAlerts: { ...this.values.tokenAlerts }
+      tokenAlerts: { ...this.values.tokenAlerts },
+      reportPlans: this.values.reportPlans.map(plan => ({
+        source: plan.source,
+        targets: plan.targets.map(target => ({ ...target }))
+      })),
+      startMinimized: this.values.startMinimized,
+      hotkey: this.values.hotkey,
+      pricingSyncHours: this.values.pricingSyncHours,
+      powerSaving: this.values.powerSaving,
+      widget: { ...this.values.widget, position: this.values.widget.position ? { ...this.values.widget.position } : null },
+      advanced: {
+        ...this.values.advanced,
+        modelCostOverrides: this.values.advanced.modelCostOverrides.map((override) => ({ ...override })),
+        extraLogPaths: [...this.values.advanced.extraLogPaths],
+        ignoredProjects: [...this.values.advanced.ignoredProjects]
+      }
     };
   }
 
@@ -129,9 +156,20 @@ export class PreferenceStore {
     if (patch.tokenAlerts && typeof patch.tokenAlerts === "object") {
       next.tokenAlerts = sanitizeTokenAlerts(patch.tokenAlerts);
     }
+    if (Array.isArray(patch.reportPlans)) {
+      next.reportPlans = validateReportPlans(patch.reportPlans);
+    }
+    if (typeof patch.startMinimized === "boolean") next.startMinimized = patch.startMinimized;
+    if (typeof patch.hotkey === "string") next.hotkey = patch.hotkey.trim().slice(0, 128) || next.hotkey;
+    if (typeof patch.pricingSyncHours === "number") {
+      next.pricingSyncHours = Math.min(168, Math.max(0, Math.round(patch.pricingSyncHours)));
+    }
+    if (typeof patch.powerSaving === "boolean") next.powerSaving = patch.powerSaving;
+    if (patch.widget && typeof patch.widget === "object") next.widget = sanitizeWidgetPreferences(patch.widget);
+    if (patch.advanced && typeof patch.advanced === "object") next.advanced = sanitizeAdvancedPreferences(patch.advanced);
     this.values = next;
     this.persist();
-    this.applyLoginItemSetting(next.launchAtLogin);
+    this.applyLoginItemSetting(next.launchAtLogin, next.startMinimized);
     return this.get();
   }
 
@@ -174,6 +212,18 @@ export class PreferenceStore {
           trayLimits: sanitizeTrayLimits(parsed.trayLimits),
           usageAlerts: sanitizeUsageAlertPreferences(parsed.usageAlerts),
           tokenAlerts: sanitizeTokenAlerts(parsed.tokenAlerts),
+          // Single-target rules from earlier builds become one-target plans.
+          reportPlans: validateReportPlans(parsed.reportPlans ?? []).length
+            ? validateReportPlans(parsed.reportPlans)
+            : planFromLegacyAliases((parsed as { reportAliases?: unknown }).reportAliases),
+          startMinimized: typeof parsed.startMinimized === "boolean" ? parsed.startMinimized : defaults.startMinimized,
+          hotkey: typeof parsed.hotkey === "string" && parsed.hotkey.trim().length > 0
+            ? parsed.hotkey.trim().slice(0, 128) : defaults.hotkey,
+          pricingSyncHours: typeof parsed.pricingSyncHours === "number" && Number.isFinite(parsed.pricingSyncHours)
+            ? Math.min(168, Math.max(0, Math.round(parsed.pricingSyncHours))) : defaults.pricingSyncHours,
+          powerSaving: typeof parsed.powerSaving === "boolean" ? parsed.powerSaving : defaults.powerSaving,
+          widget: sanitizeWidgetPreferences(parsed.widget),
+          advanced: sanitizeAdvancedPreferences(parsed.advanced),
           backgroundDefaultGeneration: rolled.appliedGeneration,
           lastProfile: isLastProfile(parsed.lastProfile) ? parsed.lastProfile : null
         },
@@ -184,16 +234,17 @@ export class PreferenceStore {
     }
   }
 
-  private applyLoginItemSetting(openAtLogin: boolean): void {
+  private applyLoginItemSetting(openAtLogin: boolean, startMinimized: boolean): void {
     // Development runs would register the bare Electron executable at login.
     if (!app.isPackaged || process.env.USAGEATLAS_SMOKE_TEST === "1") return;
+    const args = startMinimized ? ["--hidden"] : [];
     if (process.platform === "win32") {
       const executableName = path.basename(process.execPath);
       const squirrelStub = path.resolve(path.dirname(process.execPath), "..", executableName);
-      app.setLoginItemSettings({ openAtLogin, path: squirrelStub });
+      app.setLoginItemSettings({ openAtLogin, path: squirrelStub, args });
       return;
     }
-    app.setLoginItemSettings({ openAtLogin });
+    app.setLoginItemSettings({ openAtLogin, args });
   }
 }
 

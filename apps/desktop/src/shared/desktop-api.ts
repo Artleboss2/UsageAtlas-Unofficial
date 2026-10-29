@@ -1,9 +1,10 @@
 import type { DashboardSnapshot } from "@usageatlas/contracts";
 import type { GrowthEvent, GrowthEventProperties } from "./growth-events";
 import type { ProviderCredential, ProviderCredentialStatus, QuotaProviderId } from "./quota-providers";
+import type { ReportPlan } from "./report-plans";
 import type { Language } from "./languages";
 
-export type AppRoute = "day" | "trends" | "insights" | "limits" | "alerts" | "profile" | "settings" | "diagnostics";
+export type AppRoute = "day" | "trends" | "insights" | "limits" | "alerts" | "profile" | "attribution" | "settings" | "diagnostics";
 export type EngineStatus = "starting" | "ready" | "degraded" | "stopped";
 
 export interface DesktopUpdateState {
@@ -76,6 +77,10 @@ export type AccentTint = (typeof ACCENT_TINTS)[number];
 export const APPEARANCE_SURFACES = ["glass", "solid"] as const;
 export type AppearanceSurface = (typeof APPEARANCE_SURFACES)[number];
 
+/** Airy Apple-like spacing, or a dense layout for small screens. */
+export const APPEARANCE_DENSITIES = ["comfortable", "compact"] as const;
+export type AppearanceDensity = (typeof APPEARANCE_DENSITIES)[number];
+
 export interface AppearancePreferences {
   font: AppearanceFont;
   /** Root type scale, 0.85–1.3. */
@@ -88,6 +93,14 @@ export interface AppearancePreferences {
   surface: AppearanceSurface;
   /** Page slides, rail highlight and hover motion. */
   animate: boolean;
+  /** Compact tightens paddings and row heights without changing the type scale. */
+  density: AppearanceDensity;
+  /** Whole-window opacity, 0.7–1. */
+  windowOpacity: number;
+  /** Strength of the card blur, in pixels. */
+  blur: number;
+  /** Per-provider `#rrggbb` tints used by logos, chart marks and rows. */
+  providerColors: Record<string, string>;
 }
 
 export const DEFAULT_APPEARANCE: AppearancePreferences = {
@@ -99,13 +112,33 @@ export const DEFAULT_APPEARANCE: AppearancePreferences = {
   numberStyle: "exact",
   accent: "system",
   surface: "glass",
-  animate: true
+  animate: true,
+  density: "comfortable",
+  windowOpacity: 1,
+  blur: 18,
+  providerColors: {}
 };
 const appearanceFontSet = new Set<string>(APPEARANCE_FONTS);
 const appMarkSet = new Set<string>(APP_MARKS);
 const numberStyleSet = new Set<string>(NUMBER_STYLES);
 const accentTintSet = new Set<string>(ACCENT_TINTS);
 const appearanceSurfaceSet = new Set<string>(APPEARANCE_SURFACES);
+const appearanceDensitySet = new Set<string>(APPEARANCE_DENSITIES);
+const PROVIDER_COLOR_KEY = /^[a-z0-9-]{1,64}$/u;
+const HEX_COLOR = /^#[0-9a-f]{6}$/iu;
+
+export function isAppearanceDensity(value: unknown): value is AppearanceDensity {
+  return typeof value === "string" && appearanceDensitySet.has(value);
+}
+
+export function sanitizeProviderColors(value: unknown): Record<string, string> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+  return Object.fromEntries(Object.entries(value as Record<string, unknown>)
+    .filter(([providerID, color]) => PROVIDER_COLOR_KEY.test(providerID)
+      && typeof color === "string" && HEX_COLOR.test(color))
+    .map(([providerID, color]) => [providerID, (color as string).toLowerCase()])
+    .slice(0, 64));
+}
 
 export function isAppearanceFont(value: unknown): value is AppearanceFont {
   return typeof value === "string" && appearanceFontSet.has(value);
@@ -133,9 +166,15 @@ export function sanitizeAppearance(value: unknown): AppearancePreferences {
   const scale = typeof record.fontScale === "number" && Number.isFinite(record.fontScale)
     ? Math.min(1.3, Math.max(0.85, Math.round(record.fontScale * 100) / 100))
     : DEFAULT_APPEARANCE.fontScale;
-  const textColor = typeof record.textColor === "string" && /^#[0-9a-f]{6}$/iu.test(record.textColor)
+  const textColor = typeof record.textColor === "string" && HEX_COLOR.test(record.textColor)
     ? record.textColor.toLowerCase()
     : null;
+  const windowOpacity = typeof record.windowOpacity === "number" && Number.isFinite(record.windowOpacity)
+    ? Math.min(1, Math.max(0.7, Math.round(record.windowOpacity * 100) / 100))
+    : DEFAULT_APPEARANCE.windowOpacity;
+  const blur = typeof record.blur === "number" && Number.isFinite(record.blur)
+    ? Math.min(32, Math.max(0, Math.round(record.blur)))
+    : DEFAULT_APPEARANCE.blur;
   return {
     font: isAppearanceFont(record.font) ? record.font : DEFAULT_APPEARANCE.font,
     fontScale: scale,
@@ -144,7 +183,246 @@ export function sanitizeAppearance(value: unknown): AppearancePreferences {
     numberStyle: isNumberStyle(record.numberStyle) ? record.numberStyle : DEFAULT_APPEARANCE.numberStyle,
     accent: isAccentTint(record.accent) ? record.accent : DEFAULT_APPEARANCE.accent,
     surface: isAppearanceSurface(record.surface) ? record.surface : DEFAULT_APPEARANCE.surface,
-    animate: typeof record.animate === "boolean" ? record.animate : DEFAULT_APPEARANCE.animate
+    animate: typeof record.animate === "boolean" ? record.animate : DEFAULT_APPEARANCE.animate,
+    density: isAppearanceDensity(record.density) ? record.density : DEFAULT_APPEARANCE.density,
+    windowOpacity,
+    blur,
+    providerColors: sanitizeProviderColors(record.providerColors)
+  };
+}
+
+/**
+ * The floating mini window. It stays above other windows, remembers where it was
+ * dropped, and snaps to the work-area edges when it gets close.
+ */
+export interface WidgetPosition {
+  x: number;
+  y: number;
+}
+
+export interface WidgetPreferences {
+  /** Opens the mini window on launch and keeps it available from the tray. */
+  enabled: boolean;
+  /** Hide after this many idle seconds; 0 keeps it on screen. */
+  autoHideSeconds: number;
+  /** Window opacity, 0.7–1. */
+  opacity: number;
+  snapToEdges: boolean;
+  width: number;
+  height: number;
+  /** Last position, already clamped to a visible display. */
+  position: WidgetPosition | null;
+}
+
+export const DEFAULT_WIDGET_PREFERENCES: WidgetPreferences = {
+  enabled: false,
+  autoHideSeconds: 0,
+  opacity: 0.94,
+  snapToEdges: true,
+  width: 320,
+  height: 180,
+  position: null
+};
+
+export function sanitizeWidgetPreferences(value: unknown): WidgetPreferences {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return { ...DEFAULT_WIDGET_PREFERENCES };
+  const record = value as Record<string, unknown>;
+  const autoHide = typeof record.autoHideSeconds === "number" && Number.isFinite(record.autoHideSeconds)
+    ? Math.min(600, Math.max(0, Math.round(record.autoHideSeconds)))
+    : DEFAULT_WIDGET_PREFERENCES.autoHideSeconds;
+  const opacity = typeof record.opacity === "number" && Number.isFinite(record.opacity)
+    ? Math.min(1, Math.max(0.7, Math.round(record.opacity * 100) / 100))
+    : DEFAULT_WIDGET_PREFERENCES.opacity;
+  const position = record.position && typeof record.position === "object" && !Array.isArray(record.position)
+    ? record.position as Record<string, unknown>
+    : null;
+  const x = position?.x;
+  const y = position?.y;
+  return {
+    enabled: typeof record.enabled === "boolean" ? record.enabled : DEFAULT_WIDGET_PREFERENCES.enabled,
+    autoHideSeconds: autoHide,
+    opacity,
+    snapToEdges: typeof record.snapToEdges === "boolean" ? record.snapToEdges : DEFAULT_WIDGET_PREFERENCES.snapToEdges,
+    width: Math.min(640, Math.max(280, Math.round(boundedNumber(record.width, DEFAULT_WIDGET_PREFERENCES.width, 280, 640, true)))),
+    height: Math.min(400, Math.max(160, Math.round(boundedNumber(record.height, DEFAULT_WIDGET_PREFERENCES.height, 160, 400, true)))),
+    position: typeof x === "number" && Number.isSafeInteger(x) && Math.abs(x) <= 100_000
+      && typeof y === "number" && Number.isSafeInteger(y) && Math.abs(y) <= 100_000
+      ? { x, y }
+      : null
+  };
+}
+
+/** What the tray tooltip shows besides the app name. */
+export const TRAY_METRICS = ["icon", "tokens", "cost", "remaining"] as const;
+export type TrayMetric = (typeof TRAY_METRICS)[number];
+
+/** Display currencies; every amount is stored in USD and converted on render. */
+export const CURRENCY_CODES = ["USD", "EUR", "GBP", "CAD", "JPY", "CHF"] as const;
+export type CurrencyCode = (typeof CURRENCY_CODES)[number];
+
+/** Automatic settings/data export cadence. */
+export const EXPORT_SCHEDULES = ["off", "weekly", "monthly"] as const;
+export type ExportSchedule = (typeof EXPORT_SCHEDULES)[number];
+
+/** Keep history forever (0) or trim records older than the chosen window. */
+export const RETENTION_CHOICES = [0, 30, 90, 365] as const;
+export type RetentionDays = (typeof RETENTION_CHOICES)[number];
+
+/** A rate entered in Settings, in USD per million tokens. */
+export interface ModelCostOverride {
+  model: string;
+  input: number;
+  output: number;
+  cacheRead: number | null;
+  cacheWrite: number | null;
+}
+
+/**
+ * Settings that shape collection, pricing and alerts. Kept in one object so a
+ * change is validated and saved atomically instead of field by field.
+ */
+export interface AdvancedPreferences {
+  trayMetric: TrayMetric;
+  /** Soft monthly budget used by the mini window gauge; 0 turns the gauge off. */
+  monthlyBudgetUSD: number;
+  currency: CurrencyCode;
+  /** Display-currency units per USD, fixed by the user so figures never jump. */
+  currencyRate: number;
+  /** Added to displayed estimates, 0–100. */
+  taxPercent: number;
+  /** When off, cached input is charged at the full input rate. */
+  promptCaching: boolean;
+  modelCostOverrides: ModelCostOverride[];
+  /** Extra folders of session logs, including WSL/network mounts. */
+  extraLogPaths: string[];
+  /** Case-insensitive path fragments whose events are excluded from totals. */
+  ignoredProjects: string[];
+  /** Hide sessions idle longer than this from the session list; 0 keeps all. */
+  staleSessionMinutes: number;
+  burnRateEnabled: boolean;
+  burnRateTokensPerMinute: number;
+  burnRateUSDPerMinute: number;
+  resetCountdownEnabled: boolean;
+  resetCountdownMinutes: number;
+  /** Silences toast windows; the in-app inbox still receives every alert. */
+  dnd: boolean;
+  notifyLogErrors: boolean;
+  notificationSounds: boolean;
+  /** Replaces project paths and names in the interface and exports with labels. */
+  redactProjects: boolean;
+  retentionDays: number;
+  exportSchedule: ExportSchedule;
+  exportDirectory: string | null;
+  /** Encrypts settings backups and scheduled exports with an OS-protected key. */
+  encryptExports: boolean;
+  /** Last automatic export, used to avoid writing the same period twice. */
+  lastExportAt: string | null;
+}
+
+export const DEFAULT_ADVANCED_PREFERENCES: AdvancedPreferences = {
+  trayMetric: "remaining",
+  monthlyBudgetUSD: 0,
+  currency: "USD",
+  currencyRate: 1,
+  taxPercent: 0,
+  promptCaching: true,
+  modelCostOverrides: [],
+  extraLogPaths: [],
+  ignoredProjects: [],
+  staleSessionMinutes: 0,
+  burnRateEnabled: false,
+  burnRateTokensPerMinute: 100_000,
+  burnRateUSDPerMinute: 5,
+  resetCountdownEnabled: true,
+  resetCountdownMinutes: 15,
+  dnd: false,
+  notifyLogErrors: true,
+  notificationSounds: false,
+  redactProjects: false,
+  retentionDays: 0,
+  exportSchedule: "off",
+  exportDirectory: null,
+  encryptExports: false,
+  lastExportAt: null
+};
+
+const trayMetricSet = new Set<string>(TRAY_METRICS);
+const currencyCodeSet = new Set<string>(CURRENCY_CODES);
+const exportScheduleSet = new Set<string>(EXPORT_SCHEDULES);
+const retentionDaySet = new Set<number>(RETENTION_CHOICES);
+
+function boundedNumber(value: unknown, fallback: number, min: number, max: number, integer = false): number {
+  if (typeof value !== "number" || !Number.isFinite(value)) return fallback;
+  const bounded = Math.min(max, Math.max(min, value));
+  return integer ? Math.round(bounded) : Math.round(bounded * 100) / 100;
+}
+
+function stringList(value: unknown, maxItems: number, maxLength: number): string[] {
+  if (!Array.isArray(value)) return [];
+  return [...new Set(value
+    .filter((entry): entry is string => typeof entry === "string")
+    .map((entry) => entry.trim())
+    .filter((entry) => entry.length > 0 && entry.length <= maxLength))]
+    .slice(0, maxItems);
+}
+
+export function sanitizeModelCostOverrides(value: unknown): ModelCostOverride[] {
+  if (!Array.isArray(value)) return [];
+  const seen = new Set<string>();
+  return value.flatMap((entry) => {
+    if (!entry || typeof entry !== "object" || Array.isArray(entry)) return [];
+    const record = entry as Record<string, unknown>;
+    if (typeof record.model !== "string") return [];
+    const model = record.model.trim().slice(0, 256);
+    const key = model.toLowerCase();
+    if (!model || seen.has(key)) return [];
+    seen.add(key);
+    return [{
+      model,
+      input: boundedNumber(record.input, 0, 0, 100_000),
+      output: boundedNumber(record.output, 0, 0, 100_000),
+      cacheRead: record.cacheRead === null ? null : boundedNumber(record.cacheRead, 0, 0, 100_000),
+      cacheWrite: record.cacheWrite === null ? null : boundedNumber(record.cacheWrite, 0, 0, 100_000)
+    }];
+  }).slice(0, 50);
+}
+
+export function sanitizeAdvancedPreferences(value: unknown): AdvancedPreferences {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return { ...DEFAULT_ADVANCED_PREFERENCES };
+  const record = value as Record<string, unknown>;
+  const retention = typeof record.retentionDays === "number" && retentionDaySet.has(record.retentionDays)
+    ? record.retentionDays
+    : DEFAULT_ADVANCED_PREFERENCES.retentionDays;
+  return {
+    trayMetric: typeof record.trayMetric === "string" && trayMetricSet.has(record.trayMetric)
+      ? record.trayMetric as TrayMetric : DEFAULT_ADVANCED_PREFERENCES.trayMetric,
+    monthlyBudgetUSD: boundedNumber(record.monthlyBudgetUSD, DEFAULT_ADVANCED_PREFERENCES.monthlyBudgetUSD, 0, 1_000_000),
+    currency: typeof record.currency === "string" && currencyCodeSet.has(record.currency)
+      ? record.currency as CurrencyCode : DEFAULT_ADVANCED_PREFERENCES.currency,
+    currencyRate: boundedNumber(record.currencyRate, DEFAULT_ADVANCED_PREFERENCES.currencyRate, 0.01, 10_000),
+    taxPercent: boundedNumber(record.taxPercent, DEFAULT_ADVANCED_PREFERENCES.taxPercent, 0, 100),
+    promptCaching: typeof record.promptCaching === "boolean" ? record.promptCaching : DEFAULT_ADVANCED_PREFERENCES.promptCaching,
+    modelCostOverrides: sanitizeModelCostOverrides(record.modelCostOverrides),
+    extraLogPaths: stringList(record.extraLogPaths, 20, 1_024),
+    ignoredProjects: stringList(record.ignoredProjects, 100, 512),
+    staleSessionMinutes: boundedNumber(record.staleSessionMinutes, DEFAULT_ADVANCED_PREFERENCES.staleSessionMinutes, 0, 10_080, true),
+    burnRateEnabled: typeof record.burnRateEnabled === "boolean" ? record.burnRateEnabled : DEFAULT_ADVANCED_PREFERENCES.burnRateEnabled,
+    burnRateTokensPerMinute: boundedNumber(record.burnRateTokensPerMinute, DEFAULT_ADVANCED_PREFERENCES.burnRateTokensPerMinute, 1_000, 1_000_000_000, true),
+    burnRateUSDPerMinute: boundedNumber(record.burnRateUSDPerMinute, DEFAULT_ADVANCED_PREFERENCES.burnRateUSDPerMinute, 0.01, 100_000),
+    resetCountdownEnabled: typeof record.resetCountdownEnabled === "boolean" ? record.resetCountdownEnabled : DEFAULT_ADVANCED_PREFERENCES.resetCountdownEnabled,
+    resetCountdownMinutes: boundedNumber(record.resetCountdownMinutes, DEFAULT_ADVANCED_PREFERENCES.resetCountdownMinutes, 1, 240, true),
+    dnd: typeof record.dnd === "boolean" ? record.dnd : DEFAULT_ADVANCED_PREFERENCES.dnd,
+    notifyLogErrors: typeof record.notifyLogErrors === "boolean" ? record.notifyLogErrors : DEFAULT_ADVANCED_PREFERENCES.notifyLogErrors,
+    notificationSounds: typeof record.notificationSounds === "boolean" ? record.notificationSounds : DEFAULT_ADVANCED_PREFERENCES.notificationSounds,
+    redactProjects: typeof record.redactProjects === "boolean" ? record.redactProjects : DEFAULT_ADVANCED_PREFERENCES.redactProjects,
+    retentionDays: retention,
+    exportSchedule: typeof record.exportSchedule === "string" && exportScheduleSet.has(record.exportSchedule)
+      ? record.exportSchedule as ExportSchedule : DEFAULT_ADVANCED_PREFERENCES.exportSchedule,
+    exportDirectory: typeof record.exportDirectory === "string" && record.exportDirectory.length <= 1_024
+      ? record.exportDirectory : null,
+    encryptExports: typeof record.encryptExports === "boolean" ? record.encryptExports : DEFAULT_ADVANCED_PREFERENCES.encryptExports,
+    lastExportAt: typeof record.lastExportAt === "string" && /^\d{4}-\d{2}-\d{2}T/u.test(record.lastExportAt)
+      ? record.lastExportAt : null
   };
 }
 
@@ -233,6 +511,18 @@ export interface DesktopPreferences {
   usageAlerts: UsageAlertPreferences;
   /** Daily per-source token warning, independent of provider quota windows. */
   tokenAlerts: TokenAlertPreferences;
+  /** Local provider → the official providers and models its cloud save is reported as. */
+  reportPlans: ReportPlan[];
+  /** Start in the tray when Windows launches the app at sign-in. */
+  startMinimized: boolean;
+  /** Electron accelerator that toggles the mini window. */
+  hotkey: string;
+  /** How often model prices are re-fetched; 0 disables background refresh. */
+  pricingSyncHours: number;
+  /** Slow polling and pause animations while the machine runs on battery. */
+  powerSaving: boolean;
+  widget: WidgetPreferences;
+  advanced: AdvancedPreferences;
 }
 
 export interface BackgroundImageSelection {
@@ -323,8 +613,23 @@ export interface UsageAtlasDesktopAPI {
   getSnapshot(): Promise<DashboardState>;
   refreshAll(): Promise<DashboardState>;
   setProviderEnabled(providerID: string, enabled: boolean): Promise<DashboardState>;
+  setReportPlans(plans: ReportPlan[]): Promise<DesktopPreferences>;
   getPreferences(): Promise<DesktopPreferences>;
   updatePreferences(patch: Partial<DesktopPreferences>): Promise<DesktopPreferences>;
+  /** Floating mini window controls, also reachable from the tray and a hotkey. */
+  showWidget(): Promise<void>;
+  hideWidget(): Promise<void>;
+  toggleWidget(): Promise<void>;
+  expandWidget(): Promise<void>;
+  /** Writes every setting to a JSON file, optionally encrypted. */
+  exportSettings(): Promise<boolean>;
+  importSettings(): Promise<DesktopPreferences | null>;
+  chooseFolder(): Promise<string | null>;
+  chooseExportDirectory(): Promise<string | null>;
+  /** Writes the current dashboard and history summary to the export folder. */
+  exportUsageNow(): Promise<boolean>;
+  /** Relaunches after an icon or native-surface change. */
+  restartApp(): Promise<void>;
   getDiagnostics(): Promise<EngineDiagnostics>;
   openExternal(url: string): Promise<boolean>;
   onEngineStatus(listener: (status: EngineStatus) => void): () => void;
@@ -356,8 +661,19 @@ export const IPC = {
   snapshot: "dashboard:snapshot",
   refreshAll: "dashboard:refresh-all",
   setProviderEnabled: "dashboard:set-provider-enabled",
+  setReportPlans: "settings:set-report-plans",
   getPreferences: "preferences:get",
   updatePreferences: "preferences:update",
+  showWidget: "widget:show",
+  hideWidget: "widget:hide",
+  toggleWidget: "widget:toggle",
+  expandWidget: "widget:expand",
+  exportSettings: "settings:export",
+  importSettings: "settings:import",
+  chooseFolder: "settings:choose-folder",
+  chooseExportDirectory: "settings:choose-export-directory",
+  exportUsageNow: "settings:export-usage",
+  restartApp: "app:restart",
   getDiagnostics: "engine:diagnostics",
   engineStatus: "engine:status",
   navigate: "shell:navigate",

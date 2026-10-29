@@ -1,7 +1,11 @@
 import type { DashboardProvider } from "@usageatlas/contracts";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
-import type { DesktopPreferences } from "../../shared/desktop-api";
+import {
+  DEFAULT_ADVANCED_PREFERENCES,
+  DEFAULT_WIDGET_PREFERENCES,
+  type DesktopPreferences
+} from "../../shared/desktop-api";
 import { UsageAlertsPage } from "./UsageAlertsPage";
 
 describe("UsageAlertsPage", () => {
@@ -66,7 +70,11 @@ const preferences: DesktopPreferences = {
     numberStyle: "exact",
     accent: "system",
     surface: "glass",
-    animate: true
+    animate: true,
+    density: "comfortable",
+    windowOpacity: 1,
+    blur: 18,
+    providerColors: {}
   },
   tokenAlerts: { enabled: true, thresholdTokens: 100_000 },
   language: "system",
@@ -81,6 +89,13 @@ const preferences: DesktopPreferences = {
   providerEnabled: {},
   trayLimits: {},
   usageAlerts: {},
+  reportPlans: [],
+  startMinimized: false,
+  hotkey: "CommandOrControl+Shift+U",
+  pricingSyncHours: 24,
+  powerSaving: true,
+  widget: { ...DEFAULT_WIDGET_PREFERENCES },
+  advanced: { ...DEFAULT_ADVANCED_PREFERENCES },
 };
 
 const provider: DashboardProvider = {

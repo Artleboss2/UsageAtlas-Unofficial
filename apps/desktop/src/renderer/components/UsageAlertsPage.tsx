@@ -7,6 +7,7 @@ import { formatReset } from "../dashboard-model";
 import { AlertIcon, BellIcon, CheckIcon } from "../icons";
 import { useI18n } from "../i18n";
 import { ProviderLogo } from "./ProviderLogo";
+import { UsageAlertDelivery } from "./UsageAlertDelivery";
 
 interface UsageAlertsPageProps {
   preferences: DesktopPreferences | null;
@@ -146,6 +147,7 @@ export function UsageAlertsPage({
             sampleTokens={sampleTokens}
             tokenAlerts={tokenAlerts}
           />
+          <UsageAlertDelivery onUpdate={onUpdate} preferences={preferences} />
           {meteredProviders.length === 0 ? (
             <Card className="atlas-alerts-empty" variant="transparent">
               <Card.Content>

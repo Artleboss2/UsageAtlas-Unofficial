@@ -1,13 +1,16 @@
 import { CloudAccount, type KnownProfileStatus } from "./cloud-account";
 import { ProviderCredentialStore, configureProviderCredentials } from "./provider-credentials";
 import { isQuotaProvider, validateProviderCredential } from "../shared/quota-providers";
+import { validateReportPlans } from "../shared/report-plans";
 import type { DashboardSnapshot } from "@usageatlas/contracts";
-import { existsSync, mkdtempSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { createCipheriv, createDecipheriv, randomBytes } from "node:crypto";
 import {
   app,
   BrowserWindow,
   clipboard,
   dialog,
+  globalShortcut,
   ipcMain,
   Menu,
   nativeImage,
@@ -15,6 +18,7 @@ import {
   net,
   Notification,
   protocol,
+  safeStorage,
   screen,
   session,
   shell,
@@ -33,6 +37,7 @@ import type { AppMark, AppRoute, DesktopPreferences } from "../shared/desktop-ap
 import {
   IPC,
   isAccentTint,
+  isAppearanceDensity,
   isAppearanceFont,
   isAppearanceSurface,
   isAppMark,
@@ -63,6 +68,7 @@ import {
 } from "./usage-alerts";
 import { UtilityEngineTransport } from "./utility-engine-transport";
 import { WINDOW_ASPECT_RATIO, windowSizeForWorkArea } from "./window-sizing";
+import { DESKTOP_VERSION } from "../shared/version";
 
 declare const MAIN_WINDOW_VITE_DEV_SERVER_URL: string | undefined;
 declare const MAIN_WINDOW_VITE_NAME: string;
@@ -97,12 +103,20 @@ const appUserModelId = app.isPackaged ? APP_USER_MODEL_ID : APP_DEV_USER_MODEL_I
 if (process.platform === "win32") app.setAppUserModelId(appUserModelId);
 
 let mainWindow: BrowserWindow | null = null;
+let widgetWindow: BrowserWindow | null = null;
+let widgetMoveTimer: NodeJS.Timeout | null = null;
+let widgetSnapping = false;
+let registeredHotkey: string | null = null;
 let tray: Tray | null = null;
 let lastTraySnapshot: DashboardSnapshot | null = null;
 let usageCheckTimer: NodeJS.Timeout | null = null;
 let profileCheckTimer: NodeJS.Timeout | null = null;
+let exportTimer: NodeJS.Timeout | null = null;
+let pricingTimer: NodeJS.Timeout | null = null;
 let profileStatusReported = false;
 let isQuitting = false;
+/** Set by the login item so a sign-in launch can stay in the tray. */
+const hiddenLaunch = process.argv.includes("--hidden");
 let installPendingUpdate: (() => void) | null = null;
 let engine: EngineManager;
 let cloudAccount: CloudAccount;
@@ -115,6 +129,10 @@ let updates: DesktopUpdater;
 
 const activeUsageNotifications = new Set<Notification>();
 let usageAlertEvaluator = new UsageAlertEvaluator();
+let lastBurnSample: { tokens: number; cost: number; at: number } | null = null;
+let lastBurnAlertAt = 0;
+const notifiedResets = new Set<string>();
+const notifiedLogErrors = new Set<string>();
 const tokenAlertEvaluator = new TokenAlertEvaluator();
 const usageAlertDeliveryLog = new UsageAlertDeliveryLog();
 /** Includes the X and Bluesky composers for sharing a recap. */
@@ -162,8 +180,17 @@ function trayImage(image: Electron.NativeImage): Electron.NativeImage {
  * taskbar pin and the toast identity from it, so its icon has to follow the picker
  * as well as the window's own icon.
  */
-function startMenuShortcutPath(): string {
-  return path.join(app.getPath("appData"), "Microsoft", "Windows", "Start Menu", "Programs", "UsageAtlas.lnk");
+/**
+ * Squirrel writes its shortcut inside a `UsageAtlas` folder. Updating only the
+ * loose `UsageAtlas.lnk` leaves that one pointing at the build that installed the
+ * app, which is why the taskbar kept the stock Electron atom after an update.
+ */
+function startMenuShortcutPaths(): string[] {
+  const programs = path.join(app.getPath("appData"), "Microsoft", "Windows", "Start Menu", "Programs");
+  return [
+    path.join(programs, "UsageAtlas", "UsageAtlas.lnk"),
+    path.join(programs, "UsageAtlas.lnk")
+  ];
 }
 
 function devShortcutPath(): string {
@@ -180,22 +207,24 @@ function devShortcutPath(): string {
  */
 function applyShortcutMark(mark: AppMark): void {
   if (process.platform !== "win32" || process.env.USAGEATLAS_SMOKE_TEST === "1") return;
-  const shortcut = app.isPackaged ? startMenuShortcutPath() : devShortcutPath();
+  const shortcuts = app.isPackaged ? startMenuShortcutPaths() : [devShortcutPath()];
   const stub = path.resolve(process.execPath, "..", "..", "UsageAtlas.exe");
   const target = app.isPackaged && existsSync(stub) ? stub : process.execPath;
-  try {
-    shell.writeShortcutLink(shortcut, existsSync(shortcut) ? "update" : "create", {
-      target,
-      cwd: path.dirname(process.execPath),
-      // A development shortcut must relaunch the same app, not an empty Electron.
-      args: app.isPackaged ? undefined : app.getAppPath(),
-      icon: appMarkPath(mark, "ico"),
-      iconIndex: 0,
-      appUserModelId: app.isPackaged ? APP_USER_MODEL_ID : APP_DEV_USER_MODEL_ID,
-      description: "UsageAtlas"
-    });
-  } catch {
-    // A locked Start Menu still leaves the window, taskbar button and tray updated.
+  for (const shortcut of shortcuts) {
+    try {
+      shell.writeShortcutLink(shortcut, existsSync(shortcut) ? "update" : "create", {
+        target,
+        cwd: path.dirname(process.execPath),
+        // A development shortcut must relaunch the same app, not an empty Electron.
+        args: app.isPackaged ? undefined : app.getAppPath(),
+        icon: appMarkPath(mark, "ico"),
+        iconIndex: 0,
+        appUserModelId: app.isPackaged ? APP_USER_MODEL_ID : APP_DEV_USER_MODEL_ID,
+        description: "UsageAtlas"
+      });
+    } catch {
+      // A locked Start Menu still leaves the window, taskbar button and tray updated.
+    }
   }
   // Explorer keeps the old icon in its cache; this asks it to re-read shortcuts.
   try {
@@ -211,7 +240,6 @@ function applyAppMark(mark: AppMark): void {
   if (mainWindow && !mainWindow.isDestroyed()) {
     mainWindow.setIcon(image);
     if (process.platform === "win32") {
-      const stub = path.resolve(process.execPath, "..", "..", "UsageAtlas.exe");
       try {
         // The taskbar button of an AppUserModelID app follows these details, not
         // only setIcon; this is what makes the picker visible in the taskbar.
@@ -219,7 +247,9 @@ function applyAppMark(mark: AppMark): void {
           appId: appUserModelId,
           appIconPath: appMarkPath(mark, "ico"),
           appIconIndex: 0,
-          relaunchCommand: `"${existsSync(stub) ? stub : process.execPath}"`,
+          // Relaunching this exact build keeps the icon and the version in step;
+          // the Squirrel stub only forwards to it and can carry stale artwork.
+          relaunchCommand: `"${process.execPath}"`,
           relaunchDisplayName: "UsageAtlas"
         });
       } catch {
@@ -247,7 +277,7 @@ function systemWindowChrome(): (typeof windowChrome)[keyof typeof windowChrome] 
   return nativeTheme.shouldUseDarkColors ? windowChrome.dark : windowChrome.light;
 }
 
-function createWindow(route: AppRoute = "day"): BrowserWindow {
+function createWindow(route: AppRoute = "day", showOnReady = true): BrowserWindow {
   const chrome = systemWindowChrome();
   const { workArea } = screen.getDisplayNearestPoint(screen.getCursorScreenPoint());
   const { width, height, minWidth, minHeight } = windowSizeForWorkArea(workArea);
@@ -289,7 +319,23 @@ function createWindow(route: AppRoute = "day"): BrowserWindow {
     if (!isTrustedRendererURL(url)) event.preventDefault();
   });
   window.once("ready-to-show", () => {
-    window.show();
+    if (showOnReady) window.show();
+    // Windows resolves the taskbar button once the window is on screen; setting
+    // the icon again here covers an AUMID whose old shortcut Explorer cached.
+    window.setIcon(loadAppMark(preferences.get().appearance.mark, process.platform === "win32" ? "ico" : "png"));
+    if (process.platform === "win32") {
+      try {
+        window.setAppDetails({
+          appId: appUserModelId,
+          appIconPath: appMarkPath(preferences.get().appearance.mark, "ico"),
+          appIconIndex: 0,
+          relaunchCommand: `"${process.execPath}"`,
+          relaunchDisplayName: "UsageAtlas"
+        });
+      } catch {
+        // setIcon above already changed the window artwork.
+      }
+    }
   });
   window.on("close", (event) => {
     if (!isQuitting && preferences.get().minimizeToTray) {
@@ -337,6 +383,213 @@ function showWindow(route: AppRoute = "day"): void {
   }
 }
 
+/**
+ * The floating mini window. It is a second renderer over the same preload API,
+ * framed by CSS rather than the OS, so it can carry the glass, the provider mark
+ * and the same typography as the main window.
+ */
+function createWidgetWindow(showOnReady = false, focus = true): BrowserWindow {
+  const saved = preferences.get().widget;
+  const initial = saved.position
+    ? { x: saved.position.x, y: saved.position.y, width: saved.width, height: saved.height }
+    : defaultWidgetBounds(saved.width, saved.height);
+  const window = new BrowserWindow({
+    ...initial,
+    minWidth: 280,
+    minHeight: 160,
+    maxWidth: 640,
+    maxHeight: 400,
+    show: false,
+    frame: false,
+    transparent: true,
+    backgroundColor: "#00000000",
+    hasShadow: true,
+    roundedCorners: true,
+    resizable: true,
+    maximizable: false,
+    minimizable: false,
+    fullscreenable: false,
+    skipTaskbar: true,
+    alwaysOnTop: true,
+    autoHideMenuBar: true,
+    title: "UsageAtlas mini window",
+    // Windows 11 draws an acrylic sheet behind the transparent renderer; on other
+    // systems the CSS glass falls back to a translucent surface.
+    ...(process.platform === "win32" ? { backgroundMaterial: "acrylic" as const } : {}),
+    ...(process.platform === "darwin" ? { vibrancy: "under-window" as const } : {}),
+    webPreferences: {
+      preload: path.join(__dirname, "preload.js"),
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: true,
+      webSecurity: true
+    }
+  });
+  window.setAlwaysOnTop(true, "floating");
+  if (process.platform === "darwin") {
+    window.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+  }
+  window.setOpacity(saved.opacity);
+  window.webContents.setWindowOpenHandler(({ url }) => {
+    if (isAllowedExternal(url)) void shell.openExternal(url);
+    return { action: "deny" };
+  });
+  window.webContents.on("will-navigate", (event, url) => {
+    if (!isTrustedRendererURL(url)) event.preventDefault();
+  });
+  window.once("ready-to-show", () => {
+    if (!showOnReady) return;
+    if (focus) window.show();
+    else window.showInactive();
+  });
+  window.on("close", (event) => {
+    if (isQuitting) return;
+    event.preventDefault();
+    window.hide();
+  });
+  window.on("moved", scheduleWidgetBoundsSave);
+  window.on("resized", scheduleWidgetBoundsSave);
+  window.on("show", () => updateTrayMenu());
+  window.on("hide", () => updateTrayMenu());
+  window.on("closed", () => {
+    if (widgetWindow === window) widgetWindow = null;
+  });
+  if (MAIN_WINDOW_VITE_DEV_SERVER_URL) {
+    const url = new URL(MAIN_WINDOW_VITE_DEV_SERVER_URL);
+    url.hash = "widget";
+    void window.loadURL(url.toString());
+  } else {
+    void window.loadURL("app://usageatlas/index.html#widget");
+  }
+  widgetWindow = window;
+  return window;
+}
+
+function defaultWidgetBounds(width: number, height: number): Electron.Rectangle {
+  const { workArea } = screen.getDisplayNearestPoint(screen.getCursorScreenPoint());
+  return {
+    width,
+    height,
+    x: Math.round(workArea.x + workArea.width - width - 24),
+    y: Math.round(workArea.y + workArea.height - height - 24)
+  };
+}
+
+function showWidget(focus = true): void {
+  if (!preferences) return;
+  if (!widgetWindow || widgetWindow.isDestroyed()) {
+    createWidgetWindow(true, focus);
+    return;
+  }
+  widgetWindow.setOpacity(preferences.get().widget.opacity);
+  if (widgetWindow.isMinimized()) widgetWindow.restore();
+  if (focus) {
+    widgetWindow.show();
+    widgetWindow.focus();
+  } else {
+    widgetWindow.showInactive();
+  }
+}
+
+function hideWidget(): void {
+  if (widgetWindow && !widgetWindow.isDestroyed()) widgetWindow.hide();
+}
+
+function toggleWidget(): void {
+  if (widgetWindow?.isVisible()) hideWidget();
+  else showWidget();
+}
+
+function expandWidget(): void {
+  showWindow("day");
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    if (mainWindow.isMinimized()) mainWindow.restore();
+    mainWindow.show();
+    mainWindow.focus();
+  }
+}
+
+/**
+ * Squirrel leaves the previous build running. Two windows under one AppUserModelID
+ * share one taskbar button, and Explorer can keep showing the old build's artwork.
+ * Retiring every other `app-*` build leaves one icon and one history database.
+ */
+function retirePreviousBuilds(): void {
+  if (process.platform !== "win32" || !app.isPackaged || process.env.USAGEATLAS_SMOKE_TEST === "1") return;
+  const current = path.resolve(process.execPath);
+  const script = [
+    "$current = $env:USAGEATLAS_CURRENT_EXE;",
+    "Get-CimInstance Win32_Process -Filter \"Name='UsageAtlas.exe'\" |",
+    "Where-Object { $_.ExecutablePath -and $_.ExecutablePath -ne $current -and $_.ExecutablePath -like '*\\UsageAtlas\\app-*\\UsageAtlas.exe' } |",
+    "ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }"
+  ].join(" ");
+  try {
+    const child = spawn("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", script], {
+      env: { ...process.env, USAGEATLAS_CURRENT_EXE: current },
+      windowsHide: true,
+      detached: true,
+      stdio: "ignore"
+    });
+    child.unref();
+  } catch {
+    // An older build that stays alive is not fatal; the single-instance lock still
+    // keeps a second copy of this build from starting.
+  }
+}
+
+function scheduleWidgetBoundsSave(): void {
+  if (widgetMoveTimer) clearTimeout(widgetMoveTimer);
+  widgetMoveTimer = setTimeout(() => {
+    widgetMoveTimer = null;
+    persistWidgetBounds();
+  }, 250);
+}
+
+function persistWidgetBounds(): void {
+  if (!widgetWindow || widgetWindow.isDestroyed() || !preferences) return;
+  const bounds = widgetWindow.getBounds();
+  const current = preferences.get().widget;
+  let { x, y } = bounds;
+  if (current.snapToEdges) {
+    const { workArea } = screen.getDisplayMatching(bounds);
+    const threshold = 18;
+    if (Math.abs(x - workArea.x) <= threshold) x = workArea.x;
+    if (Math.abs(x + bounds.width - (workArea.x + workArea.width)) <= threshold) {
+      x = workArea.x + workArea.width - bounds.width;
+    }
+    if (Math.abs(y - workArea.y) <= threshold) y = workArea.y;
+    if (Math.abs(y + bounds.height - (workArea.y + workArea.height)) <= threshold) {
+      y = workArea.y + workArea.height - bounds.height;
+    }
+    if ((x !== bounds.x || y !== bounds.y) && !widgetSnapping) {
+      widgetSnapping = true;
+      widgetWindow.setPosition(x, y);
+      setTimeout(() => { widgetSnapping = false; }, 80);
+    }
+  }
+  preferences.update({
+    widget: {
+      ...current,
+      width: Math.min(640, Math.max(280, bounds.width)),
+      height: Math.min(400, Math.max(160, bounds.height)),
+      position: { x, y }
+    }
+  });
+}
+
+function registerHotkey(accelerator: string): void {
+  if (registeredHotkey) {
+    globalShortcut.unregister(registeredHotkey);
+    registeredHotkey = null;
+  }
+  if (!accelerator) return;
+  try {
+    if (globalShortcut.register(accelerator, toggleWidget)) registeredHotkey = accelerator;
+  } catch {
+    // An invalid accelerator is ignored; the tray item still opens the widget.
+  }
+}
+
 function showTokenNotification(alert: TriggeredTokenAlert): void {
   if (!Notification.isSupported()) return;
   showNotification(createTokenAlertNotification(alert), "day");
@@ -349,12 +602,14 @@ function showUsageNotification(alert: TriggeredUsageAlert): void {
 }
 
 function showNotification(content: { title: string; body: string }, route: AppRoute): void {
+  const advance = preferences.get().advanced;
   const notification = new Notification({
     ...content,
     // Windows shows the registered app name above the title; the title itself
     // carries the brand too, so a toast is identifiable even without a shortcut.
     title: `UsageAtlas · ${content.title}`,
-    icon: loadAppMark(preferences.get().appearance.mark)
+    icon: loadAppMark(preferences.get().appearance.mark),
+    silent: !advance.notificationSounds
   });
   const release = (): void => {
     activeUsageNotifications.delete(notification);
@@ -365,7 +620,40 @@ function showNotification(content: { title: string; body: string }, route: AppRo
   // Windows can accept a toast and still hide it (Focus assist, per-app
   // notifications off). Mirror the alert in the window so it is never lost.
   mainWindow?.webContents.send(IPC.usageAlert, { ...content, route });
-  notification.show();
+  // Do not disturb keeps the inbox complete while silencing the toast itself.
+  if (!advance.dnd) notification.show();
+  if (advance.notificationSounds && process.platform === "win32") shell.beep();
+}
+
+function applyAdvancedSettings(advanced: DesktopPreferences["advanced"]): void {
+  void engine.updateConfig({
+    scan: {
+      extraLogPaths: advanced.extraLogPaths,
+      ignoredProjects: advanced.ignoredProjects
+    },
+    pricing: {
+      promptCaching: advanced.promptCaching,
+      overrides: advanced.modelCostOverrides.map((override) => ({
+        model: override.model,
+        input: override.input,
+        output: override.output,
+        cacheRead: override.cacheRead,
+        cacheWrite: override.cacheWrite
+      }))
+    }
+  }).catch(() => undefined);
+}
+
+function schedulePricingRefresh(hours: number): void {
+  if (pricingTimer) clearInterval(pricingTimer);
+  pricingTimer = null;
+  if (hours <= 0) return;
+  pricingTimer = setInterval(() => {
+    void engine.refreshPricing()
+      .then(() => dashboard.refresh(true))
+      .catch(() => undefined);
+  }, hours * 60 * 60_000);
+  pricingTimer.unref();
 }
 
 function scheduleBackgroundUsageCheck(delayMs = 180_000): void {
@@ -373,6 +661,75 @@ function scheduleBackgroundUsageCheck(delayMs = 180_000): void {
   if (usageCheckTimer) clearTimeout(usageCheckTimer);
   usageCheckTimer = setTimeout(() => void runBackgroundUsageCheck(), delayMs);
   usageCheckTimer.unref();
+}
+
+/**
+ * Alerts that need more than one snapshot: a burn rate is a delta, a reset warning
+ * is a countdown, and a log failure is a source state. Each is delivered once per
+ * incident, so a refresh loop cannot flood the notification centre.
+ */
+function evaluateDeliveryAlerts(snapshot: DashboardSnapshot): void {
+  const advance = preferences.get().advanced;
+  const providers = snapshot.providers.filter((provider) => provider.enabled);
+  const tokens = providers.reduce((total, provider) => total + (provider.analytics?.today.totalTokens ?? 0), 0);
+  const cost = providers.reduce((total, provider) => total + (provider.analytics?.today.estimatedCostUSD ?? 0), 0);
+  const now = Date.now();
+
+  if (advance.burnRateEnabled) {
+    if (lastBurnSample) {
+      const minutes = (now - lastBurnSample.at) / 60_000;
+      if (minutes >= 0.5) {
+        const tokensPerMinute = (tokens - lastBurnSample.tokens) / minutes;
+        const dollarsPerMinute = (cost - lastBurnSample.cost) / minutes;
+        const tooFast = tokensPerMinute >= advance.burnRateTokensPerMinute
+          || dollarsPerMinute >= advance.burnRateUSDPerMinute;
+        if (tooFast && now - lastBurnAlertAt > 30 * 60_000) {
+          lastBurnAlertAt = now;
+          showNotification({
+            title: "Burn rate is high",
+            body: `${compactTooltipNumber(Math.round(tokensPerMinute))} tokens/min and $${dollarsPerMinute.toFixed(2)}/min across your active tools.`
+          }, "alerts");
+        }
+      }
+    }
+    lastBurnSample = { tokens, cost, at: now };
+  } else {
+    lastBurnSample = null;
+  }
+
+  if (advance.resetCountdownEnabled) {
+    for (const provider of providers) {
+      for (const window of provider.windows) {
+        if (!window.resetAt) continue;
+        const remaining = Date.parse(window.resetAt) - now;
+        if (!Number.isFinite(remaining) || remaining <= 0 || remaining > advance.resetCountdownMinutes * 60_000) continue;
+        const key = `${provider.id}:${window.kind}:${window.resetAt}`;
+        if (notifiedResets.has(key)) continue;
+        notifiedResets.add(key);
+        showNotification({
+          title: `${provider.name} resets soon`,
+          body: `${window.label} quota resets in ${Math.max(1, Math.ceil(remaining / 60_000))} minutes.`
+        }, "limits");
+      }
+    }
+    if (notifiedResets.size > 500) notifiedResets.clear();
+  }
+
+  if (advance.notifyLogErrors) {
+    const day = snapshot.generatedAt.slice(0, 10);
+    for (const provider of providers) {
+      const error = provider.analytics?.error;
+      if (!error || !error.code.startsWith("analytics_")) continue;
+      const key = `${provider.id}:${day}:${error.code}`;
+      if (notifiedLogErrors.has(key)) continue;
+      notifiedLogErrors.add(key);
+      showNotification({
+        title: `${provider.name} history could not be read`,
+        body: error.message
+      }, "diagnostics");
+    }
+    if (notifiedLogErrors.size > 500) notifiedLogErrors.clear();
+  }
 }
 
 async function runBackgroundUsageCheck(): Promise<void> {
@@ -400,7 +757,8 @@ function updateTrayMenu(snapshot: DashboardSnapshot | null = lastTraySnapshot): 
   if (snapshot) lastTraySnapshot = snapshot;
   if (!tray || tray.isDestroyed()) return;
 
-  const { limitOrder, trayLimits } = preferences.get();
+  const { advanced, limitOrder, trayLimits } = preferences.get();
+  tray.setToolTip(trayTooltip(snapshot, advanced.trayMetric));
   const labels = snapshot ? trayLimitLabels(snapshot, limitOrder, trayLimits) : [];
   const limitRows: MenuItemConstructorOptions[] = snapshot
     ? labels.length > 0
@@ -420,6 +778,12 @@ function updateTrayMenu(snapshot: DashboardSnapshot | null = lastTraySnapshot): 
     ...limitRows,
     { type: "separator" },
     ...updateRows,
+    {
+      label: "Mini window",
+      type: "checkbox",
+      checked: widgetWindow?.isVisible() ?? false,
+      click: () => toggleWidget()
+    },
     { label: "Open UsageAtlas", click: () => showWindow("day") },
     { label: "View all limits", click: () => showWindow("limits") },
     {
@@ -434,6 +798,175 @@ function updateTrayMenu(snapshot: DashboardSnapshot | null = lastTraySnapshot): 
     { type: "separator" },
     { label: "Quit", click: () => { isQuitting = true; app.quit(); } }
   ]));
+}
+
+/** A short, honest tray tooltip; `icon` keeps just the product name. */
+function trayTooltip(snapshot: DashboardSnapshot | null, metric: string): string {
+  if (!snapshot || metric === "icon") return "UsageAtlas";
+  const providers = snapshot.providers.filter((provider) => provider.enabled);
+  if (metric === "tokens") {
+    const tokens = providers.reduce((total, provider) => total + (provider.analytics?.today.totalTokens ?? 0), 0);
+    return `UsageAtlas — ${compactTooltipNumber(tokens)} tokens today`;
+  }
+  if (metric === "cost") {
+    const costs = providers
+      .map((provider) => provider.analytics?.today.estimatedCostUSD)
+      .filter((value): value is number => value !== null && value !== undefined);
+    const cost = costs.reduce((total, value) => total + value, 0);
+    return `UsageAtlas — $${cost.toFixed(2)} estimated today`;
+  }
+  const remaining = providers.flatMap((provider) => provider.windows.map((window) => window.remainingPercent));
+  return remaining.length > 0
+    ? `UsageAtlas — ${Math.round(Math.min(...remaining))}% remaining`
+    : "UsageAtlas — no metered limits";
+}
+
+function compactTooltipNumber(value: number): string {
+  return new Intl.NumberFormat("en", { notation: "compact", maximumFractionDigits: 1 }).format(value);
+}
+
+interface EncryptedExport {
+  format: "usageatlas-encrypted";
+  version: 1;
+  algorithm: "aes-256-gcm";
+  iv: string;
+  tag: string;
+  data: string;
+}
+
+function exportKey(): Buffer {
+  if (!safeStorage.isEncryptionAvailable()) {
+    throw new Error("Encrypted exports need an available OS key store. Turn encryption off to export.");
+  }
+  const keyPath = path.join(app.getPath("userData"), "export-key.bin");
+  if (existsSync(keyPath)) {
+    return Buffer.from(safeStorage.decryptString(readFileSync(keyPath)), "base64");
+  }
+  const key = randomBytes(32);
+  writeFileSync(keyPath, safeStorage.encryptString(key.toString("base64")), { mode: 0o600 });
+  return key;
+}
+
+function encryptExport(json: string): string {
+  const iv = randomBytes(12);
+  const cipher = createCipheriv("aes-256-gcm", exportKey(), iv);
+  const data = Buffer.concat([cipher.update(json, "utf8"), cipher.final()]);
+  const envelope: EncryptedExport = {
+    format: "usageatlas-encrypted",
+    version: 1,
+    algorithm: "aes-256-gcm",
+    iv: iv.toString("base64"),
+    tag: cipher.getAuthTag().toString("base64"),
+    data: data.toString("base64")
+  };
+  return JSON.stringify(envelope, null, 2);
+}
+
+function decryptExport(text: string): string {
+  let envelope: unknown;
+  try {
+    envelope = JSON.parse(text);
+  } catch {
+    throw new Error("This file is not a UsageAtlas export.");
+  }
+  if (!envelope || typeof envelope !== "object") throw new Error("This file is not a UsageAtlas export.");
+  const candidate = envelope as Partial<EncryptedExport>;
+  if (candidate.format !== "usageatlas-encrypted") return text;
+  if (candidate.version !== 1 || candidate.algorithm !== "aes-256-gcm"
+    || typeof candidate.iv !== "string" || typeof candidate.tag !== "string" || typeof candidate.data !== "string") {
+    throw new Error("This encrypted export has an unsupported format.");
+  }
+  try {
+    const decipher = createDecipheriv("aes-256-gcm", exportKey(), Buffer.from(candidate.iv, "base64"));
+    decipher.setAuthTag(Buffer.from(candidate.tag, "base64"));
+    return Buffer.concat([
+      decipher.update(Buffer.from(candidate.data, "base64")),
+      decipher.final()
+    ]).toString("utf8");
+  } catch {
+    throw new Error("This encrypted export was made on another computer or is damaged.");
+  }
+}
+
+function settingsPayload(): string {
+  return JSON.stringify({
+    schemaVersion: 1,
+    kind: "usageatlas.settings",
+    exportedAt: new Date().toISOString(),
+    appVersion: DESKTOP_VERSION,
+    preferences: preferences.get()
+  }, null, 2);
+}
+
+function applyImportedPreferences(previous: DesktopPreferences, nextPreferences: DesktopPreferences): void {
+  if (previous.anonymousAnalytics !== nextPreferences.anonymousAnalytics) {
+    telemetry.setEnabled(nextPreferences.anonymousAnalytics);
+  }
+  if (previous.appearance.mark !== nextPreferences.appearance.mark) {
+    applyAppMark(nextPreferences.appearance.mark);
+  }
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.setOpacity(nextPreferences.appearance.windowOpacity);
+  }
+  if (previous.hotkey !== nextPreferences.hotkey) {
+    registerHotkey(nextPreferences.hotkey);
+  }
+  if (nextPreferences.widget.enabled) showWidget(false);
+  else hideWidget();
+  if (previous.updateChannel !== nextPreferences.updateChannel || previous.updateRepository !== nextPreferences.updateRepository) {
+    void updates.check().catch(() => undefined);
+  }
+  updateTrayMenu();
+}
+
+async function writeUsageExport(directory: string, automatic: boolean): Promise<boolean> {
+  const state = await dashboard.get();
+  const snapshot = state.snapshot;
+  if (!snapshot) throw new Error("There is no usage to export yet.");
+  const providers = snapshot.providers.map((provider) => ({
+    id: provider.id,
+    name: provider.name,
+    enabled: provider.enabled,
+    plan: provider.identity?.plan ?? null,
+    windows: provider.windows,
+    quotaMetrics: provider.quotaMetrics ?? [],
+    today: provider.analytics?.today ?? null,
+    daily: provider.analytics?.daily ?? [],
+    models: provider.analytics?.models ?? []
+  }));
+  const payload = JSON.stringify({
+    schemaVersion: 1,
+    kind: "usageatlas.usage",
+    exportedAt: new Date().toISOString(),
+    appVersion: DESKTOP_VERSION,
+    generatedAt: snapshot.generatedAt,
+    automatic,
+    providers
+  }, null, 2);
+  const advance = preferences.get().advanced;
+  const fileName = `usageatlas-usage-${new Date().toISOString().slice(0, 10)}.${advance.encryptExports ? "uatlas" : "json"}`;
+  const filePath = path.join(directory, fileName);
+  writeFileSync(filePath, advance.encryptExports ? encryptExport(payload) : `${payload}\n`, { mode: 0o600 });
+  preferences.update({ advanced: { ...advance, lastExportAt: new Date().toISOString() } });
+  return true;
+}
+
+async function runScheduledExport(): Promise<void> {
+  const advance = preferences.get().advanced;
+  if (advance.exportSchedule === "off" || !advance.exportDirectory) return;
+  const last = advance.lastExportAt ? Date.parse(advance.lastExportAt) : null;
+  const now = Date.now();
+  const due = advance.exportSchedule === "weekly"
+    ? last === null || now - last >= 7 * 24 * 60 * 60_000
+    : last === null || new Date(last).getUTCMonth() !== new Date(now).getUTCMonth()
+      || new Date(last).getUTCFullYear() !== new Date(now).getUTCFullYear();
+  if (!due) return;
+  try {
+    if (!existsSync(advance.exportDirectory)) mkdirSync(advance.exportDirectory, { recursive: true });
+    await writeUsageExport(advance.exportDirectory, true);
+  } catch {
+    // A missing folder or an unavailable snapshot is retried on the next hourly check.
+  }
 }
 
 function registerIPC(): void {
@@ -545,6 +1078,12 @@ function registerIPC(): void {
     preferences.update({ providerEnabled: { ...current, [providerID]: enabled } });
     return dashboard.setProviderEnabled(providerID, enabled);
   });
+  ipcMain.handle(IPC.setReportPlans, async (event, value: unknown) => {
+    assertTrustedSender(event);
+    const next = preferences.update({ reportPlans: validateReportPlans(value) });
+    await engine.setReportPlans(next.reportPlans);
+    return next;
+  });
   ipcMain.handle(IPC.minimizeWindow, (event) => {
     assertTrustedSender(event);
     BrowserWindow.fromWebContents(event.sender)?.minimize();
@@ -574,6 +1113,15 @@ function registerIPC(): void {
     assertTrustedSender(event);
     if (!isPreferencePatch(patch)) throw new Error("Invalid preferences update");
     const previous = preferences.get();
+    // Claim the accelerator before saving it, so a shortcut already owned by
+    // another app is reported instead of silently stored.
+    if (typeof patch.hotkey === "string" && patch.hotkey !== previous.hotkey) {
+      registerHotkey(patch.hotkey);
+      if (registeredHotkey !== patch.hotkey) {
+        registerHotkey(previous.hotkey);
+        throw new Error("That keyboard shortcut is already in use.");
+      }
+    }
     const nextPreferences = preferences.update(patch);
     if (previous.anonymousAnalytics !== nextPreferences.anonymousAnalytics) {
       telemetry.setEnabled(nextPreferences.anonymousAnalytics);
@@ -586,8 +1134,143 @@ function registerIPC(): void {
     if (previous.appearance.mark !== nextPreferences.appearance.mark) {
       applyAppMark(nextPreferences.appearance.mark);
     }
+    if (previous.appearance.windowOpacity !== nextPreferences.appearance.windowOpacity && mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.setOpacity(nextPreferences.appearance.windowOpacity);
+    }
+    if (previous.widget.opacity !== nextPreferences.widget.opacity && widgetWindow && !widgetWindow.isDestroyed()) {
+      widgetWindow.setOpacity(nextPreferences.widget.opacity);
+    }
+    if (previous.widget.enabled !== nextPreferences.widget.enabled) {
+      if (nextPreferences.widget.enabled) showWidget(false);
+      else hideWidget();
+    }
+    if (JSON.stringify(previous.advanced) !== JSON.stringify(nextPreferences.advanced)) {
+      applyAdvancedSettings(nextPreferences.advanced);
+    }
+    if (previous.pricingSyncHours !== nextPreferences.pricingSyncHours) {
+      schedulePricingRefresh(nextPreferences.pricingSyncHours);
+    }
+    if (JSON.stringify(previous.reportPlans) !== JSON.stringify(nextPreferences.reportPlans)) {
+      void engine.setReportPlans(nextPreferences.reportPlans).catch(() => undefined);
+    }
+    if (nextPreferences.advanced.retentionDays > 0
+      && previous.advanced.retentionDays !== nextPreferences.advanced.retentionDays) {
+      void engine.updateConfig({ maintenance: { pruneDays: nextPreferences.advanced.retentionDays } }).catch(() => undefined);
+    }
     updateTrayMenu();
     return nextPreferences;
+  });
+  ipcMain.handle(IPC.showWidget, (event) => {
+    assertTrustedSender(event);
+    showWidget();
+  });
+  ipcMain.handle(IPC.hideWidget, (event) => {
+    assertTrustedSender(event);
+    hideWidget();
+  });
+  ipcMain.handle(IPC.toggleWidget, (event) => {
+    assertTrustedSender(event);
+    toggleWidget();
+  });
+  ipcMain.handle(IPC.expandWidget, (event) => {
+    assertTrustedSender(event);
+    expandWidget();
+  });
+  ipcMain.handle(IPC.restartApp, (event) => {
+    assertTrustedSender(event);
+    isQuitting = true;
+    app.relaunch();
+    app.exit(0);
+  });
+  ipcMain.handle(IPC.chooseFolder, async (event) => {
+    assertTrustedSender(event);
+    const owner = BrowserWindow.fromWebContents(event.sender);
+    const options: Electron.OpenDialogOptions = {
+      title: "Choose a folder",
+      properties: ["openDirectory"]
+    };
+    const result = owner ? await dialog.showOpenDialog(owner, options) : await dialog.showOpenDialog(options);
+    return result.canceled ? null : result.filePaths[0] ?? null;
+  });
+  ipcMain.handle(IPC.chooseExportDirectory, async (event) => {
+    assertTrustedSender(event);
+    const owner = BrowserWindow.fromWebContents(event.sender);
+    const options: Electron.OpenDialogOptions = {
+      title: "Choose where automatic exports are written",
+      properties: ["openDirectory", "createDirectory"]
+    };
+    const result = owner ? await dialog.showOpenDialog(owner, options) : await dialog.showOpenDialog(options);
+    if (result.canceled || !result.filePaths[0]) return null;
+    const directory = result.filePaths[0];
+    const advance = preferences.get().advanced;
+    preferences.update({ advanced: { ...advance, exportDirectory: directory } });
+    return directory;
+  });
+  ipcMain.handle(IPC.exportSettings, async (event) => {
+    assertTrustedSender(event);
+    const owner = BrowserWindow.fromWebContents(event.sender);
+    const encrypted = preferences.get().advanced.encryptExports;
+    const options: Electron.SaveDialogOptions = {
+      title: "Export UsageAtlas settings",
+      defaultPath: path.join(app.getPath("documents"), `usageatlas-settings-${new Date().toISOString().slice(0, 10)}.${encrypted ? "uatlas" : "json"}`),
+      filters: encrypted
+        ? [{ name: "Encrypted UsageAtlas export", extensions: ["uatlas"] }]
+        : [{ name: "JSON", extensions: ["json"] }]
+    };
+    const result = owner ? await dialog.showSaveDialog(owner, options) : await dialog.showSaveDialog(options);
+    if (result.canceled || !result.filePath) return false;
+    const payload = settingsPayload();
+    writeFileSync(result.filePath, encrypted ? encryptExport(payload) : `${payload}\n`, { mode: 0o600 });
+    return true;
+  });
+  ipcMain.handle(IPC.importSettings, async (event) => {
+    assertTrustedSender(event);
+    const owner = BrowserWindow.fromWebContents(event.sender);
+    const options: Electron.OpenDialogOptions = {
+      title: "Import UsageAtlas settings",
+      properties: ["openFile"],
+      filters: [{ name: "UsageAtlas export", extensions: ["json", "uatlas"] }]
+    };
+    const result = owner ? await dialog.showOpenDialog(owner, options) : await dialog.showOpenDialog(options);
+    if (result.canceled || !result.filePaths[0]) return null;
+    const text = readFileSync(result.filePaths[0], "utf8");
+    const decoded = decryptExport(text);
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(decoded);
+    } catch {
+      throw new Error("This settings file is not valid JSON.");
+    }
+    if (!parsed || typeof parsed !== "object") throw new Error("This settings file has no preferences.");
+    const candidate = (parsed as { preferences?: unknown }).preferences ?? parsed;
+    if (!candidate || typeof candidate !== "object" || Array.isArray(candidate)) {
+      throw new Error("This settings file has no preferences.");
+    }
+    const { providerEnabled: _providers, customBackgroundName: _background, ...patch } = candidate as Record<string, unknown>;
+    void _providers;
+    void _background;
+    if (!isPreferencePatch(patch)) throw new Error("This settings file uses an unsupported format.");
+    const previous = preferences.get();
+    const nextPreferences = preferences.update(patch);
+    applyImportedPreferences(previous, nextPreferences);
+    return nextPreferences;
+  });
+  ipcMain.handle(IPC.exportUsageNow, async (event) => {
+    assertTrustedSender(event);
+    let directory = preferences.get().advanced.exportDirectory;
+    if (!directory) {
+      const owner = BrowserWindow.fromWebContents(event.sender);
+      const options: Electron.OpenDialogOptions = {
+        title: "Choose where to write the usage export",
+        properties: ["openDirectory", "createDirectory"]
+      };
+      const result = owner ? await dialog.showOpenDialog(owner, options) : await dialog.showOpenDialog(options);
+      if (result.canceled || !result.filePaths[0]) return false;
+      directory = result.filePaths[0];
+      const advance = preferences.get().advanced;
+      preferences.update({ advanced: { ...advance, exportDirectory: directory } });
+    }
+    return writeUsageExport(directory, false);
   });
   ipcMain.handle(IPC.getAppMarks, (event) => {
     assertTrustedSender(event);
@@ -697,7 +1380,7 @@ function isAllowedExternal(value: string): boolean {
 function isPreferencePatch(value: unknown): value is Partial<DesktopPreferences> {
   if (!value || typeof value !== "object" || Array.isArray(value)) return false;
   const patch = value as Record<string, unknown>;
-  if (Object.keys(patch).some((key) => !["launchAtLogin", "minimizeToTray", "anonymousAnalytics", "backgroundImage", "usageAlerts", "tokenAlerts", "appearance", "language", "limitOrder", "trayLimits", "updateChannel", "updateRepository"].includes(key))) {
+  if (Object.keys(patch).some((key) => !["launchAtLogin", "minimizeToTray", "anonymousAnalytics", "backgroundImage", "usageAlerts", "tokenAlerts", "appearance", "language", "limitOrder", "trayLimits", "updateChannel", "updateRepository", "startMinimized", "hotkey", "pricingSyncHours", "powerSaving", "widget", "advanced"].includes(key))) {
     return false;
   }
   return (patch.launchAtLogin === undefined || typeof patch.launchAtLogin === "boolean")
@@ -706,6 +1389,12 @@ function isPreferencePatch(value: unknown): value is Partial<DesktopPreferences>
     && (patch.tokenAlerts === undefined || isTokenAlertPatch(patch.tokenAlerts))
     && (patch.minimizeToTray === undefined || typeof patch.minimizeToTray === "boolean")
     && (patch.anonymousAnalytics === undefined || typeof patch.anonymousAnalytics === "boolean")
+    && (patch.startMinimized === undefined || typeof patch.startMinimized === "boolean")
+    && (patch.powerSaving === undefined || typeof patch.powerSaving === "boolean")
+    && (patch.hotkey === undefined || (typeof patch.hotkey === "string" && patch.hotkey.trim().length > 0 && patch.hotkey.length <= 128))
+    && (patch.pricingSyncHours === undefined || (typeof patch.pricingSyncHours === "number" && Number.isInteger(patch.pricingSyncHours) && patch.pricingSyncHours >= 0 && patch.pricingSyncHours <= 168))
+    && (patch.widget === undefined || (Boolean(patch.widget) && typeof patch.widget === "object" && !Array.isArray(patch.widget)))
+    && (patch.advanced === undefined || (Boolean(patch.advanced) && typeof patch.advanced === "object" && !Array.isArray(patch.advanced)))
     && (patch.backgroundImage === undefined || isBackgroundImagePreference(patch.backgroundImage))
     && (patch.limitOrder === undefined || (
       Array.isArray(patch.limitOrder)
@@ -721,12 +1410,13 @@ function isPreferencePatch(value: unknown): value is Partial<DesktopPreferences>
 function isAppearancePatch(value: unknown): boolean {
   if (!value || typeof value !== "object" || Array.isArray(value)) return false;
   const patch = value as Record<string, unknown>;
-  if (Object.keys(patch).some((key) => !["font", "fontScale", "textColor", "mark", "numberStyle", "accent", "surface", "animate"].includes(key))) return false;
+  if (Object.keys(patch).some((key) => !["font", "fontScale", "textColor", "mark", "numberStyle", "accent", "surface", "animate", "density", "windowOpacity", "blur", "providerColors"].includes(key))) return false;
   return (patch.font === undefined || isAppearanceFont(patch.font))
     && (patch.mark === undefined || isAppMark(patch.mark))
     && (patch.numberStyle === undefined || isNumberStyle(patch.numberStyle))
     && (patch.accent === undefined || isAccentTint(patch.accent))
     && (patch.surface === undefined || isAppearanceSurface(patch.surface))
+    && (patch.density === undefined || isAppearanceDensity(patch.density))
     && (patch.animate === undefined || typeof patch.animate === "boolean")
     && (patch.fontScale === undefined || (
       typeof patch.fontScale === "number"
@@ -734,6 +1424,9 @@ function isAppearancePatch(value: unknown): boolean {
       && patch.fontScale >= 0.85
       && patch.fontScale <= 1.3
     ))
+    && (patch.windowOpacity === undefined || (typeof patch.windowOpacity === "number" && patch.windowOpacity >= 0.7 && patch.windowOpacity <= 1))
+    && (patch.blur === undefined || (typeof patch.blur === "number" && Number.isInteger(patch.blur) && patch.blur >= 0 && patch.blur <= 32))
+    && (patch.providerColors === undefined || (Boolean(patch.providerColors) && typeof patch.providerColors === "object" && !Array.isArray(patch.providerColors)))
     && (patch.textColor === undefined || patch.textColor === null
       || (typeof patch.textColor === "string" && /^#[0-9a-f]{6}$/iu.test(patch.textColor)));
 }
@@ -801,6 +1494,7 @@ if (squirrelStartup || !hasSingleInstanceLock) {
   session.defaultSession.setPermissionRequestHandler((_webContents, _permission, callback) => callback(false));
   session.defaultSession.setPermissionCheckHandler(() => false);
   await registerApplicationProtocol();
+  retirePreviousBuilds();
   preferences = new PreferenceStore();
   providerCredentials = new ProviderCredentialStore(path.join(app.getPath("userData"), "provider-credentials"));
   telemetry = new DesktopTelemetry(preferences);
@@ -821,6 +1515,7 @@ if (squirrelStartup || !hasSingleInstanceLock) {
     const alerts = usageAlertEvaluator.evaluate(snapshot, preferences.get().usageAlerts);
     for (const alert of alerts) showUsageNotification(alert);
     for (const alert of tokenAlertEvaluator.evaluate(snapshot, preferences.get().tokenAlerts)) showTokenNotification(alert);
+    evaluateDeliveryAlerts(snapshot);
   });
   engine.onProgress(progress => dashboard.progress(progress));
   engine.onImportProgress(message => dashboard.importProgress(message.accountId, message.progress));
@@ -830,10 +1525,14 @@ if (squirrelStartup || !hasSingleInstanceLock) {
   await cloudAccount.initialize().catch(() => undefined);
   await configureProviderCredentials(providerCredentials, engine);
   engine.onStatus(status => {
-    if (status === "ready") void configureProviderCredentials(providerCredentials, engine).then(() => engine.applyProviderPreferences(preferences.get().providerEnabled))
+    if (status === "ready") void configureProviderCredentials(providerCredentials, engine)      .then(() => engine.applyProviderPreferences(preferences.get().providerEnabled))
+      .then(() => engine.setReportPlans(preferences.get().reportPlans))
       .then(() => cloudAccount.reconnect()).catch(() => undefined);
   });
   await engine.applyProviderPreferences(preferences.get().providerEnabled);
+  await engine.setReportPlans(preferences.get().reportPlans);
+  applyAdvancedSettings(preferences.get().advanced);
+  schedulePricingRefresh(preferences.get().pricingSyncHours);
   dashboard.activate();
   registerIPC();
   createTray();
@@ -841,8 +1540,12 @@ if (squirrelStartup || !hasSingleInstanceLock) {
   // taskbar button's identity when it is created, so doing this afterwards would
   // leave the first launch of a new build on the previous icon.
   applyAppMark(preferences.get().appearance.mark);
-  mainWindow = createWindow();
+  const startHidden = hiddenLaunch && preferences.get().startMinimized;
+  mainWindow = createWindow("day", !startHidden);
+  mainWindow.setOpacity(preferences.get().appearance.windowOpacity);
   applyAppMark(preferences.get().appearance.mark);
+  registerHotkey(preferences.get().hotkey);
+  if (preferences.get().widget.enabled) showWidget(!startHidden);
   telemetry.capture("desktop_app_opened");
   if (cloudAccount.profileStatus().state === "signed-out") {
     profileStatusReported = true;
@@ -876,8 +1579,15 @@ if (squirrelStartup || !hasSingleInstanceLock) {
     }
   });
   scheduleBackgroundUsageCheck();
+  setTimeout(() => void runScheduledExport(), 45_000).unref();
+  exportTimer = setInterval(() => void runScheduledExport(), 60 * 60_000);
+  exportTimer.unref();
   if (process.env.USAGEATLAS_SMOKE_TEST === "1") void runPackagedSmokeTest(mainWindow);
   app.on("activate", () => showWindow());
+});
+
+app.on("will-quit", () => {
+  globalShortcut.unregisterAll();
 });
 
 app.on("before-quit", () => {
@@ -886,6 +1596,10 @@ app.on("before-quit", () => {
   usageCheckTimer = null;
   if (profileCheckTimer) clearInterval(profileCheckTimer);
   profileCheckTimer = null;
+  if (exportTimer) clearInterval(exportTimer);
+  exportTimer = null;
+  if (pricingTimer) clearInterval(pricingTimer);
+  pricingTimer = null;
   cloudAccount?.close();
   dashboard?.close();
   void engine?.shutdown();

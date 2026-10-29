@@ -3,6 +3,7 @@ import { buildAnalytics, type UsageRecord } from "../analytics/local-usage";
 import { openWritableSqlite } from "../platform/sqlite";
 import { UsageStore } from "./usage-store";
 import { UsageSync, type UsageCloud } from "./usage-sync";
+import { applyTargetToRecord } from "../../shared/report-plans";
 import { sameUsage, validateUsageRecord, type UsageDay, type CloudRecord } from "@usageatlas/contracts/usage";
 import fixtures from "@usageatlas/contracts/fixtures/usage-record-v1.json";
 
@@ -74,6 +75,22 @@ function analytics(records: UsageRecord[] = [usageEvent()]) {
 }
 
 describe("usage cloud storage", () => {
+  it("keeps a relabelled upload valid for the same cloud contract", () => {
+    const record = day(321);
+    record.models = [{ modelKey: "glm-4.6", totals: record.totals! }];
+    const rewritten = applyTargetToRecord(record, {
+      reportAs: "codex",
+      model: "gpt-5.3-codex",
+      weight: 100
+    });
+    const validated = validateUsageRecord(rewritten) as UsageDay;
+
+    expect(validated.providerId).toBe("codex");
+    expect(validated.models).toEqual([{ modelKey: "gpt-5.3-codex", totals: record.totals }]);
+    expect(validated.recordId).toBe(record.recordId);
+    expect(validated.totals).toEqual(record.totals);
+  });
+
   it("stops requesting more cloud pages when the account is disconnected", async () => {
     const local = store();
     const cloud = remoteCloud();

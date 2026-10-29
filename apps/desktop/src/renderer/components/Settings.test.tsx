@@ -1,7 +1,11 @@
 import type { DashboardProvider } from "@usageatlas/contracts";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
-import type { DesktopPreferences } from "../../shared/desktop-api";
+import {
+  DEFAULT_ADVANCED_PREFERENCES,
+  DEFAULT_WIDGET_PREFERENCES,
+  type DesktopPreferences
+} from "../../shared/desktop-api";
 import { Settings } from "./Settings";
 
 describe("Settings sources", () => {
@@ -100,6 +104,14 @@ function render(providers: DashboardProvider[]): string {
       onRefresh={vi.fn()}
       onSetProviderEnabled={vi.fn()}
       onUpdate={vi.fn()}
+      onShowWidget={vi.fn()}
+      onHideWidget={vi.fn()}
+      onExportSettings={vi.fn()}
+      onImportSettings={vi.fn()}
+      onChooseFolder={vi.fn()}
+      onChooseExportDirectory={vi.fn()}
+      onExportUsage={vi.fn()}
+      onRestartApp={vi.fn()}
       preferences={preferences()}
       providerSaving={null}
       providers={providers}
@@ -135,7 +147,11 @@ function preferences(): DesktopPreferences {
       numberStyle: "exact",
       accent: "system",
       surface: "glass",
-      animate: true
+      animate: true,
+      density: "comfortable",
+      windowOpacity: 1,
+      blur: 18,
+      providerColors: {}
     },
     tokenAlerts: { enabled: true, thresholdTokens: 100_000 },
     language: "system",
@@ -149,6 +165,13 @@ function preferences(): DesktopPreferences {
     providerEnabled: {},
     limitOrder: [],
     trayLimits: {},
-    usageAlerts: {}
+    usageAlerts: {},
+    reportPlans: [],
+    startMinimized: false,
+    hotkey: "CommandOrControl+Shift+U",
+    pricingSyncHours: 24,
+    powerSaving: true,
+    widget: { ...DEFAULT_WIDGET_PREFERENCES },
+    advanced: { ...DEFAULT_ADVANCED_PREFERENCES }
   };
 }

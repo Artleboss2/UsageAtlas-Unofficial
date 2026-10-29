@@ -1,5 +1,7 @@
 import { UpdateSettings } from "./UpdateControls";
 import { CloudSettings } from "./CloudSettings";
+import { SettingsData } from "./SettingsData";
+import { SettingsWidget } from "./SettingsWidget";
 import type { DashboardProvider } from "@usageatlas/contracts";
 import { Button, Card, Label, Radio, RadioGroup, Skeleton, Spinner, Switch } from "@heroui/react";
 import { useEffect, useRef, useState } from "react";
@@ -12,10 +14,12 @@ import type {
 } from "../../shared/desktop-api";
 import {
   ACCENT_TINTS,
+  APPEARANCE_DENSITIES,
   APPEARANCE_SURFACES,
   DEFAULT_APPEARANCE,
   DEFAULT_BACKGROUND_IMAGE,
   NUMBER_STYLES,
+  TRAY_METRICS,
   isBackgroundImagePreference
 } from "../../shared/desktop-api";
 import { FORK_HOME_URL } from "../../shared/fork";
@@ -58,9 +62,17 @@ interface SettingsProps {
   onSetProviderEnabled(providerID: string, enabled: boolean): Promise<void>;
   /** PNG data URLs for the app marks, so the picker shows what the OS will show. */
   markUrls?: Record<AppMark, string> | null;
+  onShowWidget(): Promise<void>;
+  onHideWidget(): Promise<void>;
+  onExportSettings(): Promise<void>;
+  onImportSettings(): Promise<void>;
+  onChooseFolder(): Promise<string | null>;
+  onChooseExportDirectory(): Promise<string | null>;
+  onExportUsage(): Promise<void>;
+  onRestartApp(): Promise<void>;
 }
 
-type SettingsTab = "general" | "appearance";
+type SettingsTab = "general" | "appearance" | "widget" | "data";
 
 export function Settings({
   updateState,
@@ -80,6 +92,14 @@ export function Settings({
   refreshing,
   onSetProviderEnabled,
   markUrls = null,
+  onShowWidget,
+  onHideWidget,
+  onExportSettings,
+  onImportSettings,
+  onChooseFolder,
+  onChooseExportDirectory,
+  onExportUsage,
+  onRestartApp
 }: SettingsProps): React.JSX.Element {
   const { t } = useI18n();
   const [tab, setTab] = useState<SettingsTab>("general");
@@ -159,6 +179,24 @@ export function Settings({
         >
           {t("settings.appearanceTab")}
         </button>
+        <button
+          aria-selected={tab === "widget"}
+          className="atlas-settings-tabs__tab"
+          onClick={() => setTab("widget")}
+          role="tab"
+          type="button"
+        >
+          {t("settings.widgetTab")}
+        </button>
+        <button
+          aria-selected={tab === "data"}
+          className="atlas-settings-tabs__tab"
+          onClick={() => setTab("data")}
+          role="tab"
+          type="button"
+        >
+          {t("settings.dataTab")}
+        </button>
       </div>
 
       {!preferences ? (
@@ -187,6 +225,52 @@ export function Settings({
                   label={t("settings.tray.label")}
                   onChange={(minimizeToTray) => onUpdate({ minimizeToTray })}
                 />
+                <SettingRow
+                  checked={preferences.startMinimized}
+                  description={t("settings.startMinimized.description")}
+                  label={t("settings.startMinimized.label")}
+                  onChange={(startMinimized) => onUpdate({ startMinimized })}
+                />
+                <SettingRow
+                  checked={preferences.powerSaving}
+                  description={t("settings.power.description")}
+                  label={t("settings.power.label")}
+                  onChange={(powerSaving) => onUpdate({ powerSaving })}
+                />
+                <label className="atlas-setting-row flex min-h-20 flex-wrap items-center gap-4 p-3">
+                  <span className="min-w-0 flex-1">
+                    <strong className="text-sm font-medium text-foreground">{t("settings.hotkey.label")}</strong>
+                    <span className="mt-1 block text-xs text-muted">{t("settings.hotkey.description")}</span>
+                  </span>
+                  <input
+                    aria-label={t("settings.hotkey.label")}
+                    className="atlas-text-field atlas-hotkey-field"
+                    defaultValue={preferences.hotkey}
+                    onBlur={(event) => {
+                      const hotkey = event.target.value.trim();
+                      if (hotkey && hotkey !== preferences.hotkey) void onUpdate({ hotkey });
+                    }}
+                    spellCheck={false}
+                  />
+                </label>
+                <label className="atlas-setting-row flex min-h-20 flex-wrap items-center gap-4 p-3">
+                  <span className="min-w-0 flex-1">
+                    <strong className="text-sm font-medium text-foreground">{t("settings.pricingSync.label")}</strong>
+                    <span className="mt-1 block text-xs text-muted">{t("settings.pricingSync.description")}</span>
+                  </span>
+                  <select
+                    aria-label={t("settings.pricingSync.label")}
+                    className="atlas-select"
+                    onChange={(event) => void onUpdate({ pricingSyncHours: Number(event.target.value) })}
+                    value={preferences.pricingSyncHours}
+                  >
+                    {[0, 6, 12, 24, 48, 168].map((hours) => (
+                      <option key={hours} value={hours}>
+                        {hours === 0 ? t("settings.pricingSync.off") : t("settings.pricingSync.hours", { count: hours })}
+                      </option>
+                    ))}
+                  </select>
+                </label>
               </Card.Content>
             </Card>
 
@@ -552,6 +636,138 @@ export function Settings({
 
             <Card variant="transparent">
               <Card.Header>
+                <Card.Title>{t("settings.density.title")}</Card.Title>
+                <Card.Description>{t("settings.density.description")}</Card.Description>
+              </Card.Header>
+              <Card.Content className="mt-2">
+                <div aria-label={t("settings.density.title")} className="atlas-choice-tiles" role="radiogroup">
+                  {APPEARANCE_DENSITIES.map((density) => (
+                    <button
+                      aria-checked={appearance.density === density}
+                      className="atlas-choice-tile"
+                      key={density}
+                      onClick={() => setAppearance({ density })}
+                      role="radio"
+                      type="button"
+                    >
+                      <span className="atlas-choice-tile__sample">
+                        {density === "compact" ? "▦" : "▢"}
+                      </span>
+                      <span className="atlas-choice-tile__label">
+                        {t(`option.density.${density}` as MessageKey)}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              </Card.Content>
+            </Card>
+
+            <Card variant="transparent">
+              <Card.Header>
+                <Card.Title>{t("settings.window.title")}</Card.Title>
+                <Card.Description>{t("settings.window.description")}</Card.Description>
+              </Card.Header>
+              <Card.Content className="atlas-settings-list mt-2">
+                <div className="atlas-setting-row flex min-h-24 flex-col gap-3 p-3">
+                  <div className="flex items-center justify-between gap-4">
+                    <div>
+                      <strong className="text-sm font-medium text-foreground">{t("settings.window.opacity")}</strong>
+                      <p className="mt-1 text-xs text-muted">{t("settings.window.opacityDescription")}</p>
+                    </div>
+                    <output className="text-sm tabular-nums text-muted">{Math.round(appearance.windowOpacity * 100)}%</output>
+                  </div>
+                  <input
+                    aria-label={t("settings.window.opacity")}
+                    className="atlas-slider"
+                    max={100}
+                    min={70}
+                    onChange={(event) => setAppearance({ windowOpacity: Number(event.target.value) / 100 })}
+                    step={1}
+                    type="range"
+                    value={Math.round(appearance.windowOpacity * 100)}
+                  />
+                </div>
+                <div className="atlas-setting-row flex min-h-24 flex-col gap-3 p-3">
+                  <div className="flex items-center justify-between gap-4">
+                    <div>
+                      <strong className="text-sm font-medium text-foreground">{t("settings.window.blur")}</strong>
+                      <p className="mt-1 text-xs text-muted">{t("settings.window.blurDescription")}</p>
+                    </div>
+                    <output className="text-sm tabular-nums text-muted">{appearance.blur}px</output>
+                  </div>
+                  <input
+                    aria-label={t("settings.window.blur")}
+                    className="atlas-slider"
+                    max={32}
+                    min={0}
+                    onChange={(event) => setAppearance({ blur: Number(event.target.value) })}
+                    step={1}
+                    type="range"
+                    value={appearance.blur}
+                  />
+                </div>
+                <label className="atlas-setting-row flex min-h-20 flex-wrap items-center gap-4 p-3">
+                  <span className="min-w-0 flex-1">
+                    <strong className="text-sm font-medium text-foreground">{t("settings.trayMetric.label")}</strong>
+                    <span className="mt-1 block text-xs text-muted">{t("settings.trayMetric.description")}</span>
+                  </span>
+                  <select
+                    aria-label={t("settings.trayMetric.label")}
+                    className="atlas-select"
+                    onChange={(event) => void onUpdate({
+                      advanced: { ...preferences.advanced, trayMetric: event.target.value as DesktopPreferences["advanced"]["trayMetric"] }
+                    })}
+                    value={preferences.advanced.trayMetric}
+                  >
+                    {TRAY_METRICS.map((metric) => (
+                      <option key={metric} value={metric}>
+                        {t(`option.trayMetric.${metric}` as MessageKey)}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </Card.Content>
+            </Card>
+
+            <Card variant="transparent">
+              <Card.Header>
+                <Card.Title>{t("settings.providerColors.title")}</Card.Title>
+                <Card.Description>{t("settings.providerColors.description")}</Card.Description>
+              </Card.Header>
+              <Card.Content className="mt-2">
+                <div className="atlas-provider-colors">
+                  {providers.map((provider) => (
+                    <label className="atlas-provider-color" key={provider.id}>
+                      <ProviderLogo compact providerID={provider.id} providerName={provider.name} />
+                      <span>{provider.name}</span>
+                      <input
+                        aria-label={t("settings.providerColors.aria", { provider: provider.name })}
+                        onChange={(event) => setAppearance({
+                          providerColors: { ...appearance.providerColors, [provider.id]: event.target.value }
+                        })}
+                        type="color"
+                        value={appearance.providerColors[provider.id] ?? "#8e8e93"}
+                      />
+                      <button
+                        aria-label={t("settings.providerColors.reset", { provider: provider.name })}
+                        className="atlas-provider-color__reset"
+                        onClick={() => {
+                          const next = { ...appearance.providerColors };
+                          delete next[provider.id];
+                          setAppearance({ providerColors: next });
+                        }}
+                        type="button"
+                      >
+                        ×
+                      </button>
+                    </label>
+                  ))}
+                </div>
+              </Card.Content>
+            </Card>
+
+            <Card variant="transparent">
+              <Card.Header>
                 <Card.Title>{t("settings.mark.title")}</Card.Title>
                 <Card.Description>{t("settings.mark.description")}</Card.Description>
               </Card.Header>
@@ -578,6 +794,10 @@ export function Settings({
                     </button>
                   ))}
                 </div>
+                <p className="mt-3 text-xs text-muted">{t("settings.mark.restartHint")}</p>
+                <Button className="mt-2" onPress={() => void onRestartApp()} variant="outline">
+                  {t("settings.mark.restart")}
+                </Button>
               </Card.Content>
             </Card>
 
@@ -644,6 +864,29 @@ export function Settings({
               </Card.Content>
             </Card>
           </div>
+
+          <div className="mt-8" hidden={tab !== "widget"}>
+            <SettingsWidget
+              onHide={onHideWidget}
+              onShow={onShowWidget}
+              onUpdate={onUpdate}
+              preferences={preferences}
+              saving={saving}
+            />
+          </div>
+
+          <div className="mt-8" hidden={tab !== "data"}>
+            <SettingsData
+              onChooseExportDirectory={onChooseExportDirectory}
+              onChooseFolder={onChooseFolder}
+              onExportSettings={onExportSettings}
+              onExportUsage={onExportUsage}
+              onImportSettings={onImportSettings}
+              onUpdate={onUpdate}
+              preferences={preferences}
+              saving={saving}
+            />
+          </div>
         </>
       )}
     </div>
@@ -679,7 +922,7 @@ function WallpaperOption({
   );
 }
 
-function SettingRow({
+export function SettingRow({
   label,
   description,
   checked,

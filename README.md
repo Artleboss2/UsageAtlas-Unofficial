@@ -37,10 +37,13 @@ Earlier 0.3.x cards are in the [previous timeline](docs/timeline.svg). A 0.5.0 g
 
 ### 0.4.0 — the truth of the usage
 
-**No relabelling.** A cloud save now carries the provider that actually produced the request. The
-old attribution page, its weighted wheel and the settings that rewrote uploaded providers are gone.
-A source the hosted service does not model stays on this computer with a clear notice instead of a
-fake label.
+**Attribution for sources the hosted service does not model yet.** Local history always keeps the
+provider that actually produced the request. When a source such as Freebuff or z.ai cannot be saved
+under its own name, the Attribution page lets it be reported as one or more official providers with
+a share each — 30 % Codex, 20 % ChatGPT, 50 % Claude, say. The wheel picks per request from a hash
+of that request's identity, so the shares hold over time, the same target can come up several times
+in a row, and a retried save keeps the label it already had. An unmapped source still stays on this
+computer and is named in Settings → Cloud save.
 
 **A compact local ledger.** The database used to keep one observation per request, one `collection`
 row per scan and one `capacity` row per quota check, plus a write-only archive of every replaced
@@ -227,19 +230,24 @@ local app data or replacing your computer. Signing out stops future saves but do
 existing cloud history. To request account and cloud-history deletion, email
 [privacy@usageatlas.com](mailto:privacy@usageatlas.com).
 
-A source the hosted service refuses appears under "waiting to be saved" with its own name, never as
-another provider.
+A source the hosted service refuses appears under "waiting to be saved" with its own name. Add a
+rule on the Attribution page to report it under a provider the server accepts; without a rule it is
+never uploaded under another provider's name.
 
 ## Storage
 
 The local database is written by `apps/desktop/src/engine/history`. The day record is the source of
-truth for every screen; `usage_fact` is an upload outbox and a 30-day idempotence window. The
+truth for every screen; `usage_fact` is an upload outbox and a one-week idempotence window. The
 compaction runs once per database version and is safe to interrupt: deletions are committed before
-`VACUUM`, and a file locked by the background writer is compacted on the next launch.
+`VACUUM`, and the background writer connection only opens on the first batch, so the one-time
+rewrite is not blocked by a second connection.
 
 On the measured profile the ledger occupied 3.7 MB of 4.61 MB and the write-only archive 0.75 MB.
-After compaction the whole file is 0.856 MB. Tokens, costs, hourly buckets and per-model splits are
-identical; only superseded scan and quota snapshots and already-uploaded request payloads are gone.
+After compaction the whole file is 0.856 MB. On a current profile the next pass takes 1,380,352
+bytes to 704,512 bytes (49 % smaller): display details are stored deflated, collection and capacity
+snapshots are dropped once acknowledged, attribution labels live on their row instead of a settings
+key, two unused indexes are removed, and saved request payloads are kept for a week. Tokens, costs,
+hourly buckets, per-model splits and all 20 day records are identical.
 [STATISTICS_STORAGE.md](docs/STATISTICS_STORAGE.md) documents the tables and the recovery rules.
 
 ## Build from source

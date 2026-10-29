@@ -12,6 +12,11 @@ const MAXIMUM_BYTES = 8 * 1_024 * 1_024;
 
 let memory: { cachePath: string; fetchedAt: string; catalog: PricingCatalog } | null = null;
 
+/** Forces the next scan to re-fetch the catalog instead of reusing today's copy. */
+export function clearPricingCache(): void {
+  memory = null;
+}
+
 export interface ModelRate {
   contextTiers?: { threshold: number; input?: number; output?: number; cacheRead?: number; cacheWrite?: number }[];
   input: number;

@@ -71,7 +71,11 @@ export function ProviderLogo({
         : null;
 
   return (
-    <span aria-hidden="true" className={`atlas-provider-logo ${avatarClassName}`}>
+    <span
+      aria-hidden="true"
+      className={`atlas-provider-logo ${avatarClassName}`}
+      style={{ background: `color-mix(in oklab, var(--atlas-provider-${providerID}, transparent) 12%, transparent)` }}
+    >
       {Icon ? <Icon size={iconSize} /> : image ? <img alt="" height={iconSize} src={image} width={iconSize} /> : providerID === "pi" ? "π" : providerName.slice(0, 1)}
     </span>
   );

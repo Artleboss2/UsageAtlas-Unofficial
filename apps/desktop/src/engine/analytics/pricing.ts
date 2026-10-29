@@ -9,6 +9,56 @@ import {
 export type { PricingCatalog } from "./models-dev";
 export type Pricing = ModelRate;
 
+interface PricingOverrideInput {
+  model: string;
+  /** USD per million tokens, as entered in Settings. */
+  input: number;
+  output: number;
+  cacheRead: number | null;
+  cacheWrite: number | null;
+}
+
+let promptCachingEnabled = true;
+let pricingOverrides = new Map<string, Pricing>();
+
+/**
+ * Applies Settings → Data pricing choices to every estimate made after this call.
+ * Rates are entered per million tokens and stored per token here.
+ */
+export function configurePricing(options: {
+  promptCaching?: boolean;
+  overrides?: PricingOverrideInput[];
+}): void {
+  if (typeof options.promptCaching === "boolean") promptCachingEnabled = options.promptCaching;
+  if (Array.isArray(options.overrides)) {
+    pricingOverrides = new Map();
+    for (const override of options.overrides) {
+      const model = override.model.trim().toLowerCase();
+      if (!model) continue;
+      const perToken = (value: number | null): number | undefined => (
+        typeof value === "number" && Number.isFinite(value) && value >= 0 ? value / 1_000_000 : undefined
+      );
+      const rate: Pricing = {
+        input: perToken(override.input) ?? 0,
+        output: perToken(override.output) ?? 0
+      };
+      const cacheRead = perToken(override.cacheRead);
+      const cacheWrite = perToken(override.cacheWrite);
+      if (cacheRead !== undefined) rate.cacheRead = cacheRead;
+      if (cacheWrite !== undefined) rate.cacheWrite = cacheWrite;
+      pricingOverrides.set(model, rate);
+    }
+  }
+}
+
+function overrideFor(...models: string[]): Pricing | undefined {
+  for (const model of models) {
+    const rate = pricingOverrides.get(model.trim().toLowerCase());
+    if (rate) return rate;
+  }
+  return undefined;
+}
+
 export interface TokenCostInput {
   model: string;
   inputTokens: number;
@@ -125,6 +175,8 @@ export function estimateClaudeCost(
 
 function resolveCodexPricing(raw: string, catalog: PricingCatalog | null): Pricing | undefined {
   const normalized = normalizeCodexModel(raw);
+  const override = overrideFor(raw, stripCodexIdentity(raw), normalized);
+  if (override) return override;
   const bundled = CODEX_PRICING[normalized];
   const live = firstRate(catalog, MODELS_DEV_PROVIDER_OPENAI, [
     raw.trim(),
@@ -137,6 +189,8 @@ function resolveCodexPricing(raw: string, catalog: PricingCatalog | null): Prici
 function resolveClaudePricing(raw: string, catalog: PricingCatalog | null): Pricing | undefined {
   const identity = stripClaudeIdentity(raw);
   const normalized = normalizeClaudeModel(raw);
+  const override = overrideFor(raw, identity, normalized);
+  if (override) return override;
   const bundled = CLAUDE_PRICING[normalized];
   const live = firstRate(catalog, MODELS_DEV_PROVIDER_ANTHROPIC, [
     raw.trim(),
@@ -183,9 +237,11 @@ function estimateCodex(input: TokenCostInput, pricing: Pricing | undefined): num
   if (!pricing) return null;
   const rawInput = nonnegative(input.inputTokens);
   pricing = pricingForContext(pricing, rawInput);
-  const cached = Math.min(nonnegative(input.cachedInputTokens), rawInput);
+  const cached = promptCachingEnabled ? Math.min(nonnegative(input.cachedInputTokens), rawInput) : 0;
   const remainingInput = rawInput - cached;
-  const cacheCreation = Math.min(nonnegative(input.cacheCreationInputTokens), remainingInput);
+  const cacheCreation = promptCachingEnabled
+    ? Math.min(nonnegative(input.cacheCreationInputTokens), remainingInput)
+    : 0;
   const uncached = remainingInput - cacheCreation;
   const above = pricing.threshold !== undefined && rawInput > pricing.threshold;
   const inputRate = above ? pricing.inputAboveThreshold ?? pricing.input : pricing.input;
@@ -203,9 +259,14 @@ function estimateCodex(input: TokenCostInput, pricing: Pricing | undefined): num
 }
 
 function estimateClaude(input: TokenCostInput, pricing: Pricing): number {
-  const freshInput = nonnegative(input.inputTokens);
-  const cached = nonnegative(input.cachedInputTokens);
-  const cacheCreation = nonnegative(input.cacheCreationInputTokens);
+  let freshInput = nonnegative(input.inputTokens);
+  let cached = nonnegative(input.cachedInputTokens);
+  let cacheCreation = nonnegative(input.cacheCreationInputTokens);
+  if (!promptCachingEnabled) {
+    freshInput += cached + cacheCreation;
+    cached = 0;
+    cacheCreation = 0;
+  }
   const cacheCreation1h = Math.min(nonnegative(input.cacheCreation1hInputTokens ?? 0), cacheCreation);
   const cacheCreation5m = cacheCreation - cacheCreation1h;
   const contextTokens = freshInput + cached + cacheCreation;

@@ -8,6 +8,7 @@ import "@fontsource-variable/plus-jakarta-sans";
 import "@fontsource-variable/geist";
 import "./globals.css";
 import { App } from "./App";
+import { CompactWidget } from "./CompactWidget";
 
 // Keep the component and glass themes aligned with the OS appearance.
 const systemDark = matchMedia("(prefers-color-scheme: dark)");
@@ -27,5 +28,11 @@ systemDark.addEventListener("change", applySystemTheme);
 
 const root = document.getElementById("root");
 if (!root) throw new Error("Missing renderer root");
-// Toasts sit outside the shell, whose glass panels would otherwise anchor them.
-createRoot(root).render(<StrictMode><App /><Toast.Provider placement="bottom end" /></StrictMode>);
+const widgetMode = location.hash.replace(/^#/, "") === "widget";
+if (widgetMode) {
+  document.documentElement.dataset.surface = "widget";
+  createRoot(root).render(<StrictMode><CompactWidget /></StrictMode>);
+} else {
+  // Toasts sit outside the shell, whose glass panels would otherwise anchor them.
+  createRoot(root).render(<StrictMode><App /><Toast.Provider placement="bottom end" /></StrictMode>);
+}

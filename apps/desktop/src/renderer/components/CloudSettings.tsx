@@ -165,7 +165,7 @@ export function CloudSettings(): React.JSX.Element {
                     : ""}
                   {heldBack.join(", ")} {heldBack.length === 1 ? "stays" : "stay"} on this
                   computer: the server does not model {heldBack.length === 1 ? "that source" : "those sources"} yet.
-                  It is never uploaded under another provider's name.
+                  Add a rule on the Attribution page to report them under a provider it accepts.
                 </p>
               )}
             </div>

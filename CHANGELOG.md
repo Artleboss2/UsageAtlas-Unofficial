@@ -3,6 +3,31 @@
 All notable UsageAtlas desktop changes are recorded here. This build starts from the open-source
 UsageAtlas app; see [README.md](README.md) for what it adds and what it is not.
 
+## Unreleased
+
+### Added
+
+- **The settings the reference spec lists.** The compact always-on-top widget gets its own page
+  beside the window controls, and Settings gains opt-in controls that were only constants before:
+  extra log roots and ignored project fragments, burn-rate and quota-reset alerts with sounds and a
+  do-not-disturb switch, per-provider colours, window opacity and blur, density, model price
+  overrides, currency and tax, project redaction, a retention window, and scheduled exports.
+- **Attribution is back while the provider PR is unmerged.** A source the hosted service does not
+  model can again be reported as one or more official providers with a share each. Local history is
+  never rewritten; only the uploaded copy is. Each request keeps the target it first spun, so a
+  retried save cannot change its label.
+
+### Changed
+
+- **The local file is smaller again.** Day display details are stored deflated and read back
+  unchanged; collection and capacity snapshots are deleted once the server has acknowledged them; an
+  attribution label is now a column on the fact or day it describes instead of a settings row keyed
+  by its id; two indexes no query filtered on are dropped; and a saved request keeps its payload
+  for a week rather than a month. The one-time rewrite could not run before while the background
+  writer held the file, so it now opens on the first batch instead and the `VACUUM` succeeds. On a
+  current profile: 1,380,352 bytes → 704,512 bytes (49 % smaller), 606 → 278 fact rows, 723 → 0
+  label settings rows, with all 20 day records, every token, cost, hour and model total intact.
+
 ## 0.4.0 — 2026-10-29
 
 ### Changed

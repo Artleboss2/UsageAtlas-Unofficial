@@ -9,25 +9,19 @@ import {
   type SaveResult
 } from "@usageatlas/contracts/usage";
 import type { CloudProgress } from "../../shared/desktop-api";
-import { UsageStore } from "./usage-store";
-
-/** Providers the hosted service models. Everything else stays on this computer. */
-const CLOUD_PROVIDERS = [
-  "codex",
-  "claude",
-  "cursor",
-  "opencode",
-  "antigravity",
-  "pi",
-  "muse",
-  "warp",
-  "kimi",
-  "kilo",
-  "copilot",
-  "factory",
-  "amp",
-  "qoder"
-] as const;
+import {
+  OFFICIAL_PROVIDERS,
+  applyTargetToFact,
+  applyTargetToRecord,
+  isOfficialProvider,
+  planFor,
+  unaliasUsageRecord,
+  type ReportPlan,
+  type ReportTarget
+} from "../../shared/report-plans";
+import { spinTarget } from "./report-wheel";
+import { identifyFact } from "./statistics-store";
+import { ATTRIBUTION_SEPARATOR, parseAttribution, UsageStore } from "./usage-store";
 
 /**
  * The hosted service stores at most this many observations per request. Sending
@@ -55,7 +49,9 @@ export class UsageSync {
   private stopping = false;
   private controller: AbortController | null = null;
   private preparedAccount: string | null = null;
-  /** Sources the server does not model, kept on this computer. */
+  /** Applied to the uploaded copy only; local history keeps its real provider. */
+  private reportPlans: ReportPlan[] = [];
+  /** Sources the server does not model and no rule renames, kept on this computer. */
   private heldBack: string[] = [];
   constructor(
     private readonly store: UsageStore,
@@ -122,9 +118,20 @@ export class UsageSync {
     this.schedule();
     if (switched) this.changed("account");
   }
-  /** Providers this server accepts. Anything else stays local. */
+  setReportPlans(plans: ReportPlan[]): void {
+    this.reportPlans = plans;
+    // A new rule takes a source out of the held-back notice right away, instead
+    // of waiting for the next save to notice.
+    this.reportHeldBack(this.unsupportedProviders(this.uploadableProviders()));
+  }
+  /**
+   * Providers this server accepts: the ones it models, plus the sources a saved
+   * rule renames. Anything else stays local until the user adds a rule.
+   */
   private uploadableProviders(): string[] {
-    return [...CLOUD_PROVIDERS];
+    const providers = new Set<string>(OFFICIAL_PROVIDERS);
+    for (const plan of this.reportPlans) providers.add(plan.source);
+    return [...providers];
   }
   /** Sources with pending usage that the server would reject as-is. */
   private unsupportedProviders(providers: readonly string[]): string[] {
@@ -139,8 +146,9 @@ export class UsageSync {
     this.heldBack = [...providers];
   }
   /**
-   * Usage that no save can upload because the server models no such source. It is
-   * counted apart from `pending` so it never reads as a save that keeps failing.
+   * Usage that no save can upload yet because the server models no such source
+   * and no rule renames it. It is counted apart from `pending` so a source the
+   * user has not mapped never reads as a save that keeps failing.
    */
   private heldBackPending(): number {
     const held = this.unsupportedProviders(this.uploadableProviders());
@@ -151,6 +159,47 @@ export class UsageSync {
   private uploadablePending(): number {
     const providers = this.uploadableProviders();
     return this.store.uploadableCount(providers) + this.store.statistics.pendingCount(providers);
+  }
+  /**
+   * Renames one pending observation for upload. Its id is the hash of its content,
+   * so a renamed copy is renumbered and the id it is stored under here is kept for
+   * the acknowledgement. The wheel is spun on the event's identity: every version
+   * of one request keeps the same target.
+   */
+  private renameFact(fact: UsageFact): { fact: UsageFact; localId: string } {
+    const target = this.targetFor(`fact:${fact.id}`, fact.providerId, fact.kind === "usage_event" ? fact.eventId : fact.id);
+    return target
+      ? { fact: identifyFact(applyTargetToFact(fact, target)), localId: fact.id }
+      : { fact, localId: fact.id };
+  }
+  /** Renames one daily record; a day keeps the target it landed on between saves. */
+  private renameRecord(row: PendingRecord): PendingRecord {
+    const target = this.targetFor(`record:${row.record.recordId}`, row.record.providerId, row.record.recordId);
+    return target ? { ...row, record: applyTargetToRecord(row.record, target) } : row;
+  }
+  /**
+   * One unit of usage keeps the target it was first reported as, even after the
+   * plan's weights change: the server holds a record under one provider and
+   * rejects the same record under another. A target that the current plan no
+   * longer offers falls back to a fresh spin.
+   */
+  private targetFor(key: string, source: string, spinKey: string): ReportTarget | null {
+    const plan = planFor(this.reportPlans, source);
+    if (!plan) return null;
+    const stored = this.store.attribution(key);
+    if (stored) {
+      const { reportAs, model } = parseAttribution(stored);
+      // The server bound this record to that label, so the plan's current weights
+      // and models no longer apply to it; a copy stored without a model borrows the
+      // one the plan still offers for that provider.
+      if (isOfficialProvider(reportAs)) {
+        const fallback = plan.targets.find(target => target.reportAs === reportAs)?.model ?? plan.targets[0].model;
+        return { reportAs, model: model || fallback, weight: 0 };
+      }
+    }
+    const target = spinTarget(plan, spinKey);
+    if (target) this.store.setAttribution(key, `${target.reportAs}${ATTRIBUTION_SEPARATOR}${target.model}`);
+    return target;
   }
   setAutomatic(enabled: boolean): void {
     if (!this.cloud) throw new Error("Sign in before enabling automatic save.");
@@ -208,14 +257,21 @@ export class UsageSync {
       if (upload) {
         this.progress = { operation: "save", phase: "saving", completed: 0, total: this.store.statistics.pendingCount() };
         for (;;) {
-          const outgoing = this.store.statistics.pending(providers).slice(0, STATISTICS_SAVE_BATCH);
+          // The server fingerprints an observation's content and only stores a copy
+          // whose id still matches it, so a renamed fact is renumbered here and the
+          // acknowledgement is translated back to the row this computer wrote.
+          const outgoing = this.store.statistics.pending(providers)
+            .slice(0, STATISTICS_SAVE_BATCH)
+            .map(fact => this.renameFact(fact));
           if (!outgoing.length) break;
           if (!cloud.saveFacts) throw new Error("This server does not support saving usage observations. Update before saving.");
-          const saved = await cloud.saveFacts(outgoing);
+          const saved = await cloud.saveFacts(outgoing.map(entry => entry.fact));
           if (this.closed || this.stopping) return;
           if (saved.length !== outgoing.length || new Set(saved).size !== outgoing.length
-            || saved.some(id => !outgoing.some(fact => fact.id === id))) throw new Error("Incomplete statistics acknowledgement.");
-          this.store.transaction(() => this.store.statistics.acknowledge(saved));
+            || saved.some(id => !outgoing.some(entry => entry.fact.id === id))) throw new Error("Incomplete statistics acknowledgement.");
+          const local = saved.map(id => outgoing.find(entry => entry.fact.id === id)!.localId);
+          if (new Set(local).size !== local.length) throw new Error("Ambiguous statistics acknowledgement.");
+          this.store.transaction(() => this.store.statistics.acknowledge(local));
           this.progress!.completed += saved.length;
         }
       }
@@ -225,7 +281,7 @@ export class UsageSync {
         do {
           const page = await cloud.read(after);
           if (this.closed || this.stopping) return;
-          for (const record of page.records) this.store.merge(record);
+          for (const record of page.records) this.store.merge(record, unaliasUsageRecord);
           if (page.next !== null && ((after !== null && page.next <= after) || page.records.length === 0)) {
             throw new Error("Invalid cloud page.");
           }
@@ -239,8 +295,8 @@ export class UsageSync {
         const counts = this.store.counts();
         this.progress = { operation: "save", phase: "saving", completed: 0, total: counts.pending - counts.conflicts - counts.invalid };
         while (pending.length) {
-          const outgoing = pending;
-          const before = new Map(outgoing.map(row => [row.record.recordId, this.stateOf(row)]));
+          const outgoing = pending.map((row) => this.renameRecord(row));
+          const sent = new Map(outgoing.map(row => [row.record.recordId, this.stateOf(row)]));
           const results = await cloud.save(outgoing);
           if (this.closed || this.stopping) return;
           if (
@@ -255,16 +311,18 @@ export class UsageSync {
             if (result.status === "saved") {
               if (!sameUsage(sent.record, result.record) || result.revision < sent.revision)
                 throw new Error("Cloud acknowledgement does not match the sent record.");
+              // Acknowledge the local row: the cloud only ever saw the relabelled copy.
               this.store.acknowledge(local, result);
               this.progress.completed += 1;
-            } else this.store.merge(result);
+            } else this.store.merge(result, unaliasUsageRecord);
           }
           // Only the rows this pass sent count as progress: a source the server
           // refuses to accept stays pending and is reported instead of retried.
           const next = this.store.pending(providers);
           // A row the server keeps answering about must change something — its own
-          // version or its revision — or the save would spin forever.
-          if (next.some((row) => before.get(row.record.recordId) === this.stateOf(row)))
+          // version, its revision, or the provider it is reported as — or the save
+          // would spin forever. Adopting the server's label and revision counts.
+          if (next.some((row) => sent.get(row.record.recordId) === this.stateOf(row)))
             throw new Error("Cloud save made no progress. Restore from cloud, then try again.");
           pending = next;
           const remaining = this.store.counts();
@@ -291,12 +349,12 @@ export class UsageSync {
   }
   /** What one pending row looks like to the server, for progress checks. */
   private stateOf(row: PendingRecord): string {
-    return [row.localVersion, row.revision].join("\u0000");
+    return [row.localVersion, row.revision, this.store.attribution(`record:${row.record.recordId}`)].join("\u0000");
   }
   private schedule(): void {
     if (!this.automatic || !this.cloud || this.closed || this.stopping || this.timer || this.running) return;
-    // A source the server refuses must not keep an hourly save running forever:
-    // only what a save can actually upload wakes the timer.
+    // A source the server refuses without a rule must not keep an hourly save
+    // running forever: only what a save can actually upload wakes the timer.
     if (this.uploadablePending() === 0) return;
     this.timer = setTimeout(() => {
       this.timer = null;

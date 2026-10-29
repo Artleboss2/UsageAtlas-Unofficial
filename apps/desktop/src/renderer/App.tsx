@@ -12,6 +12,7 @@ import type {
 } from "../shared/desktop-api";
 import { applyWallpaper } from "./wallpapers";
 import { applyAppearance } from "./appearance";
+import { setCostDisplay } from "./number-format";
 import type { AppMark } from "../shared/desktop-api";
 import { useAchievementNudge } from "./achievement-nudge";
 import { snapshotHasCachedUsage } from "../shared/cached-snapshot";
@@ -20,6 +21,7 @@ import { useDesktopUpdates } from "./update-state";
 import { UpdateTag } from "./components/UpdateControls";
 import { I18nProvider, useI18n } from "./i18n";
 import { AppShell } from "./components/AppShell";
+import { Attribution } from "./components/Attribution";
 import { DayDashboard } from "./components/DayDashboard";
 import type { HealthNotice } from "./components/Diagnostics";
 import { Diagnostics } from "./components/Diagnostics";
@@ -38,6 +40,7 @@ import { providerConnection, reconnectSentence } from "./provider-connection";
 import { wantsProfilePrompt } from "./profile-promotion";
 import { useCloudAccount, useLeaderboard, useProfilePageVisited, useProfilePrompt } from "./profile-state";
 import { useWrappedNudge } from "./wrapped-nudge";
+import type { ReportPlan } from "../shared/report-plans";
 
 const ALERT_INBOX_KEY = "usageatlas.alert-inbox.v1";
 const MAX_INBOX_ENTRIES = 50;
@@ -80,6 +83,7 @@ export function App(): React.JSX.Element {
   const [saving, setSaving] = useState(false);
   const [diagnosticsLoading, setDiagnosticsLoading] = useState(false);
   const [providerSaving, setProviderSaving] = useState<string | null>(null);
+  const [aliasSaving, setAliasSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [dismissedNotices, setDismissedNotices] = useState<string[]>([]);
   const [usageAlert, setUsageAlert] = useState<DesktopUsageAlert | null>(null);
@@ -176,6 +180,16 @@ export function App(): React.JSX.Element {
     if (appearance) applyAppearance(appearance);
   }, [appearance]);
 
+  const advanced = preferences?.advanced;
+  useEffect(() => {
+    if (!advanced) return;
+    setCostDisplay({
+      currency: advanced.currency,
+      rate: advanced.currencyRate,
+      taxPercent: advanced.taxPercent
+    });
+  }, [advanced]);
+
   useEffect(() => {
     const onHashChange = () => setRoute(routeFromHash(location.hash));
     window.addEventListener("hashchange", onHashChange);
@@ -235,6 +249,15 @@ export function App(): React.JSX.Element {
     }
   }
 
+  async function saveReportPlans(plans: ReportPlan[]): Promise<void> {
+    setAliasSaving(true);
+    try {
+      setPreferences(await window.usageAtlas.setReportPlans(plans));
+    } finally {
+      setAliasSaving(false);
+    }
+  }
+
   const usageError = error ?? dashboardFailure(dashboard);
   const usageLoading = loading || (!usageError && dashboardIsLoading(dashboard));
   const today = todayDay();
@@ -281,6 +304,22 @@ export function App(): React.JSX.Element {
     setTrendRange(range);
     setTrendEndDay(today);
     navigate("trends");
+  }
+
+  async function importSettings(): Promise<void> {
+    const next = await window.usageAtlas.importSettings().catch((caught: unknown) => {
+      setError(caught instanceof Error ? caught.message : "The settings file could not be read.");
+      return null;
+    });
+    if (next) setPreferences(next);
+  }
+
+  async function exportUsage(): Promise<void> {
+    try {
+      await window.usageAtlas.exportUsageNow();
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "The usage export could not be written.");
+    }
   }
 
   const activity = (
@@ -429,6 +468,14 @@ export function App(): React.JSX.Element {
           prompt={profilePrompt.prompt}
         />
       )}
+      {route === "attribution" && (
+        <Attribution
+          onSave={saveReportPlans}
+          preferences={preferences}
+          providers={snapshot?.providers ?? []}
+          saving={aliasSaving}
+        />
+      )}
       {route === "settings" && (
         <Settings
           updateState={updates.state}
@@ -448,6 +495,14 @@ export function App(): React.JSX.Element {
           providers={snapshot?.providers ?? []}
           refreshing={refreshing}
           saving={saving}
+          onShowWidget={() => window.usageAtlas.showWidget()}
+          onHideWidget={() => window.usageAtlas.hideWidget()}
+          onExportSettings={() => window.usageAtlas.exportSettings().then(() => undefined)}
+          onImportSettings={importSettings}
+          onChooseFolder={() => window.usageAtlas.chooseFolder()}
+          onChooseExportDirectory={() => window.usageAtlas.chooseExportDirectory()}
+          onExportUsage={exportUsage}
+          onRestartApp={() => window.usageAtlas.restartApp()}
         />
       )}
       {route === "diagnostics" && (
@@ -534,8 +589,7 @@ function backgroundImageErrorMessage(caught: unknown): string {
 
 function routeFromHash(hash: string): AppRoute {
   const candidate = hash.replace(/^#/, "");
-  if (candidate === "attribution") return "settings";
-  if (candidate === "trends" || candidate === "insights" || candidate === "limits" || candidate === "alerts" || candidate === "profile" || candidate === "settings" || candidate === "diagnostics") {
+  if (candidate === "trends" || candidate === "insights" || candidate === "limits" || candidate === "alerts" || candidate === "profile" || candidate === "attribution" || candidate === "settings" || candidate === "diagnostics") {
     return candidate;
   }
   return "day";

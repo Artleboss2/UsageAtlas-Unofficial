@@ -27,6 +27,9 @@ import type { EngineRefreshProgress, EngineRequest, EngineResponse } from "./pro
 import { ProviderError, type ProviderAdapter, type ProviderRefreshResult } from "./provider";
 import { DESKTOP_VERSION } from "../shared/version";
 import { validateProviderCredential } from "../shared/quota-providers";
+import { validateReportPlans } from "../shared/report-plans";
+import { configurePricing } from "./analytics/pricing";
+import { clearPricingCache } from "./analytics/models-dev";
 
 const STALE_AFTER_SECONDS = 180;
 const PROVIDER_REFRESH_TIMEOUT_MS = 60_000;
@@ -48,6 +51,10 @@ export class EngineService {
   private readonly analyticsFailures = new Map<string, ProviderFailure>();
   private readonly history: HistoryStore;
   private readonly sync: UsageSync | null;
+  /** Folders the JSONL readers should also walk; mounted WSL/network paths work here. */
+  private extraLogPaths: string[] = [];
+  /** Case-insensitive project path fragments excluded from every total. */
+  private ignoredProjects: string[] = [];
 
   constructor(
     adapters: ProviderAdapter[],
@@ -115,6 +122,61 @@ export class EngineService {
         return this.snapshot() as unknown as JsonValue;
       }
       case "config.update": {
+        if (Object.hasOwn(request.params, "reportPlans")) {
+          const plans = validateReportPlans(request.params.reportPlans);
+          this.sync?.setReportPlans(plans);
+          return { reportPlans: plans.length };
+        }
+        if (request.params.pricing && typeof request.params.pricing === "object" && !Array.isArray(request.params.pricing)) {
+          const pricing = request.params.pricing as Record<string, JsonValue>;
+          const overrides = Array.isArray(pricing.overrides)
+            ? pricing.overrides.flatMap((entry) => {
+              if (!entry || typeof entry !== "object" || Array.isArray(entry)) return [];
+              const value = entry as Record<string, JsonValue>;
+              if (typeof value.model !== "string") return [];
+              return [{
+                model: value.model,
+                input: typeof value.input === "number" ? value.input : 0,
+                output: typeof value.output === "number" ? value.output : 0,
+                cacheRead: typeof value.cacheRead === "number" ? value.cacheRead : null,
+                cacheWrite: typeof value.cacheWrite === "number" ? value.cacheWrite : null
+              }];
+            })
+            : [];
+          configurePricing({
+            promptCaching: typeof pricing.promptCaching === "boolean" ? pricing.promptCaching : undefined,
+            overrides
+          });
+          return { pricing: "configured", overrides: overrides.length } as JsonValue;
+        }
+        if (request.params.scan && typeof request.params.scan === "object" && !Array.isArray(request.params.scan)) {
+          const scan = request.params.scan as Record<string, JsonValue>;
+          this.extraLogPaths = Array.isArray(scan.extraLogPaths)
+            ? scan.extraLogPaths.filter((entry): entry is string => typeof entry === "string" && entry.length <= 1_024).slice(0, 20)
+            : [];
+          this.ignoredProjects = Array.isArray(scan.ignoredProjects)
+            ? scan.ignoredProjects.filter((entry): entry is string => typeof entry === "string" && entry.length <= 512).slice(0, 100)
+            : [];
+          // A changed filter must not keep the previous totals cached.
+          this.cached.clear();
+          this.refreshedAt.clear();
+          return { scan: "configured", extraLogPaths: this.extraLogPaths.length } as JsonValue;
+        }
+        if (request.params.maintenance && typeof request.params.maintenance === "object" && !Array.isArray(request.params.maintenance)) {
+          const maintenance = request.params.maintenance as Record<string, JsonValue>;
+          if (maintenance.pruneDays !== undefined) {
+            if (typeof maintenance.pruneDays !== "number" || !Number.isInteger(maintenance.pruneDays) || maintenance.pruneDays < 1) {
+              throw new ProviderError("invalid_params", "pruneDays must be a positive integer.");
+            }
+            if (!(this.history instanceof SqliteHistoryStore)) throw new ProviderError("unsupported", "History pruning needs local storage.");
+            const removed = this.history.usage.pruneBeforeDays(maintenance.pruneDays);
+            this.cached.clear();
+            this.refreshedAt.clear();
+            this.historyChanged?.();
+            return { pruned: removed } as JsonValue;
+          }
+          throw new ProviderError("invalid_params", "Unknown maintenance operation.");
+        }
         const providerID = this.providerID(request.params.provider);
         if (Object.hasOwn(request.params, "credential")) {
           const adapter = this.providers.get(providerID)!;
@@ -166,6 +228,11 @@ export class EngineService {
         }
         return this.sync.status() as unknown as JsonValue;
       }
+      case "pricing.refresh":
+        clearPricingCache();
+        this.cached.clear();
+        this.refreshedAt.clear();
+        return { refreshed: true } as JsonValue;
       case "shutdown":
         this.sync?.close();
         await this.history.close?.();
@@ -299,7 +366,9 @@ export class EngineService {
         now,
         historyDays: lookbackDays(defaultAccountKey),
         historyDaysForAccount: lookbackDays,
-        reportingTimeZoneForAccount: account => { reportingTimeZone = this.history.reportingTimeZone?.(providerID, account); return reportingTimeZone; }
+        reportingTimeZoneForAccount: account => { reportingTimeZone = this.history.reportingTimeZone?.(providerID, account); return reportingTimeZone; },
+        extraLogPaths: this.extraLogPaths,
+        ignoredProjects: this.ignoredProjects
       });
       const accountKey = resolveAccountKey(refreshed.accountKey);
       if (adapter.capacityAccountKey) this.capacityAccounts.set(providerID, accountKey);

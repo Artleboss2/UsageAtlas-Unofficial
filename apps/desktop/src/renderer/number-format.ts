@@ -1,4 +1,4 @@
-import type { NumberStyle } from "../shared/desktop-api";
+import type { CurrencyCode, NumberStyle } from "../shared/desktop-api";
 
 /**
  * Numbers are rendered in English on purpose: every label around them is English
@@ -42,19 +42,53 @@ const exactNumberFormatter = new Intl.NumberFormat(NUMBER_LOCALE, {
   maximumFractionDigits: 2
 });
 
-const currencyFormatter = new Intl.NumberFormat(NUMBER_LOCALE, {
-  style: "currency",
-  currency: "USD",
-  minimumFractionDigits: 2,
-  maximumFractionDigits: 2
-});
+/**
+ * Costs are stored in USD and converted for display. The rate is fixed by the
+ * user rather than fetched, so a figure never changes between two renders.
+ */
+let costCurrency: CurrencyCode = "USD";
+let costRate = 1;
+let costTaxPercent = 0;
+const currencyFormatters = new Map<string, Intl.NumberFormat>();
 
-const preciseCurrencyFormatter = new Intl.NumberFormat(NUMBER_LOCALE, {
-  style: "currency",
-  currency: "USD",
-  minimumFractionDigits: 4,
-  maximumFractionDigits: 4
-});
+export interface CostDisplaySettings {
+  currency: CurrencyCode;
+  /** Display-currency units per USD. */
+  rate: number;
+  taxPercent: number;
+}
+
+export function setCostDisplay(settings: CostDisplaySettings): void {
+  costCurrency = settings.currency;
+  costRate = Number.isFinite(settings.rate) && settings.rate > 0 ? settings.rate : 1;
+  costTaxPercent = Number.isFinite(settings.taxPercent) ? Math.min(100, Math.max(0, settings.taxPercent)) : 0;
+  currencyFormatters.clear();
+}
+
+function convertedCost(value: number): number {
+  return value * costRate * (1 + costTaxPercent / 100);
+}
+
+function currencyFormatter(precise: boolean): Intl.NumberFormat {
+  const digits = costCurrency === "JPY" ? 0 : precise ? 4 : 2;
+  const key = `${costCurrency}:${digits}`;
+  let formatter = currencyFormatters.get(key);
+  if (!formatter) {
+    formatter = new Intl.NumberFormat(NUMBER_LOCALE, {
+      style: "currency",
+      currency: costCurrency,
+      minimumFractionDigits: digits,
+      maximumFractionDigits: digits
+    });
+    currencyFormatters.set(key, formatter);
+  }
+  return formatter;
+}
+
+function currencySymbol(): string {
+  const parts = currencyFormatter(false).formatToParts(0);
+  return parts.find((part) => part.type === "currency")?.value ?? "$";
+}
 
 /** Every digit, grouped — the form the interface uses unless compact is chosen. */
 function formatExactValue(value: number): string {
@@ -89,14 +123,16 @@ export function formatAxisNumber(value: number): string {
 }
 
 export function formatCompactCurrency(value: number): string {
-  const sign = value < 0 ? "-$" : "$";
-  return `${sign}${formatCompactNumber(Math.abs(value))}`;
+  const converted = convertedCost(value);
+  const sign = converted < 0 ? `-${currencySymbol()}` : currencySymbol();
+  return `${sign}${formatCompactNumber(Math.abs(converted))}`;
 }
 
 /** Chart currency ticks stay short for the same reason the numeric ones do. */
 export function formatAxisCurrency(value: number): string {
-  const sign = value < 0 ? "-$" : "$";
-  return `${sign}${formatWithUnits(Math.abs(value))}`;
+  const converted = convertedCost(value);
+  const sign = converted < 0 ? `-${currencySymbol()}` : currencySymbol();
+  return `${sign}${formatWithUnits(Math.abs(converted))}`;
 }
 
 export function formatTokens(value: number): string {
@@ -109,5 +145,8 @@ export function formatExactTokens(value: number): string {
 
 export function formatCost(value: number | null): string {
   if (value === null) return "—";
-  return value > 0 && value < 0.01 ? preciseCurrencyFormatter.format(value) : currencyFormatter.format(value);
+  const converted = convertedCost(value);
+  return converted > 0 && converted < 0.01
+    ? currencyFormatter(true).format(converted)
+    : currencyFormatter(false).format(converted);
 }
