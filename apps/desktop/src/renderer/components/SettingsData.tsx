@@ -119,6 +119,21 @@ export function SettingsData({
         </Card.Header>
         <Card.Content className="atlas-settings-list mt-2">
           <SettingRow
+            checked={advanced.blendedCostEnabled}
+            description={t("settings.data.blendedDescription")}
+            label={t("settings.data.blended")}
+            onChange={(blendedCostEnabled) => updateAdvanced({ blendedCostEnabled })}
+          />
+          {advanced.blendedCostEnabled ? (
+            <NumberRow
+              description={t("settings.data.blendedRateDescription")}
+              label={t("settings.data.blendedRate")}
+              onCommit={(value) => void updateAdvanced({ blendedCostPerMillionUSD: value })}
+              step={0.01}
+              value={advanced.blendedCostPerMillionUSD}
+            />
+          ) : null}
+          <SettingRow
             checked={advanced.promptCaching}
             description={t("settings.data.cachingDescription")}
             label={t("settings.data.caching")}

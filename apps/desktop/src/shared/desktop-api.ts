@@ -290,6 +290,14 @@ export interface AdvancedPreferences {
   currencyRate: number;
   /** Added to displayed estimates, 0–100. */
   taxPercent: number;
+  /**
+   * Replaces per-model catalog rates with one blended rate. Provider logs often
+   * name a private model whose public price is far below the invoice, so the
+   * catalog total understates a real bill by an order of magnitude.
+   */
+  blendedCostEnabled: boolean;
+  /** USD per million tokens while `blendedCostEnabled` is on. */
+  blendedCostPerMillionUSD: number;
   /** When off, cached input is charged at the full input rate. */
   promptCaching: boolean;
   modelCostOverrides: ModelCostOverride[];
@@ -325,6 +333,10 @@ export const DEFAULT_ADVANCED_PREFERENCES: AdvancedPreferences = {
   currency: "USD",
   currencyRate: 1,
   taxPercent: 0,
+  blendedCostEnabled: true,
+  // The published leaderboard sits near $0.54 per million tokens; use that as
+  // the default so a fresh install does not report a tenfold-low estimate.
+  blendedCostPerMillionUSD: 0.54,
   promptCaching: true,
   modelCostOverrides: [],
   extraLogPaths: [],
@@ -401,6 +413,14 @@ export function sanitizeAdvancedPreferences(value: unknown): AdvancedPreferences
       ? record.currency as CurrencyCode : DEFAULT_ADVANCED_PREFERENCES.currency,
     currencyRate: boundedNumber(record.currencyRate, DEFAULT_ADVANCED_PREFERENCES.currencyRate, 0.01, 10_000),
     taxPercent: boundedNumber(record.taxPercent, DEFAULT_ADVANCED_PREFERENCES.taxPercent, 0, 100),
+    blendedCostEnabled: typeof record.blendedCostEnabled === "boolean"
+      ? record.blendedCostEnabled : DEFAULT_ADVANCED_PREFERENCES.blendedCostEnabled,
+    blendedCostPerMillionUSD: boundedNumber(
+      record.blendedCostPerMillionUSD,
+      DEFAULT_ADVANCED_PREFERENCES.blendedCostPerMillionUSD,
+      0.01,
+      1_000
+    ),
     promptCaching: typeof record.promptCaching === "boolean" ? record.promptCaching : DEFAULT_ADVANCED_PREFERENCES.promptCaching,
     modelCostOverrides: sanitizeModelCostOverrides(record.modelCostOverrides),
     extraLogPaths: stringList(record.extraLogPaths, 20, 1_024),

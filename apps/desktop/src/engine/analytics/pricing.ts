@@ -20,6 +20,14 @@ interface PricingOverrideInput {
 
 let promptCachingEnabled = true;
 let pricingOverrides = new Map<string, Pricing>();
+/**
+ * A single rate for every token, in USD per token. Provider logs routinely name
+ * private models (Freebuff's `m-...` ids, fine-tunes, proxies) whose public
+ * catalog price has nothing to do with the invoice, so a model-based estimate can
+ * be an order of magnitude low. When this is set it wins over both the catalog
+ * and the custom overrides; `null` restores per-model pricing.
+ */
+let blendedCostPerToken: number | null = null;
 
 /**
  * Applies Settings → Data pricing choices to every estimate made after this call.
@@ -28,8 +36,17 @@ let pricingOverrides = new Map<string, Pricing>();
 export function configurePricing(options: {
   promptCaching?: boolean;
   overrides?: PricingOverrideInput[];
+  /** USD per million tokens, or null to price each model from the catalog. */
+  blendedCostPerMillion?: number | null;
 }): void {
   if (typeof options.promptCaching === "boolean") promptCachingEnabled = options.promptCaching;
+  if (options.blendedCostPerMillion !== undefined) {
+    blendedCostPerToken = typeof options.blendedCostPerMillion === "number"
+      && Number.isFinite(options.blendedCostPerMillion)
+      && options.blendedCostPerMillion > 0
+      ? options.blendedCostPerMillion / 1_000_000
+      : null;
+  }
   if (Array.isArray(options.overrides)) {
     pricingOverrides = new Map();
     for (const override of options.overrides) {
@@ -49,6 +66,12 @@ export function configurePricing(options: {
       pricingOverrides.set(model, rate);
     }
   }
+}
+
+/** The flat estimate for a token count, or null while per-model pricing is on. */
+export function blendedCostFor(totalTokens: number): number | null {
+  if (blendedCostPerToken === null) return null;
+  return Math.max(0, Number.isFinite(totalTokens) ? totalTokens : 0) * blendedCostPerToken;
 }
 
 function overrideFor(...models: string[]): Pricing | undefined {
@@ -148,6 +171,9 @@ export function estimateCodexCost(
   input: TokenCostInput,
   catalog: PricingCatalog | null = emptyPricingCatalog()
 ): number | null {
+  // Codex callers pass inputTokens as the whole prompt (cached included).
+  const blended = blendedCostFor(nonnegative(input.inputTokens) + nonnegative(input.outputTokens));
+  if (blended !== null) return blended;
   const model = normalizeCodexModel(input.model);
   const pricing = resolveCodexPricing(input.model, catalog);
   const standardCost = estimateCodex(input, pricing);
@@ -163,6 +189,14 @@ export function estimateClaudeCost(
   input: TokenCostInput,
   catalog: PricingCatalog | null = emptyPricingCatalog()
 ): number | null {
+  // Claude callers keep fresh input and cache buckets separate.
+  const blended = blendedCostFor(
+    nonnegative(input.inputTokens)
+    + nonnegative(input.cachedInputTokens)
+    + nonnegative(input.cacheCreationInputTokens)
+    + nonnegative(input.outputTokens)
+  );
+  if (blended !== null) return blended;
   const speed = input.speed?.trim().toLowerCase() ?? "standard";
   const standard = resolveClaudePricing(input.model, catalog);
   if (!standard) return null;

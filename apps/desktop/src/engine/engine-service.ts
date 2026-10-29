@@ -145,7 +145,10 @@ export class EngineService {
             : [];
           configurePricing({
             promptCaching: typeof pricing.promptCaching === "boolean" ? pricing.promptCaching : undefined,
-            overrides
+            overrides,
+            blendedCostPerMillion: typeof pricing.blendedCostPerMillion === "number"
+              ? pricing.blendedCostPerMillion
+              : pricing.blendedCostPerMillion === null ? null : undefined
           });
           return { pricing: "configured", overrides: overrides.length } as JsonValue;
         }

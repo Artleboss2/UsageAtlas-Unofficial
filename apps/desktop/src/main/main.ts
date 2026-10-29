@@ -642,14 +642,18 @@ function showNotification(content: { title: string; body: string }, route: AppRo
   if (advance.notificationSounds && process.platform === "win32") shell.beep();
 }
 
-function applyAdvancedSettings(advanced: DesktopPreferences["advanced"]): void {
-  void engine.updateConfig({
+function applyAdvancedSettings(advanced: DesktopPreferences["advanced"]): Promise<void> {
+  return engine.updateConfig({
     scan: {
       extraLogPaths: advanced.extraLogPaths,
       ignoredProjects: advanced.ignoredProjects
     },
     pricing: {
       promptCaching: advanced.promptCaching,
+      // A flat rate is the only honest estimate for private model names; the
+      // engine prices every new observation with it and a rescan reprices the
+      // recent ledger, so the total on the dashboard matches the setting.
+      blendedCostPerMillion: advanced.blendedCostEnabled ? advanced.blendedCostPerMillionUSD : null,
       overrides: advanced.modelCostOverrides.map((override) => ({
         model: override.model,
         input: override.input,
@@ -658,7 +662,7 @@ function applyAdvancedSettings(advanced: DesktopPreferences["advanced"]): void {
         cacheWrite: override.cacheWrite
       }))
     }
-  }).catch(() => undefined);
+  }).then(() => undefined).catch(() => undefined);
 }
 
 function schedulePricingRefresh(hours: number): void {
@@ -1162,7 +1166,10 @@ function registerIPC(): void {
       else hideWidget();
     }
     if (JSON.stringify(previous.advanced) !== JSON.stringify(nextPreferences.advanced)) {
-      applyAdvancedSettings(nextPreferences.advanced);
+      // Pricing and scan roots only take effect on the next collection. Waiting
+      // for the config write and then refreshing makes the new estimate visible
+      // immediately instead of after the next scheduled scan.
+      void applyAdvancedSettings(nextPreferences.advanced).then(() => dashboard.refresh(true));
     }
     if (previous.pricingSyncHours !== nextPreferences.pricingSyncHours) {
       schedulePricingRefresh(nextPreferences.pricingSyncHours);
@@ -1584,7 +1591,7 @@ if (squirrelStartup || !hasSingleInstanceLock) {
   });
   await engine.applyProviderPreferences(preferences.get().providerEnabled);
   await engine.setReportPlans(preferences.get().reportPlans);
-  applyAdvancedSettings(preferences.get().advanced);
+  await applyAdvancedSettings(preferences.get().advanced);
   schedulePricingRefresh(preferences.get().pricingSyncHours);
   dashboard.activate();
   registerIPC();

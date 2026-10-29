@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
+  DEFAULT_ADVANCED_PREFERENCES,
   DEFAULT_BACKGROUND_IMAGE,
+  sanitizeAdvancedPreferences,
   isBackgroundImagePreference,
   rollForwardBackgroundDefault,
   sanitizeBackgroundImage,
@@ -23,6 +25,23 @@ describe("update source preference", () => {
     expect(sanitizeUpdateRepository("arthur/UsageAtlas-Builds/tree/main")).toBe("");
     expect(sanitizeUpdateRepository("https://github.com/arthur/UsageAtlas-Builds")).toBe("");
     expect(sanitizeUpdateRepository(7)).toBe("");
+  });
+});
+
+describe("blended cost preference", () => {
+  it("defaults to a realistic $0.54 per million tokens", () => {
+    expect(DEFAULT_ADVANCED_PREFERENCES.blendedCostEnabled).toBe(true);
+    expect(DEFAULT_ADVANCED_PREFERENCES.blendedCostPerMillionUSD).toBe(0.54);
+    expect(sanitizeAdvancedPreferences({}).blendedCostPerMillionUSD).toBe(0.54);
+  });
+
+  it("keeps a saved rate and rejects values outside the supported range", () => {
+    expect(sanitizeAdvancedPreferences({ blendedCostPerMillionUSD: 1.25, blendedCostEnabled: false })).toMatchObject({
+      blendedCostPerMillionUSD: 1.25,
+      blendedCostEnabled: false
+    });
+    expect(sanitizeAdvancedPreferences({ blendedCostPerMillionUSD: -4 }).blendedCostPerMillionUSD).toBe(0.01);
+    expect(sanitizeAdvancedPreferences({ blendedCostPerMillionUSD: 99_999 }).blendedCostPerMillionUSD).toBe(1_000);
   });
 });
 
