@@ -143,7 +143,9 @@ function WidgetBody({
         />
         <Gauge
           caption={t("widget.budget")}
-          label={budgetPercent === null ? t("widget.noBudget") : `${Math.round(budgetPercent)}%`}
+          // The caption already says what the ring is; a long "not set" label
+          // cannot fit inside a 46px ring.
+          label={budgetPercent === null ? "—" : `${Math.round(budgetPercent)}%`}
           tone={budgetPercent === null ? "neutral" : toneFor(100 - budgetPercent)}
           value={budgetPercent ?? 0}
         />

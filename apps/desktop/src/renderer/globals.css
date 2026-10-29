@@ -4300,6 +4300,301 @@ html[data-surface="widget"] #root {
   font-weight: 700;
 }
 
+/* Settings → Widget. The preview mirrors the floating card closely enough to
+   judge spacing without embedding a second BrowserWindow. */
+.atlas-widget-preview {
+  display: flex;
+  width: min(100%, 340px);
+  flex-direction: column;
+  gap: 9px;
+  padding: 12px 14px 13px;
+  border-radius: 18px;
+  background:
+    linear-gradient(150deg, rgba(255, 255, 255, 0.34), rgba(255, 255, 255, 0.06) 45%, transparent 75%),
+    color-mix(in oklab, var(--background) 74%, transparent);
+  box-shadow:
+    inset 0 0 0 0.5px rgba(255, 255, 255, 0.5),
+    inset 0 1px 0 rgba(255, 255, 255, 0.55),
+    0 18px 48px -24px rgba(0, 0, 0, 0.45);
+  color: var(--foreground);
+}
+
+@media (prefers-color-scheme: dark) {
+  .atlas-widget-preview {
+    background:
+      linear-gradient(150deg, rgba(255, 255, 255, 0.14), rgba(255, 255, 255, 0.03) 45%, transparent 75%),
+      color-mix(in oklab, #1b1b1d 76%, transparent);
+    box-shadow:
+      inset 0 0 0 0.5px rgba(255, 255, 255, 0.16),
+      inset 0 1px 0 rgba(255, 255, 255, 0.2),
+      0 18px 48px -24px rgba(0, 0, 0, 0.7);
+  }
+}
+
+.atlas-widget-preview__header {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-width: 0;
+}
+
+.atlas-widget-preview__mark {
+  display: grid;
+  width: 30px;
+  height: 30px;
+  flex: none;
+  place-items: center;
+  border-radius: 10px;
+  background: linear-gradient(145deg, #3a3a3c, #1c1c1e);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.24);
+  color: #fff;
+  font-size: 0.6rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+.atlas-widget-preview__titles {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.atlas-widget-preview__titles strong,
+.atlas-widget-preview__titles span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.atlas-widget-preview__titles strong {
+  font-size: 0.82rem;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+}
+
+.atlas-widget-preview__titles span {
+  color: var(--muted);
+  font-size: 0.66rem;
+}
+
+.atlas-widget-preview__gauges {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.atlas-widget-preview__gauge {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 9px;
+  padding: 7px 9px;
+  border-radius: 13px;
+  background: color-mix(in oklab, var(--surface) 44%, transparent);
+  box-shadow: inset 0 0 0 0.5px rgba(255, 255, 255, 0.24);
+}
+
+.atlas-widget-preview__ring {
+  position: relative;
+  display: grid;
+  width: 44px;
+  height: 44px;
+  flex: none;
+  place-items: center;
+  border-radius: 50%;
+  background: conic-gradient(
+    var(--tone, #34c759) var(--progress, 0%),
+    color-mix(in oklab, var(--foreground) 12%, transparent) 0
+  );
+}
+
+.atlas-widget-preview__ring::before {
+  content: "";
+  position: absolute;
+  inset: 5px;
+  border-radius: 50%;
+  background: color-mix(in oklab, var(--background) 94%, transparent);
+}
+
+.atlas-widget-preview__ring > span {
+  position: relative;
+  z-index: 1;
+  font-size: 0.67rem;
+  font-weight: 650;
+  letter-spacing: -0.02em;
+}
+
+.atlas-widget-preview__ring[data-tone="warn"] { --tone: #ff9f0a; }
+.atlas-widget-preview__ring[data-tone="bad"] { --tone: #ff453a; }
+.atlas-widget-preview__ring[data-tone="neutral"] { --tone: var(--muted); }
+
+.atlas-widget-preview__caption {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 0.62rem;
+  line-height: 1.2;
+  text-overflow: ellipsis;
+}
+
+.atlas-widget-preview__stats {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.atlas-widget-preview__stats div {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 2px;
+  padding: 6px 8px;
+  border-radius: 10px;
+  background: color-mix(in oklab, var(--surface) 32%, transparent);
+}
+
+.atlas-widget-preview__stats span {
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 0.56rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.atlas-widget-preview__stats strong {
+  overflow: hidden;
+  font-size: 0.68rem;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Appearance → provider tints. The grid keeps a long product name from pushing
+   the swatch and reset into the next tile. */
+.atlas-provider-colors {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 8px;
+  padding: 4px;
+}
+
+.atlas-provider-color {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  padding: 7px 8px 7px 10px;
+  border-radius: 12px;
+  background: color-mix(in oklab, var(--surface-secondary) 72%, transparent);
+  box-shadow: inset 0 0 0 0.5px var(--separator);
+}
+
+.atlas-provider-color > span:not(.atlas-provider-logo) {
+  overflow: hidden;
+  font-size: 0.8125rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.atlas-provider-color .atlas-provider-logo {
+  flex: none;
+  border-radius: 8px;
+}
+
+.atlas-provider-color input[type="color"] {
+  width: 22px;
+  height: 22px;
+  flex: none;
+  padding: 0;
+  overflow: hidden;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  appearance: none;
+  cursor: pointer;
+}
+
+.atlas-provider-color input[type="color"]::-webkit-color-swatch-wrapper {
+  padding: 0;
+}
+
+.atlas-provider-color input[type="color"]::-webkit-color-swatch {
+  border: 1px solid color-mix(in oklab, var(--foreground) 14%, transparent);
+  border-radius: 999px;
+}
+
+.atlas-provider-color input[type="color"]::-moz-color-swatch {
+  border: 1px solid color-mix(in oklab, var(--foreground) 14%, transparent);
+  border-radius: 999px;
+}
+
+.atlas-provider-color__reset {
+  display: grid;
+  width: 20px;
+  height: 20px;
+  place-items: center;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 0.875rem;
+  line-height: 1;
+  transition: background 160ms ease, color 160ms ease;
+}
+
+.atlas-provider-color__reset:hover {
+  background: color-mix(in oklab, var(--foreground) 9%, transparent);
+  color: var(--foreground);
+}
+
+/* Settings fields. Chromium draws Windows number spinners that do not belong to
+   this surface, so the steppers are hidden and the value is right-aligned. */
+.atlas-text-field,
+.atlas-number-field,
+.atlas-select {
+  min-height: 34px;
+  padding: 0 10px;
+  border: 1px solid color-mix(in oklab, var(--foreground) 12%, transparent);
+  border-radius: 9px;
+  background: color-mix(in oklab, var(--surface-secondary) 82%, transparent);
+  color: var(--foreground);
+  font-size: 0.8125rem;
+  transition: border-color 160ms ease, background 160ms ease;
+}
+
+.atlas-text-field:focus-visible,
+.atlas-number-field:focus-visible,
+.atlas-select:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 1px;
+}
+
+.atlas-select {
+  padding-right: 28px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%236e6e73' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-position: right 10px center;
+  background-repeat: no-repeat;
+  background-size: 9px 6px;
+  appearance: none;
+  cursor: pointer;
+}
+
+.atlas-number-field {
+  width: 96px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  appearance: textfield;
+  -moz-appearance: textfield;
+}
+
+.atlas-number-field::-webkit-inner-spin-button,
+.atlas-number-field::-webkit-outer-spin-button {
+  margin: 0;
+  appearance: none;
+}
+
 /* Compact density: tighter rows and gutters without shrinking the type scale. */
 html[data-appearance-density="compact"] .atlas-page {
   --atlas-page-gutter: clamp(6px, 0.8vw, 12px);

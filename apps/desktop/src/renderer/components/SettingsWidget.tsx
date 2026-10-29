@@ -1,4 +1,5 @@
 import { Button, Card } from "@heroui/react";
+import type { CSSProperties } from "react";
 import type { DesktopPreferences } from "../../shared/desktop-api";
 import { useI18n } from "../i18n";
 import { SettingRow } from "./Settings";
@@ -116,18 +117,49 @@ export function SettingsWidget({
               <Card.Description>{t("settings.widget.previewDescription")}</Card.Description>
             </Card.Header>
             <Card.Content className="mt-2">
-              <div className="atlas-widget-preview">
+              <div aria-hidden="true" className="atlas-widget-preview">
                 <div className="atlas-widget-preview__header">
-                  <span className="atlas-widget-preview__dot" />
-                  <span>{t("settings.widget.previewProvider")}</span>
-                  <span className="atlas-widget-preview__model">claude-sonnet-5</span>
+                  <span className="atlas-widget-preview__mark">UA</span>
+                  <div className="atlas-widget-preview__titles">
+                    <strong>{t("settings.widget.previewProvider")}</strong>
+                    <span>claude-sonnet-5</span>
+                  </div>
                 </div>
-                <div className="atlas-widget-preview__body">
-                  <span className="atlas-widget-preview__gauge">62%</span>
-                  <span className="atlas-widget-preview__gauge">18%</span>
-                  <span className="atlas-widget-preview__stat">{t("settings.widget.previewBurn")}</span>
-                  <span className="atlas-widget-preview__stat">$0.42</span>
-                  <span className="atlas-widget-preview__stat">2h 14m</span>
+                <div className="atlas-widget-preview__gauges">
+                  <div className="atlas-widget-preview__gauge">
+                    <span
+                      className="atlas-widget-preview__ring"
+                      data-tone="good"
+                      style={{ "--progress": "62%" } as CSSProperties}
+                    >
+                      <span>62%</span>
+                    </span>
+                    <span className="atlas-widget-preview__caption">{t("widget.quota")}</span>
+                  </div>
+                  <div className="atlas-widget-preview__gauge">
+                    <span
+                      className="atlas-widget-preview__ring"
+                      data-tone="warn"
+                      style={{ "--progress": "18%" } as CSSProperties}
+                    >
+                      <span>18%</span>
+                    </span>
+                    <span className="atlas-widget-preview__caption">{t("widget.budget")}</span>
+                  </div>
+                </div>
+                <div className="atlas-widget-preview__stats">
+                  <div>
+                    <span>{t("widget.burnRate")}</span>
+                    <strong>{t("settings.widget.previewBurn")}</strong>
+                  </div>
+                  <div>
+                    <span>{t("widget.sessionCost")}</span>
+                    <strong>$0.42</strong>
+                  </div>
+                  <div>
+                    <span>{t("widget.reset")}</span>
+                    <strong>2h 14m</strong>
+                  </div>
                 </div>
               </div>
             </Card.Content>

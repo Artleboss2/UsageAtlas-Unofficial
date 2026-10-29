@@ -738,7 +738,7 @@ export function Settings({
                 <div className="atlas-provider-colors">
                   {providers.map((provider) => (
                     <label className="atlas-provider-color" key={provider.id}>
-                      <ProviderLogo compact providerID={provider.id} providerName={provider.name} />
+                      <ProviderLogo mark providerID={provider.id} providerName={provider.name} />
                       <span>{provider.name}</span>
                       <input
                         aria-label={t("settings.providerColors.aria", { provider: provider.name })}
