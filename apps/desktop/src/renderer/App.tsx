@@ -415,6 +415,7 @@ export function App(): React.JSX.Element {
           updateState={updates.state}
           onCheckForUpdates={updates.check}
           onInstallUpdate={updates.install}
+          onRollbackUpdate={updates.rollback}
           backgroundError={backgroundError}
           customBackgroundUrl={customBackgroundUrl}
           onChooseCustomBackground={chooseCustomBackground}

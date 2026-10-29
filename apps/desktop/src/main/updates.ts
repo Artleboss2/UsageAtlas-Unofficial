@@ -7,6 +7,7 @@ import {
   downloadPageURL,
   latestPublishedVersion,
   newerInstalledVersion,
+  previousInstalledVersion,
   redactUpdateError,
   resolveUpdateSource,
   squirrelFeedURL,
@@ -28,6 +29,8 @@ export interface AutoUpdateHooks {
 export interface DesktopUpdater {
   getState(): DesktopUpdateState;
   check(): Promise<DesktopUpdateState>;
+  /** Relaunches the newest build applied before this one. */
+  rollback(): boolean;
   /** Where a version this build cannot install in place is downloaded from. */
   downloadPageURL(): string;
 }
@@ -40,10 +43,12 @@ export function configureAutoUpdates(hooks: AutoUpdateHooks = {}): DesktopUpdate
   // A build installed while an older window stayed open is already on disk. Say
   // so instead of letting Squirrel answer "up to date" for the newer package.
   const installedAhead = newerInstalledVersion(process.execPath, currentVersion);
+  let previousVersion = previousInstalledVersion(process.execPath, currentVersion);
   let state: DesktopUpdateState = {
     status: enabled ? (installedAhead ? "ready" : "idle") : "unavailable",
     currentVersion,
     availableVersion: installedAhead,
+    previousVersion,
     error: null
   };
 
@@ -56,6 +61,16 @@ export function configureAutoUpdates(hooks: AutoUpdateHooks = {}): DesktopUpdate
     if (process.platform === "win32" && existsSync(stub)) app.relaunch({ execPath: stub });
     else app.relaunch();
     app.exit(0);
+  }
+  function rollback(): boolean {
+    if (!enabled) return false;
+    previousVersion = previousInstalledVersion(process.execPath, currentVersion);
+    if (!previousVersion) return false;
+    const build = path.resolve(path.dirname(process.execPath), "..", `app-${previousVersion}`, "UsageAtlas.exe");
+    if (process.platform === "win32" && existsSync(build)) app.relaunch({ execPath: build });
+    else app.relaunch();
+    app.exit(0);
+    return true;
   }
   let initialTimer: NodeJS.Timeout | undefined;
   let timer: NodeJS.Timeout | undefined;
@@ -138,5 +153,5 @@ export function configureAutoUpdates(hooks: AutoUpdateHooks = {}): DesktopUpdate
     timer.unref();
     app.once("before-quit", stopChecking);
   }
-  return { getState: () => state, check, downloadPageURL: () => downloadPageURL(source()) };
+  return { getState: () => state, check, rollback, downloadPageURL: () => downloadPageURL(source()) };
 }

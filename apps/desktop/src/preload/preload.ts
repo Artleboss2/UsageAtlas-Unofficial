@@ -25,6 +25,7 @@ const api: UsageAtlasDesktopAPI = {
   getUpdateState: () => ipcRenderer.invoke(IPC.getUpdateState),
   checkForUpdates: () => ipcRenderer.invoke(IPC.checkForUpdates),
   installUpdate: () => ipcRenderer.invoke(IPC.installUpdate),
+  rollbackUpdate: () => ipcRenderer.invoke(IPC.rollbackUpdate),
   onUpdateState: (listener) => {
     const handler = (_event: Electron.IpcRendererEvent, state: Parameters<typeof listener>[0]) => listener(state);
     ipcRenderer.on(IPC.updateStateChanged, handler);

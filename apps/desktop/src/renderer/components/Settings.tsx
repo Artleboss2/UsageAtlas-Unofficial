@@ -43,6 +43,7 @@ interface SettingsProps {
   updateState: DesktopUpdateState | null;
   onCheckForUpdates(): Promise<void>;
   onInstallUpdate(): Promise<void>;
+  onRollbackUpdate?(): Promise<void>;
   preferences: DesktopPreferences | null;
   backgroundError: string | null;
   customBackgroundUrl: string | null;
@@ -65,6 +66,7 @@ export function Settings({
   updateState,
   onCheckForUpdates,
   onInstallUpdate,
+  onRollbackUpdate,
   preferences,
   backgroundError,
   customBackgroundUrl,
@@ -301,6 +303,7 @@ export function Settings({
               repository={preferences.updateRepository}
               onCheck={onCheckForUpdates}
               onInstall={onInstallUpdate}
+              onRollback={onRollbackUpdate}
               state={updateState}
             />
 

@@ -11,6 +11,8 @@ export interface DesktopUpdateState {
   status: "idle" | "checking" | "current" | "downloading" | "ready" | "available" | "error" | "unavailable";
   currentVersion: string;
   availableVersion: string | null;
+  /** Newest build applied before this one, offered as a one-click rollback. */
+  previousVersion: string | null;
   error: string | null;
 }
 
@@ -301,6 +303,7 @@ export interface UsageAtlasDesktopAPI {
   getUpdateState(): Promise<DesktopUpdateState>;
   checkForUpdates(): Promise<DesktopUpdateState>;
   installUpdate(): Promise<void>;
+  rollbackUpdate(): Promise<boolean>;
   onUpdateState(listener: (state: DesktopUpdateState) => void): () => void;
   getCloudStatus(): Promise<CloudStatus>;
   cloudAction(action: CloudAction, options?: CloudActionOptions): Promise<CloudStatus>;
@@ -336,6 +339,7 @@ export const IPC = {
   getUpdateState: "updates:get",
   checkForUpdates: "updates:check",
   installUpdate: "updates:install",
+  rollbackUpdate: "updates:rollback",
   updateStateChanged: "updates:changed",
   cloudStatus: "cloud:status",
   cloudAction: "cloud:action",

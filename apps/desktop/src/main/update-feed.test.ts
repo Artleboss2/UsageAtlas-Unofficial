@@ -8,6 +8,7 @@ import {
   isNewerVersion,
   latestPublishedVersion,
   newerInstalledVersion,
+  previousInstalledVersion,
   redactUpdateError,
   resolveUpdateSource,
   squirrelFeedURL,
@@ -152,6 +153,12 @@ describe("newerInstalledVersion", () => {
   it("ignores paths that are not a Squirrel install", () => {
     const root = install("0.3.6");
     expect(newerInstalledVersion(path.join(root, "UsageAtlas.exe"), "0.3.5")).toBeNull();
+  });
+
+  it("offers the newest older build as the rollback target", () => {
+    const root = install("0.3.5", "0.3.6", "0.3.9");
+    expect(previousInstalledVersion(path.join(root, "app-0.3.9", "UsageAtlas.exe"), "0.3.9")).toBe("0.3.6");
+    expect(previousInstalledVersion(path.join(root, "app-0.3.5", "UsageAtlas.exe"), "0.3.5")).toBeNull();
   });
 });
 

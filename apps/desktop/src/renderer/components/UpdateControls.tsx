@@ -29,6 +29,7 @@ interface UpdateControlsProps {
   state: DesktopUpdateState | null;
   onCheck(): Promise<void>;
   onInstall(): Promise<void>;
+  onRollback?(): Promise<void>;
   channel?: UpdateChannel;
   repository?: string;
   onChangeChannel?(channel: UpdateChannel): Promise<void>;
@@ -39,6 +40,7 @@ export function UpdateSettings({
   state,
   onCheck,
   onInstall,
+  onRollback,
   channel,
   repository,
   onChangeChannel,
@@ -71,10 +73,18 @@ export function UpdateSettings({
           {state?.status === "current" ? <CheckIcon /> : null}
           <span>{description}</span>
         </p>
-        <Button isDisabled={busy || unavailable} onPress={() => void (ready || available ? onInstall() : onCheck())} variant="secondary">
-          {busy ? <Spinner aria-hidden="true" size="sm" /> : ready || available ? <DownloadIcon /> : <RefreshIcon />}
-          <span>{label}</span>
-        </Button>
+        <div className="atlas-update-settings__actions">
+          <Button isDisabled={busy || unavailable} onPress={() => void (ready || available ? onInstall() : onCheck())} variant="secondary">
+            {busy ? <Spinner aria-hidden="true" size="sm" /> : ready || available ? <DownloadIcon /> : <RefreshIcon />}
+            <span>{label}</span>
+          </Button>
+          {state?.previousVersion && onRollback ? (
+            <Button isDisabled={busy} onPress={() => void onRollback()} variant="ghost">
+              <RefreshIcon />
+              <span>Roll back to {state.previousVersion}</span>
+            </Button>
+          ) : null}
+        </div>
         {channel !== undefined && onChangeChannel ? (
           <div className="atlas-update-settings__channel">
             <RadioGroup

@@ -138,6 +138,28 @@ export function latestPublishedVersion(payload: unknown): string | null {
  * shared `Update.exe`, hears "up to date" and keeps showing its own older version.
  * Reading the sibling folders lets the app say what is really installed instead.
  */
+/** The newest applied build older than the running one, for a one-click rollback. */
+export function previousInstalledVersion(execPath: string, runningVersion: string): string | null {
+  const appDirectory = path.dirname(execPath);
+  if (!/^app-/u.test(path.basename(appDirectory))) return null;
+  let entries: string[];
+  try {
+    entries = readdirSync(path.dirname(appDirectory));
+  } catch {
+    return null;
+  }
+  let newest: string | null = null;
+  for (const entry of entries) {
+    const match = /^app-(\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?)$/u.exec(entry);
+    if (!match) continue;
+    const version = match[1];
+    if (compareVersions(version, runningVersion) < 0 && (newest === null || compareVersions(version, newest) > 0)) {
+      newest = version;
+    }
+  }
+  return newest;
+}
+
 export function newerInstalledVersion(execPath: string, runningVersion: string): string | null {
   const appDirectory = path.dirname(execPath);
   if (!/^app-/u.test(path.basename(appDirectory))) return null;

@@ -441,6 +441,10 @@ function registerIPC(): void {
     assertTrustedSender(event);
     return updates.check();
   });
+  ipcMain.handle(IPC.rollbackUpdate, (event) => {
+    assertTrustedSender(event);
+    return updates.rollback();
+  });
   ipcMain.handle(IPC.installUpdate, async (event) => {
     assertTrustedSender(event);
     if (updates.getState().status === "ready" && installPendingUpdate) installPendingUpdate();
