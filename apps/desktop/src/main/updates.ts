@@ -153,5 +153,22 @@ export function configureAutoUpdates(hooks: AutoUpdateHooks = {}): DesktopUpdate
     timer.unref();
     app.once("before-quit", stopChecking);
   }
-  return { getState: () => state, check, rollback, downloadPageURL: () => downloadPageURL(source()) };
+  /**
+   * A saved "current" can go stale: Squirrel may unpack a newer build while this
+   * window keeps running. Re-read the install root on every read so the badge
+   * says "restart", not "latest", the moment a newer folder exists.
+   */
+  function getState(): DesktopUpdateState {
+    if (!enabled || state.status === "checking" || state.status === "downloading" || state.status === "ready") {
+      return state;
+    }
+    const pending = newerInstalledVersion(process.execPath, currentVersion);
+    if (!pending) return state;
+    hooks.onUpdateReady?.(restartIntoInstalledBuild);
+    state = { ...state, status: "ready", availableVersion: pending, error: null };
+    hooks.onStateChange?.(state);
+    return state;
+  }
+
+  return { getState, check, rollback, downloadPageURL: () => downloadPageURL(source()) };
 }

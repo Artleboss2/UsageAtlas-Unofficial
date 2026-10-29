@@ -39,6 +39,7 @@ import { providerConnection, type ProviderConnection } from "../provider-connect
 import { BUILT_IN_WALLPAPERS } from "../wallpapers";
 import { ProviderLogo } from "./ProviderLogo";
 import { ProviderCredentialForm } from "./ProviderCredentialForm";
+import { ProviderDiscovery } from "./ProviderDiscovery";
 import { useI18n } from "../i18n";
 import { isQuotaProvider } from "../../shared/quota-providers";
 import { LANGUAGES, LANGUAGE_LABELS } from "../../shared/languages";
@@ -334,6 +335,8 @@ export function Settings({
                 ) : null}
               </Card.Content>
             </Card>
+
+            <ProviderDiscovery />
 
             <Card variant="transparent">
               <Card.Header>

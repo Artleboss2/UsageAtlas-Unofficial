@@ -114,6 +114,16 @@ export function formatCompactNumber(value: number): string {
   return numberStyle === "exact" ? formatExactValue(value) : formatWithUnits(value);
 }
 
+/** Every digit, regardless of the Appearance choice. */
+export function formatExactNumber(value: number): string {
+  return formatExactValue(value);
+}
+
+/** A short unit such as `1.3M`, regardless of the Appearance choice. */
+export function formatShortNumber(value: number): string {
+  return formatWithUnits(value);
+}
+
 /**
  * Chart ticks stay compact whatever the preference says: at 1,284,930, 1,140,000
  * and 1,024,000 the axis labels would collide and leave no room for the plot.

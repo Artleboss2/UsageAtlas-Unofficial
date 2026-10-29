@@ -1,4 +1,6 @@
 import { CloudAccount, type KnownProfileStatus } from "./cloud-account";
+import { CATALOG, discoverProviderUsage } from "../engine/discovery";
+import { summarizeDiscovery } from "./provider-discovery";
 import { ProviderCredentialStore, configureProviderCredentials } from "./provider-credentials";
 import { isQuotaProvider, validateProviderCredential } from "../shared/quota-providers";
 import { validateReportPlans } from "../shared/report-plans";
@@ -410,15 +412,18 @@ function createWidgetWindow(showOnReady = false, focus = true): BrowserWindow {
     : defaultWidgetBounds(saved.width, saved.height);
   const window = new BrowserWindow({
     ...initial,
-    minWidth: 280,
-    minHeight: 160,
+    minWidth: 180,
+    minHeight: 104,
     maxWidth: 640,
     maxHeight: 400,
     show: false,
     frame: false,
     transparent: true,
     backgroundColor: "#00000000",
-    hasShadow: true,
+    // The CSS card draws its own shadow. A native shadow on a transparent
+    // Windows window follows the window rectangle, which is the square edge
+    // users saw around the rounded card.
+    hasShadow: false,
     roundedCorners: true,
     resizable: true,
     maximizable: false,
@@ -428,9 +433,8 @@ function createWidgetWindow(showOnReady = false, focus = true): BrowserWindow {
     alwaysOnTop: true,
     autoHideMenuBar: true,
     title: "UsageAtlas mini window",
-    // Windows 11 draws an acrylic sheet behind the transparent renderer; on other
-    // systems the CSS glass falls back to a translucent surface.
-    ...(process.platform === "win32" ? { backgroundMaterial: "acrylic" as const } : {}),
+    // No `backgroundMaterial` here: acrylic paints the whole window rectangle and
+    // squares off the rounded card. The renderer's CSS glass is the surface.
     ...(process.platform === "darwin" ? { vibrancy: "under-window" as const } : {}),
     webPreferences: {
       preload: path.join(__dirname, "preload.js"),
@@ -587,8 +591,8 @@ function persistWidgetBounds(): void {
   preferences.update({
     widget: {
       ...current,
-      width: Math.min(640, Math.max(280, bounds.width)),
-      height: Math.min(400, Math.max(160, bounds.height)),
+      width: Math.min(640, Math.max(180, bounds.width)),
+      height: Math.min(400, Math.max(104, bounds.height)),
       position: { x, y }
     }
   });
@@ -1098,6 +1102,23 @@ function registerIPC(): void {
     const current = preferences.get().providerEnabled;
     preferences.update({ providerEnabled: { ...current, [providerID]: enabled } });
     return dashboard.setProviderEnabled(providerID, enabled);
+  });
+  ipcMain.handle(IPC.discoverProvider, async (event, name: unknown) => {
+    assertTrustedSender(event);
+    if (typeof name !== "string") throw new Error("Enter a provider name to look for.");
+    const provider = name.trim();
+    if (!provider) throw new Error("Enter a provider name to look for.");
+    if (provider.length > 64) throw new Error("Use a provider name of 64 characters or fewer.");
+    const result = await discoverProviderUsage(provider, new Date(), {
+      // One saved route per provider next to the other app data. A read-only
+      // folder only costs a re-scan on the next look.
+      cacheDirectory: path.join(app.getPath("userData"), "discovery")
+    });
+    return summarizeDiscovery(result);
+  });
+  ipcMain.handle(IPC.discoverableProviders, (event) => {
+    assertTrustedSender(event);
+    return CATALOG.map((entry) => entry.name);
   });
   ipcMain.handle(IPC.setReportPlans, async (event, value: unknown) => {
     assertTrustedSender(event);

@@ -3,6 +3,32 @@
 All notable UsageAtlas desktop changes are recorded here. This build starts from the open-source
 UsageAtlas app; see [README.md](README.md) for what it adds and what it is not.
 
+## 0.4.4 — 2026-10-29
+
+### Added
+
+- **Find a provider, inside the app.** Settings → General now probes any tool name against its local
+  stores and reports the route it would read, a confidence score, the folders and entries scanned,
+  and every matching file with its store and token fields. The 63 seeded names are offered as
+  suggestions. The scan is local-only: no network request is made. This is the first slice of the
+  0.5.0 discovery goal.
+- **A restart badge that cannot go stale.** When a newer `app-<version>` folder exists while an older
+  window is still running, the top-bar badge says **Restart to finish update** and the update state
+  re-reads the install root instead of trusting a previously reported “latest”.
+
+### Changed
+
+- **The mini window shows one thing: today's tokens.** The quota and budget dials are gone, along
+  with the burn-rate, session-cost and reset rows that depended on them. It now uses the full width
+  for one figure across every enabled tool, switches to a short unit (`12.4M`) below 300 px, and can
+  be resized down to 180 × 104.
+- **The mini window is a rounded glass card again.** The Windows acrylic sheet that painted a square
+  around the card is removed, the native shadow no longer follows the window rectangle, and the card
+  is inset inside a transparent window so its corners stay round.
+- **Rollback survives an update.** `refresh-install.ps1` now keeps the newest build and its immediate
+  predecessor (plus the folder the running window came from) instead of deleting every older build.
+  The 0.5.0 trusted-build acceptance now names two folders instead of zero.
+
 ## 0.4.3 — 2026-10-29
 
 ### Added

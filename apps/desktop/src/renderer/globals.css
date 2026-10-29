@@ -1574,6 +1574,15 @@ html[data-appearance-font="geist"] {
 .atlas-update-tag:disabled { cursor: default; }
 .atlas-update-tag svg { width: 14px; height: 14px; }
 .atlas-update-tag__description { color: var(--muted); font-weight: 500; margin-inline-end: 4px; }
+.atlas-update-tag[data-state="ready"] {
+  background: color-mix(in oklab, #34c759 15%, transparent);
+  box-shadow: inset 0 0 0 0.5px color-mix(in oklab, #34c759 45%, transparent);
+}
+
+.atlas-update-tag[data-state="ready"] svg {
+  color: #1f8a3b;
+}
+
 
 .atlas-update-settings {
   display: flex;
@@ -4063,28 +4072,31 @@ html[data-surface="widget"] body {
   font-size: calc(13px * var(--atlas-font-scale, 1));
 }
 
+/* The native window is transparent. The inset keeps the card's rounded edge and
+   its shadow away from the window rectangle, so no square corner can show. */
 html[data-surface="widget"] #root {
   height: 100vh;
-  border-radius: 18px;
+  padding: 6px;
+  background: transparent;
   overflow: hidden;
 }
 
 .atlas-widget {
   display: flex;
-  height: 100vh;
+  height: 100%;
   flex-direction: column;
-  gap: 9px;
-  padding: 12px 14px 13px;
-  border-radius: 18px;
+  gap: 8px;
+  padding: 10px 12px 12px;
+  border-radius: 22px;
   background:
     linear-gradient(150deg, rgba(255, 255, 255, 0.34), rgba(255, 255, 255, 0.06) 45%, transparent 75%),
-    color-mix(in oklab, var(--background) 74%, transparent);
+    color-mix(in oklab, var(--background) 78%, transparent);
   box-shadow:
     inset 0 0 0 0.5px rgba(255, 255, 255, 0.5),
     inset 0 1px 0 rgba(255, 255, 255, 0.55),
-    0 18px 48px -18px rgba(0, 0, 0, 0.45);
-  -webkit-backdrop-filter: blur(26px) saturate(165%);
-  backdrop-filter: blur(26px) saturate(165%);
+    0 14px 34px -16px rgba(0, 0, 0, 0.45);
+  -webkit-backdrop-filter: blur(28px) saturate(170%);
+  backdrop-filter: blur(28px) saturate(170%);
   color: var(--foreground);
 }
 
@@ -4092,12 +4104,18 @@ html[data-surface="widget"] #root {
   .atlas-widget {
     background:
       linear-gradient(150deg, rgba(255, 255, 255, 0.14), rgba(255, 255, 255, 0.03) 45%, transparent 75%),
-      color-mix(in oklab, #1b1b1d 76%, transparent);
+      color-mix(in oklab, #1b1b1d 78%, transparent);
     box-shadow:
       inset 0 0 0 0.5px rgba(255, 255, 255, 0.16),
       inset 0 1px 0 rgba(255, 255, 255, 0.2),
-      0 18px 48px -18px rgba(0, 0, 0, 0.7);
+      0 14px 34px -16px rgba(0, 0, 0, 0.7);
   }
+}
+
+.atlas-widget[data-compact="true"] {
+  gap: 4px;
+  padding: 8px 10px 10px;
+  border-radius: 18px;
 }
 
 .atlas-widget__header {
@@ -4105,8 +4123,12 @@ html[data-surface="widget"] #root {
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  min-height: 38px;
+  min-height: 30px;
   -webkit-app-region: drag;
+}
+
+.atlas-widget[data-compact="true"] .atlas-widget__header {
+  min-height: 24px;
 }
 
 .atlas-widget__identity {
@@ -4116,9 +4138,19 @@ html[data-surface="widget"] #root {
   gap: 9px;
 }
 
+.atlas-widget[data-compact="true"] .atlas-widget__identity {
+  gap: 7px;
+}
+
 .atlas-widget__identity .atlas-provider-logo {
   flex: none;
   border-radius: 11px;
+}
+
+.atlas-widget[data-compact="true"] .atlas-widget__identity .atlas-provider-logo {
+  width: 24px;
+  height: 24px;
+  border-radius: 8px;
 }
 
 .atlas-widget__titles {
@@ -4145,6 +4177,10 @@ html[data-surface="widget"] #root {
   white-space: nowrap;
 }
 
+.atlas-widget[data-narrow="true"] .atlas-widget__titles {
+  display: none;
+}
+
 .atlas-widget__actions {
   display: flex;
   flex: none;
@@ -4162,6 +4198,11 @@ html[data-surface="widget"] #root {
   background: transparent;
   color: var(--muted);
   transition: background 160ms ease, color 160ms ease, transform 160ms ease;
+}
+
+.atlas-widget[data-compact="true"] .atlas-widget__button {
+  width: 20px;
+  height: 20px;
 }
 
 .atlas-widget__button:hover {
@@ -4188,115 +4229,72 @@ html[data-surface="widget"] #root {
   stroke-width: 1.7;
 }
 
-.atlas-widget__gauges {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 8px;
-}
-
-.atlas-widget__gauge {
+.atlas-widget__tokens {
   display: flex;
-  align-items: center;
-  gap: 9px;
-  padding: 7px 9px;
-  border-radius: 13px;
-  background: color-mix(in oklab, var(--surface) 44%, transparent);
-  box-shadow: inset 0 0 0 0.5px rgba(255, 255, 255, 0.24);
-}
-
-.atlas-widget__gaugeRing {
-  position: relative;
-  display: grid;
-  width: 46px;
-  height: 46px;
-  flex: none;
-  place-items: center;
-}
-
-.atlas-widget__gaugeRing svg {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-}
-
-.atlas-widget__gaugeTrack {
-  fill: none;
-  stroke: color-mix(in oklab, var(--foreground) 12%, transparent);
-  stroke-width: 5;
-}
-
-.atlas-widget__gaugeValue {
-  fill: none;
-  stroke: var(--widget-tone, #34c759);
-  stroke-linecap: round;
-  stroke-width: 5;
-  transition: stroke-dasharray 500ms cubic-bezier(0.22, 1, 0.36, 1);
-}
-
-.atlas-widget__gaugeRing span {
-  font-size: 0.67rem;
-  font-weight: 650;
-  letter-spacing: -0.02em;
-}
-
-.atlas-widget__gauge[data-tone="warn"] { --widget-tone: #ff9f0a; }
-.atlas-widget__gauge[data-tone="bad"] { --widget-tone: #ff453a; }
-.atlas-widget__gauge[data-tone="neutral"] { --widget-tone: var(--muted); }
-
-.atlas-widget__gaugeCaption {
-  min-width: 0;
-  overflow: hidden;
-  font-size: 0.62rem;
-  line-height: 1.2;
-  color: var(--muted);
-  text-overflow: ellipsis;
-}
-
-.atlas-widget__stats {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 6px;
-  margin-top: auto;
-}
-
-.atlas-widget__stats div {
-  display: flex;
-  min-width: 0;
+  min-height: 0;
+  flex: 1;
   flex-direction: column;
+  justify-content: center;
   gap: 2px;
-  padding: 6px 8px;
-  border-radius: 10px;
-  background: color-mix(in oklab, var(--surface) 32%, transparent);
 }
 
-.atlas-widget__stats span {
+.atlas-widget__caption {
   overflow: hidden;
-  font-size: 0.56rem;
-  letter-spacing: 0.01em;
   color: var(--muted);
+  font-size: 0.58rem;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-overflow: ellipsis;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.atlas-widget__figure {
+  display: flex;
+  min-width: 0;
+  align-items: baseline;
+  gap: 7px;
+}
+
+.atlas-widget__figure strong {
+  overflow: hidden;
+  font-size: clamp(1.6rem, 21vw, 2.9rem);
+  font-variant-numeric: tabular-nums;
+  font-weight: 650;
+  letter-spacing: -0.045em;
+  line-height: 1;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.atlas-widget__stats strong {
-  overflow: hidden;
-  font-size: 0.68rem;
-  font-weight: 650;
-  font-variant-numeric: tabular-nums;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+.atlas-widget__figure strong[data-compact="true"] {
+  font-size: clamp(1.9rem, 27vw, 3.1rem);
+}
+
+.atlas-widget__figure span {
+  flex: none;
+  color: var(--muted);
+  font-size: 0.66rem;
+  letter-spacing: 0.01em;
+}
+
+.atlas-widget[data-narrow="true"] .atlas-widget__figure {
+  justify-content: center;
+}
+
+.atlas-widget[data-narrow="true"] .atlas-widget__figure strong {
+  font-size: clamp(1.9rem, 30vw, 3rem);
 }
 
 .atlas-widget__emptyMark {
   display: grid;
-  width: 34px;
-  height: 34px;
+  width: 30px;
+  height: 30px;
   flex: none;
   place-items: center;
-  border-radius: 11px;
+  border-radius: 10px;
   background: color-mix(in oklab, var(--foreground) 10%, transparent);
-  font-size: 0.66rem;
+  font-size: 0.6rem;
   font-weight: 700;
 }
 
@@ -4306,12 +4304,12 @@ html[data-surface="widget"] #root {
   display: flex;
   width: min(100%, 340px);
   flex-direction: column;
-  gap: 9px;
-  padding: 12px 14px 13px;
-  border-radius: 18px;
+  gap: 8px;
+  padding: 12px 14px 14px;
+  border-radius: 22px;
   background:
     linear-gradient(150deg, rgba(255, 255, 255, 0.34), rgba(255, 255, 255, 0.06) 45%, transparent 75%),
-    color-mix(in oklab, var(--background) 74%, transparent);
+    color-mix(in oklab, var(--background) 78%, transparent);
   box-shadow:
     inset 0 0 0 0.5px rgba(255, 255, 255, 0.5),
     inset 0 1px 0 rgba(255, 255, 255, 0.55),
@@ -4323,7 +4321,7 @@ html[data-surface="widget"] #root {
   .atlas-widget-preview {
     background:
       linear-gradient(150deg, rgba(255, 255, 255, 0.14), rgba(255, 255, 255, 0.03) 45%, transparent 75%),
-      color-mix(in oklab, #1b1b1d 76%, transparent);
+      color-mix(in oklab, #1b1b1d 78%, transparent);
     box-shadow:
       inset 0 0 0 0.5px rgba(255, 255, 255, 0.16),
       inset 0 1px 0 rgba(255, 255, 255, 0.2),
@@ -4378,97 +4376,42 @@ html[data-surface="widget"] #root {
   font-size: 0.66rem;
 }
 
-.atlas-widget-preview__gauges {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 8px;
-}
-
-.atlas-widget-preview__gauge {
+.atlas-widget-preview__tokens {
   display: flex;
-  min-width: 0;
-  align-items: center;
-  gap: 9px;
-  padding: 7px 9px;
-  border-radius: 13px;
-  background: color-mix(in oklab, var(--surface) 44%, transparent);
-  box-shadow: inset 0 0 0 0.5px rgba(255, 255, 255, 0.24);
-}
-
-.atlas-widget-preview__ring {
-  position: relative;
-  display: grid;
-  width: 44px;
-  height: 44px;
-  flex: none;
-  place-items: center;
-  border-radius: 50%;
-  background: conic-gradient(
-    var(--tone, #34c759) var(--progress, 0%),
-    color-mix(in oklab, var(--foreground) 12%, transparent) 0
-  );
-}
-
-.atlas-widget-preview__ring::before {
-  content: "";
-  position: absolute;
-  inset: 5px;
-  border-radius: 50%;
-  background: color-mix(in oklab, var(--background) 94%, transparent);
-}
-
-.atlas-widget-preview__ring > span {
-  position: relative;
-  z-index: 1;
-  font-size: 0.67rem;
-  font-weight: 650;
-  letter-spacing: -0.02em;
-}
-
-.atlas-widget-preview__ring[data-tone="warn"] { --tone: #ff9f0a; }
-.atlas-widget-preview__ring[data-tone="bad"] { --tone: #ff453a; }
-.atlas-widget-preview__ring[data-tone="neutral"] { --tone: var(--muted); }
-
-.atlas-widget-preview__caption {
-  min-width: 0;
-  overflow: hidden;
-  color: var(--muted);
-  font-size: 0.62rem;
-  line-height: 1.2;
-  text-overflow: ellipsis;
-}
-
-.atlas-widget-preview__stats {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 6px;
-}
-
-.atlas-widget-preview__stats div {
-  display: flex;
-  min-width: 0;
   flex-direction: column;
   gap: 2px;
-  padding: 6px 8px;
-  border-radius: 10px;
-  background: color-mix(in oklab, var(--surface) 32%, transparent);
+  padding: 8px 0 4px;
 }
 
-.atlas-widget-preview__stats span {
-  overflow: hidden;
+.atlas-widget-preview__caption {
   color: var(--muted);
-  font-size: 0.56rem;
+  font-size: 0.58rem;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.atlas-widget-preview__figure {
+  display: flex;
+  align-items: baseline;
+  gap: 7px;
+  min-width: 0;
+}
+
+.atlas-widget-preview__figure strong {
+  overflow: hidden;
+  font-size: 2rem;
+  font-variant-numeric: tabular-nums;
+  font-weight: 650;
+  letter-spacing: -0.045em;
+  line-height: 1.05;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.atlas-widget-preview__stats strong {
-  overflow: hidden;
-  font-size: 0.68rem;
-  font-weight: 650;
-  font-variant-numeric: tabular-nums;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+.atlas-widget-preview__figure span {
+  color: var(--muted);
+  font-size: 0.66rem;
 }
 
 /* Appearance → provider tints. The grid keeps a long product name from pushing
@@ -4740,4 +4683,114 @@ html[data-appearance-density="compact"] .atlas-settings-tabs {
   .atlas-alias-row {
     grid-template-columns: minmax(0, 1fr);
   }
+}
+/* Settings → Find a provider. The route and its confidence matter more than
+   the folder count, so the summary stays on one line and the files list scrolls. */
+.atlas-discovery__form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 4px 4px 10px;
+}
+
+.atlas-discovery__form .atlas-text-field {
+  min-width: 0;
+  flex: 1 1 220px;
+}
+
+.atlas-discovery__result {
+  margin: 0 4px 6px;
+  padding: 12px;
+  border-radius: 14px;
+  background: color-mix(in oklab, var(--surface-secondary) 68%, transparent);
+  box-shadow: inset 0 0 0 0.5px var(--separator);
+}
+
+.atlas-discovery__summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.atlas-discovery__summary strong {
+  font-size: 0.9rem;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+}
+
+.atlas-discovery__badge {
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: color-mix(in oklab, var(--foreground) 9%, transparent);
+  color: var(--muted);
+  font-size: 0.62rem;
+  font-weight: 600;
+}
+
+.atlas-discovery__badge[data-route="cached"] {
+  background: color-mix(in oklab, #34c759 16%, transparent);
+  color: #1f8a3b;
+}
+
+.atlas-discovery__confidence {
+  margin-inline-start: auto;
+  color: var(--muted);
+  font-size: 0.7rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.atlas-discovery__meta,
+.atlas-discovery__empty,
+.atlas-discovery__error {
+  margin: 7px 0 0;
+  color: var(--muted);
+  font-size: 0.72rem;
+  line-height: 1.35;
+}
+
+.atlas-discovery__error {
+  padding: 0 4px;
+  color: #ff453a;
+}
+
+.atlas-discovery__empty {
+  margin: 10px 0 0;
+}
+
+.atlas-discovery__files {
+  display: flex;
+  max-height: 210px;
+  flex-direction: column;
+  gap: 7px;
+  margin: 10px 0 0;
+  padding: 0;
+  overflow-y: auto;
+  list-style: none;
+}
+
+.atlas-discovery__files li {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: color-mix(in oklab, var(--surface) 44%, transparent);
+}
+
+.atlas-discovery__path {
+  overflow: hidden;
+  font-family: ui-monospace, "SFMono-Regular", Consolas, monospace;
+  font-size: 0.72rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.atlas-discovery__detail {
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 0.66rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }

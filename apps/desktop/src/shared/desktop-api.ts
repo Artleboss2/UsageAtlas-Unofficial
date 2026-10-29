@@ -219,8 +219,8 @@ export const DEFAULT_WIDGET_PREFERENCES: WidgetPreferences = {
   autoHideSeconds: 0,
   opacity: 0.94,
   snapToEdges: true,
-  width: 320,
-  height: 180,
+  width: 300,
+  height: 150,
   position: null
 };
 
@@ -243,8 +243,8 @@ export function sanitizeWidgetPreferences(value: unknown): WidgetPreferences {
     autoHideSeconds: autoHide,
     opacity,
     snapToEdges: typeof record.snapToEdges === "boolean" ? record.snapToEdges : DEFAULT_WIDGET_PREFERENCES.snapToEdges,
-    width: Math.min(640, Math.max(280, Math.round(boundedNumber(record.width, DEFAULT_WIDGET_PREFERENCES.width, 280, 640, true)))),
-    height: Math.min(400, Math.max(160, Math.round(boundedNumber(record.height, DEFAULT_WIDGET_PREFERENCES.height, 160, 400, true)))),
+    width: Math.min(640, Math.max(180, Math.round(boundedNumber(record.width, DEFAULT_WIDGET_PREFERENCES.width, 180, 640, true)))),
+    height: Math.min(400, Math.max(104, Math.round(boundedNumber(record.height, DEFAULT_WIDGET_PREFERENCES.height, 104, 400, true)))),
     position: typeof x === "number" && Number.isSafeInteger(x) && Math.abs(x) <= 100_000
       && typeof y === "number" && Number.isSafeInteger(y) && Math.abs(y) <= 100_000
       ? { x, y }
@@ -556,6 +556,31 @@ export interface EngineDiagnostics {
   messages: string[];
 }
 
+/** One local file the discovery engine proved holds token accounting. */
+export interface ProviderDiscoveryFile {
+  path: string;
+  kind: string;
+  /** 0–100, how sure the probe is that this file carries token usage. */
+  confidence: number;
+  /** Rows or records that matched a token field. */
+  matches: number;
+  reason: string;
+  /** `json · usage.total_tokens` or `sqlite · usage.token_count`, when known. */
+  store: string | null;
+  fields: string[];
+}
+
+/** What Settings → Find a provider shows after a scan. */
+export interface ProviderDiscovery {
+  provider: string;
+  route: "cached" | "discovered";
+  files: ProviderDiscoveryFile[];
+  folders: number;
+  related: number;
+  entries: number;
+  confidence: number;
+}
+
 export interface RefreshProgress {
   completed: number;
   total: number;
@@ -632,6 +657,10 @@ export interface UsageAtlasDesktopAPI {
   chooseCustomBackground(): Promise<BackgroundImageSelection | null>;
   getSnapshot(): Promise<DashboardState>;
   refreshAll(): Promise<DashboardState>;
+  /** Probes a provider by name. Reads local files only; never touches the network. */
+  discoverProvider(name: string): Promise<ProviderDiscovery>;
+  /** Seed names offered by the discovery field. */
+  listDiscoverableProviders(): Promise<string[]>;
   setProviderEnabled(providerID: string, enabled: boolean): Promise<DashboardState>;
   setReportPlans(plans: ReportPlan[]): Promise<DesktopPreferences>;
   getPreferences(): Promise<DesktopPreferences>;
@@ -681,6 +710,8 @@ export const IPC = {
   snapshot: "dashboard:snapshot",
   refreshAll: "dashboard:refresh-all",
   setProviderEnabled: "dashboard:set-provider-enabled",
+  discoverProvider: "providers:discover",
+  discoverableProviders: "providers:catalog",
   setReportPlans: "settings:set-report-plans",
   getPreferences: "preferences:get",
   updatePreferences: "preferences:update",

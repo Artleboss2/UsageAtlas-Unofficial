@@ -28,7 +28,7 @@
 
 ## Timeline: 0.4.0 → 0.5.0
 
-![Timeline: 0.4.0 through 0.4.3 shipped, 0.5.0 carries seven major acceptance-tested goals](docs/timeline-0.4-0.5.svg)
+![Timeline: 0.4.0 through 0.4.4 shipped, with two 0.5.0 goals in progress](docs/timeline-0.4-0.5.svg)
 
 Earlier 0.3.x cards are in the [previous timeline](docs/timeline.svg). A 0.5.0 goal only moves to
 *shipped* when its acceptance test passes in a build published from this repository.
@@ -130,6 +130,29 @@ the tools that do report limits.
 
 **The repository stopped carrying old installers.** 0.4.3 removes roughly **1.2 GB** of superseded
 release assets, build output and logs, keeping only the artifacts for the current release.
+
+### 0.4.4 — a quieter window, a real search
+
+**The mini window got honest about what it measures.** It no longer draws quota and budget dials that
+most local tools cannot fill, and it no longer paints an acrylic rectangle around a rounded card. It
+shows one number — today's tokens across every enabled tool — inside the same glass surface as the
+rest of the app. The native window is transparent with the card inset, so its corners are round on
+every desktop. Shrinking it below 300 px switches the exact figure to a short unit (`12.4M`), and the
+window can now go down to 180 × 104.
+
+**Discovery is a screen, not a library.** Settings → General → **Find a provider** accepts any name,
+offers the 63 seeded names in its suggestion list, and probes the local stores without a network
+request. The result names the route (found or remembered), a confidence score, the folders and
+entries scanned, and each matching file with its store (`json · usage.total_tokens`) and fields
+(`input_tokens, output_tokens`). This is the first slice of the 0.5.0 “any tool, 30 s” goal; the
+300+ verified catalog and the 98 % detection figure remain open.
+
+**Updates tell the truth before a restart.** When Squirrel has unpacked a newer `app-<version>` while
+an older window kept running, the top-bar badge now says **Restart to finish update** instead of
+“New update available”, and the state re-reads the install root so a stale “latest” cannot survive a
+newer folder. `refresh-install.ps1` keeps the newest build **and its predecessor** (plus the running
+one), so the one-click rollback still has a target after an update. This is the first slice of
+“trusted by construction”; signing, encryption and the SBOM remain open.
 
 ### Private and unlisted providers
 
@@ -354,8 +377,9 @@ everything a developer spends on AI. Seven hard outcomes, each with an acceptanc
   stored requests, and **under 2 % battery per hour** on the reference laptop.
 - **Trusted by construction.** Encrypted local vault, signed installer and update feed, automatic
   rollback, and no stale build left behind. Acceptance: a tampered package is refused, a failed
-  update returns to the previous build in one launch, **zero** `app-*` folders other than the
-  running one remain, and the release publishes an SBOM and a reproducible build hash.
+  update returns to the previous build in one launch, at most **two** `app-*` folders — the running
+  build and its rollback target — remain, and the release publishes an SBOM and a reproducible build
+  hash.
 - **Fluent for everyone.** Acceptance: **twelve languages** including one right-to-left catalog,
   **100 % of renderer strings** translated, keyboard-only navigation, a screen-reader pass, and
   **WCAG 2.2 AA** on every main screen.

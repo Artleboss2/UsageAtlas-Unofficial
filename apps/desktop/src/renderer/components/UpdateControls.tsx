@@ -141,21 +141,34 @@ export function UpdateTag({ state, onCheck, onInstall }: UpdateControlsProps): R
   if (!state || !["downloading", "ready", "available", "error"].includes(state.status)) return null;
   const downloading = state.status === "downloading";
   const failed = state.status === "error";
-  const description = downloading ? "Downloading update" : failed ? "Update check failed" : "New update available";
+  const ready = state.status === "ready";
+  const description = downloading ? "Downloading update" : failed
+    ? "Update check failed"
+    : ready ? "Restart to finish update" : "New update available";
+  const version = state.availableVersion ? ` ${state.availableVersion}` : "";
   const title = downloading ? "Downloading the update in the background" : failed
     ? `${state.error ?? "Unable to update."} Check for updates again.`
-    : state.status === "ready" ? "Update and restart UsageAtlas" : "Download the latest version of UsageAtlas";
+    : ready
+      ? `Version${version} is installed. Restart UsageAtlas to finish.`
+      : `Download version${version} of UsageAtlas`;
   return (
     <button
       aria-label={`${description}. ${title}`}
       className="atlas-update-tag no-drag"
+      data-state={state.status}
       disabled={downloading}
       onClick={() => void (failed ? onCheck() : onInstall())}
       title={title}
       type="button"
     >
       <span className="atlas-update-tag__description">{description}</span>
-      {downloading ? <Spinner aria-hidden="true" size="sm" /> : <><DownloadIcon /><span>{failed ? "Retry" : "Update"}</span></>}
+      {downloading ? (
+        <Spinner aria-hidden="true" size="sm" />
+      ) : ready ? (
+        <><RefreshIcon /><span>Restart</span></>
+      ) : (
+        <><DownloadIcon /><span>{failed ? "Retry" : "Update"}</span></>
+      )}
     </button>
   );
 }

@@ -2,8 +2,9 @@
 #
 # Squirrel keeps every installed app-<version> folder and leaves the previous
 # build running. Both copies register the same AppUserModelID, so Explorer can
-# keep drawing the old build's taskbar artwork. Keeping one build on disk makes
-# the newest icon and the newest code the only possible result.
+# keep drawing the old build's taskbar artwork. Keep the newest build plus its
+# immediate predecessor: one icon wins, and the previous build stays available
+# for the in-app rollback.
 param(
   [string]$InstallRoot = (Join-Path $env:LOCALAPPDATA "UsageAtlas"),
   [string]$CurrentExe = ""
@@ -33,8 +34,15 @@ Get-CimInstance Win32_Process -Filter "Name = 'UsageAtlas.exe'" |
   ForEach-Object { Stop-Process -Id $_.ProcessId -Force }
 Start-Sleep -Milliseconds 900
 
+$keep = @($builds[0].FullName)
+if ($builds.Count -gt 1) { $keep += $builds[1].FullName }
+# Never delete the folder the running window came from, even after a rollback.
+if ($CurrentExe) {
+  $currentDir = Split-Path -Parent ([System.IO.Path]::GetFullPath($CurrentExe))
+  if ($keep -notcontains $currentDir) { $keep += $currentDir }
+}
 foreach ($build in $builds) {
-  if ($build.FullName -eq $newest.FullName) { continue }
+  if ($keep -contains $build.FullName) { continue }
   Remove-Item -LiteralPath $build.FullName -Recurse -Force
 }
 

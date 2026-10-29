@@ -1,5 +1,4 @@
 import { Button, Card } from "@heroui/react";
-import type { CSSProperties } from "react";
 import type { DesktopPreferences } from "../../shared/desktop-api";
 import { useI18n } from "../i18n";
 import { SettingRow } from "./Settings";
@@ -125,40 +124,11 @@ export function SettingsWidget({
                     <span>claude-sonnet-5</span>
                   </div>
                 </div>
-                <div className="atlas-widget-preview__gauges">
-                  <div className="atlas-widget-preview__gauge">
-                    <span
-                      className="atlas-widget-preview__ring"
-                      data-tone="good"
-                      style={{ "--progress": "62%" } as CSSProperties}
-                    >
-                      <span>62%</span>
-                    </span>
-                    <span className="atlas-widget-preview__caption">{t("widget.quota")}</span>
-                  </div>
-                  <div className="atlas-widget-preview__gauge">
-                    <span
-                      className="atlas-widget-preview__ring"
-                      data-tone="warn"
-                      style={{ "--progress": "18%" } as CSSProperties}
-                    >
-                      <span>18%</span>
-                    </span>
-                    <span className="atlas-widget-preview__caption">{t("widget.budget")}</span>
-                  </div>
-                </div>
-                <div className="atlas-widget-preview__stats">
-                  <div>
-                    <span>{t("widget.burnRate")}</span>
-                    <strong>{t("settings.widget.previewBurn")}</strong>
-                  </div>
-                  <div>
-                    <span>{t("widget.sessionCost")}</span>
-                    <strong>$0.42</strong>
-                  </div>
-                  <div>
-                    <span>{t("widget.reset")}</span>
-                    <strong>2h 14m</strong>
+                <div className="atlas-widget-preview__tokens">
+                  <span className="atlas-widget-preview__caption">{t("widget.tokensToday")}</span>
+                  <div className="atlas-widget-preview__figure">
+                    <strong>{t("settings.widget.previewTokens")}</strong>
+                    <span>{t("widget.tokens")}</span>
                   </div>
                 </div>
               </div>
