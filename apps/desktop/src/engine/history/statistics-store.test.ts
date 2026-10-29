@@ -161,7 +161,7 @@ describe("durable usage observations", () => {
     const changed = { ...record, totals: { ...record.totals!, inputTokens: 150, totalTokens: 200 }, hourly: null, models: null, breakdownCoverage: { hourly: "unknown" as const, models: "unknown" as const } };
     local.merge({ record: changed, revision: 3 });
     expect(local.get(record.recordId)?.details).toBeNull();
-    expect(local.db.all("SELECT details FROM usage_record_history WHERE details IS NOT NULL").length).toBeGreaterThan(0);
+    expect(local.db.all("SELECT name FROM sqlite_master WHERE name = 'usage_record_history'")).toEqual([]);
   });
   it("retains sealed history when a successful rescan sees fewer source events", () => {
     const { payload } = day();
@@ -189,7 +189,8 @@ describe("durable usage observations", () => {
     await expect(sync.save()).rejects.toThrow("connection lost"); expect(local.statistics.pendingCount()).toBeGreaterThan(0);
     offline = false; await sync.save(); expect(local.statistics.pendingCount()).toBe(0); expect(remote.size).toBe(2);
     const restored = store(); const restore = new UsageSync(restored); resources.push(() => restore.close()); await restore.configure("a", cloud); restore.setAutomatic(false); await restore.restore();
-    expect(restored.db.all("SELECT * FROM usage_fact WHERE owner = 'a'")).toHaveLength(2);
+    expect(restored.db.all("SELECT * FROM usage_fact WHERE owner = 'a'")).toHaveLength(0);
+    expect(restored.statistics.pending()).toEqual([]);
     await restore.configure("b", { ...cloud, async readFacts() { return { facts: [], cursor: "0", more: false }; } });
     expect(restored.statistics.pending()).toEqual([]);
     expect(restored.db.all("SELECT * FROM usage_fact WHERE owner = 'b'")).toHaveLength(0);
@@ -198,7 +199,7 @@ describe("durable usage observations", () => {
     const local = store(); const live = { source: "oauth", updatedAt: now.toISOString(), analytics: null, identity: { plan: "pro" }, windows: [{ kind: "weekly", label: "Weekly", usedPercent: 10, remainingPercent: 90 }], credits: null };
     local.statistics.capacity("codex", "local", "replica", live);
     local.statistics.capacity("codex", "local", "replica", { ...live, updatedAt: "2026-09-23T13:00:00Z", windows: [{ ...live.windows[0], usedPercent: 20 }] });
-    expect(local.db.all("SELECT * FROM usage_fact WHERE kind = 'capacity'")).toHaveLength(2);
+    expect(local.db.all("SELECT * FROM usage_fact WHERE kind = 'capacity'")).toHaveLength(1);
     const fact = local.statistics.pending()[0]; expect(identifyFact(fact).id).toBe(fact.id);
     expect(() => local.statistics.put({ ...fact, sourceId: "11111111-1111-4111-a111-111111111111" })).toThrow("fingerprint");
   });

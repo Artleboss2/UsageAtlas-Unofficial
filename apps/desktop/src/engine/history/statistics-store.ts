@@ -36,10 +36,21 @@ function fingerprint(value: unknown): Fingerprinted {
   return { fact, contentId: hash(content.replace(`"pricingVersion":${JSON.stringify(fact.pricingVersion)}`, `"pricingVersion":null`)) };
 }
 
+/**
+ * How long a saved observation keeps its payload. Past this, the event is only
+ * remembered by its content id, which is all a rescan needs to avoid uploading
+ * it a second time. The day record already holds its totals.
+ */
+const SAVED_EVENT_RETENTION_MS = 30 * 24 * 60 * 60 * 1_000;
+
 /** Immutable numeric observations, independently recoverable from display summaries. */
 export class StatisticsStore {
   constructor(private readonly db: WritableSqliteDatabase, private readonly owner: () => string) {
     db.exec(`
+      CREATE TABLE IF NOT EXISTS usage_event_seen (
+        owner TEXT NOT NULL, event_id TEXT NOT NULL, content_id TEXT NOT NULL,
+        PRIMARY KEY(owner,event_id,content_id)
+      );
       CREATE TABLE IF NOT EXISTS usage_fact (
         owner TEXT NOT NULL, id TEXT NOT NULL, source_id TEXT NOT NULL,
         kind TEXT NOT NULL, provider TEXT NOT NULL, occurred_at TEXT NOT NULL,
@@ -64,6 +75,41 @@ export class StatisticsStore {
     if (!db.all("PRAGMA table_info(usage_fact)").some(column => column.name === "content_id"))
       db.exec("ALTER TABLE usage_fact ADD COLUMN content_id TEXT");
   }
+  /**
+   * Keeps the ledger an outbox rather than a second history.
+   *
+   * `collection` and `capacity` facts are snapshots: only the newest one per
+   * source and day (collection) or per source (capacity) can ever be uploaded or
+   * shown, and older copies are deleted as soon as a newer one lands. Saved
+   * events older than the retention window keep their fingerprint in
+   * `usage_event_seen`, so a rescan stays idempotent without its payload.
+   */
+  compact(now = Date.now()): number {
+    const cutoff = new Date(now - SAVED_EVENT_RETENTION_MS).toISOString();
+    this.db.run(
+      `INSERT OR IGNORE INTO usage_event_seen(owner,event_id,content_id)
+       SELECT owner,event_id,content_id FROM usage_fact
+       WHERE kind = 'usage_event' AND saved = 1 AND content_id IS NOT NULL AND occurred_at < ?`,
+      [cutoff]
+    );
+    const before = Number(this.db.get("SELECT COUNT(*) AS count FROM usage_fact")?.count ?? 0);
+    this.db.run(
+      `DELETE FROM usage_fact WHERE kind = 'usage_event' AND saved = 1 AND content_id IS NOT NULL AND occurred_at < ?`,
+      [cutoff]
+    );
+    this.pruneProvenance();
+    const after = Number(this.db.get("SELECT COUNT(*) AS count FROM usage_fact")?.count ?? 0);
+    return before - after;
+  }
+  /** Drops superseded scan and quota snapshots, newest per key wins. */
+  private pruneProvenance(): void {
+    this.db.run(`DELETE FROM usage_fact WHERE kind = 'collection' AND rowid NOT IN (
+      SELECT max(rowid) FROM usage_fact WHERE kind = 'collection'
+      GROUP BY owner, provider, source_id, substr(occurred_at, 1, 10))`);
+    this.db.run(`DELETE FROM usage_fact WHERE kind = 'capacity' AND rowid NOT IN (
+      SELECT max(rowid) FROM usage_fact WHERE kind = 'capacity'
+      GROUP BY owner, provider, source_id)`);
+  }
   put(fact: UsageFact, saved = false, owner = this.owner()): void {
     const checked = fingerprint(fact);
     const rowid = this.insert(checked, saved, owner);
@@ -75,7 +121,20 @@ export class StatisticsStore {
     this.db.run(operation.sql, operation.parameters);
     const inserted = this.db.get("SELECT changes() AS changes, last_insert_rowid() AS rowid");
     if (saved) this.db.run("UPDATE usage_fact SET saved = 1 WHERE owner = ? AND id = ?", [owner, checked.fact.id]);
-    return inserted?.changes ? Number(inserted.rowid) : null;
+    if (!inserted?.changes) return null;
+    const rowid = Number(inserted.rowid);
+    // A newer snapshot replaces its predecessor right away, instead of waiting for
+    // the next launch to compact a scan that runs every few minutes.
+    if (checked.fact.kind === "collection")
+      this.db.run(`DELETE FROM usage_fact WHERE owner = ? AND provider = ? AND source_id = ?
+        AND kind = 'collection' AND substr(occurred_at, 1, 10) = substr(?, 1, 10)
+        AND rowid <> ? AND occurred_at <= ?`, [owner, checked.fact.providerId, checked.fact.sourceId,
+        checked.fact.observedAt, rowid, checked.fact.observedAt]);
+    else if (checked.fact.kind === "capacity")
+      this.db.run(`DELETE FROM usage_fact WHERE owner = ? AND provider = ? AND source_id = ?
+        AND kind = 'capacity' AND rowid <> ? AND occurred_at <= ?`, [owner, checked.fact.providerId,
+        checked.fact.sourceId, rowid, checked.fact.observedAt]);
+    return rowid;
   }
   /**
    * Scans add versions in observation order, so the newest version of an event has the highest rowid.
@@ -225,10 +284,13 @@ export class StatisticsStore {
 // text: json_set keeps their key order, which matches facts this device collected.
 const withoutRepricing = (payload: string) => `json_set(${payload}, '$.id', '', '$.observedAt', '', '$.pricingVersion', NULL)`;
 /** Whether a fact repeats the newest version of its event stored below `before` (a rowid), apart from repricing. */
-const repeatsVersion = (contentId: string, payload: string, event: string, before?: string) => `EXISTS (SELECT 1 FROM usage_fact p
-  WHERE p.rowid = (SELECT v.rowid FROM usage_fact v WHERE v.owner = ?1 AND v.event_id = ${event}${before ? ` AND v.rowid < ${before}` : ""}
-    ORDER BY v.rowid DESC LIMIT 1)
-  AND (p.content_id = ${contentId} OR ${withoutRepricing("p.payload")} = ${withoutRepricing(payload)}))`;
+const repeatsVersion = (contentId: string, payload: string, event: string, before?: string) => `(
+  EXISTS (SELECT 1 FROM usage_fact p
+    WHERE p.rowid = (SELECT v.rowid FROM usage_fact v WHERE v.owner = ?1 AND v.event_id = ${event}${before ? ` AND v.rowid < ${before}` : ""}
+      ORDER BY v.rowid DESC LIMIT 1)
+    AND (p.content_id = ${contentId} OR ${withoutRepricing("p.payload")} = ${withoutRepricing(payload)}))
+  OR EXISTS (SELECT 1 FROM usage_event_seen m
+    WHERE m.owner = ?1 AND m.event_id = ${event} AND m.content_id = ${contentId}))`;
 
 function insertOperation({ fact: r, contentId }: Fingerprinted, owner: string, saved: boolean): SqliteOperation {
   const event = r.kind === "usage_event" ? r : null;

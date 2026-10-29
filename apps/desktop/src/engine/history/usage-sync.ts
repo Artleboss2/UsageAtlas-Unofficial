@@ -1,4 +1,4 @@
-import { validateUsageFact, STATISTICS_BATCH_SIZE, type UsageFact } from "@usageatlas/contracts/statistics";
+import type { UsageFact } from "@usageatlas/contracts/statistics";
 import {
   USAGE_BATCH_SIZE,
   USAGE_MAX_BYTES,
@@ -20,7 +20,7 @@ import {
   type ReportTarget
 } from "../../shared/report-plans";
 import { spinTarget } from "./report-wheel";
-import { hasValidFingerprint, identifyFact } from "./statistics-store";
+import { identifyFact } from "./statistics-store";
 import { ATTRIBUTION_SEPARATOR, parseAttribution, UsageStore } from "./usage-store";
 
 /**
@@ -251,26 +251,9 @@ export class UsageSync {
         await this.store.statistics.dropRepricedCopies(() => this.closed || this.stopping).catch(() => undefined);
         if (this.closed || this.stopping) return;
       }
-      if (cloud.readFacts) {
-        const key = `statistics-cursor:${this.store.owner}`;
-        let cursor = this.store.setting(key) ?? "0";
-        for (;;) {
-          const page = await cloud.readFacts(cursor);
-          if (this.closed || this.stopping) return;
-          if (!/^\d+$/.test(page.cursor) || BigInt(page.cursor) < BigInt(cursor)
-            || (page.more && (page.cursor === cursor || !page.facts.length))) throw new Error("Invalid statistics page.");
-          this.store.transaction(() => {
-            // A relabelled fact comes back with the id it was uploaded under, so its content
-            // no longer matches that id. This computer already counted the real observation,
-            // and an unverifiable copy must not enter the local store.
-            for (const fact of page.facts) if (hasValidFingerprint(fact)) this.store.statistics.put(fact, true);
-            this.store.setSetting(key, page.cursor);
-          });
-          cursor = page.cursor;
-          this.progress!.completed += page.facts.length;
-          if (!page.more) break;
-        }
-      }
+      // Observations are not restored. The server already holds them, the local
+      // day records carry the same totals, and re-reading them used to copy the
+      // whole cloud ledger into this database on every restore.
       if (upload) {
         this.progress = { operation: "save", phase: "saving", completed: 0, total: this.store.statistics.pendingCount() };
         for (;;) {
@@ -425,12 +408,6 @@ export function httpUsageCloud(baseURL: string, token: string): UsageCloud {
     });
   };
   return {
-    async readFacts(after) {
-      const result = await request(`/api/usage/statistics?after=${encodeURIComponent(after)}`) as { facts: unknown; cursor: unknown; more: unknown };
-      if (!Array.isArray(result.facts) || result.facts.length > STATISTICS_BATCH_SIZE
-        || typeof result.cursor !== "string" || !/^\d{1,19}$/.test(result.cursor) || typeof result.more !== "boolean") throw new Error("Invalid statistics response.");
-      return { facts: result.facts.map(validateUsageFact), cursor: result.cursor, more: result.more };
-    },
     async saveFacts(facts) {
       const result = await request("/api/usage/statistics", { facts }) as { saved: unknown };
       if (!Array.isArray(result.saved) || result.saved.some(id => typeof id !== "string")) throw new Error("Invalid statistics acknowledgement.");

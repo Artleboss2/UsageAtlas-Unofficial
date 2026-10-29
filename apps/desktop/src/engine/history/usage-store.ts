@@ -1,4 +1,3 @@
-import { createHash } from "node:crypto";
 import { StatisticsStore } from "./statistics-store";
 import { readHistoryDayPayload } from "./payload";
 import { previewModelRecovery } from "./usage-payload";
@@ -21,13 +20,6 @@ export interface LocalRecord extends PendingRecord {
   savedVersion: number;
   conflict: CloudRecord | null;
 }
-/**
- * Archived copies kept per record. The archive is write-only — nothing reads it
- * back — and every collection pass used to file another copy of each day, which
- * made it the largest table in the local database (4 MB of 8 MB on a two-day-old
- * profile). Keeping the newest versions bounds it without losing recent history.
- */
-const ARCHIVED_VERSIONS_PER_RECORD = 20;
 const SCHEMA = `
 CREATE TABLE IF NOT EXISTS usage_record (
   owner TEXT NOT NULL DEFAULT '',
@@ -53,41 +45,37 @@ export class UsageStore {
   onChange?: () => void;
   constructor(readonly db: WritableSqliteDatabase) {
     db.exec(SCHEMA);
-    db.exec(`CREATE TABLE IF NOT EXISTS usage_record_history (
-      owner TEXT NOT NULL, id TEXT NOT NULL, fingerprint TEXT NOT NULL,
-      payload TEXT NOT NULL, details TEXT, archived_at TEXT NOT NULL,
-      PRIMARY KEY(owner,id,fingerprint)
-    )`);
+    // Earlier builds kept a write-only copy of every replaced projection. It was
+    // the largest table in this file and nothing could read it back, so it is
+    // dropped and never written again.
+    db.exec("DROP TABLE IF EXISTS usage_record_history");
     this.statistics = new StatisticsStore(db, () => this.owner);
     if (!db.all("PRAGMA table_info(usage_record)").some((column) => column.name === "save_error"))
       db.exec("ALTER TABLE usage_record ADD COLUMN save_error TEXT");
     this.repair();
-    this.pruneArchive();
+    this.compact();
   }
   /**
-   * Returns the archive to its bound and hands freed pages back to the file
-   * system, so an existing oversized database shrinks on the next launch
-   * instead of waiting for the next write to reuse a few pages.
+   * Collapses the ledger to what the app still needs to upload or show, then
+   * returns the freed pages to the file system once. Until now every scan filed a
+   * `collection` fact, every quota check a `capacity` fact, and every cloud save
+   * kept the acknowledged request rows forever: 2,597 of 2,856 rows on a real
+   * profile carried no usage at all. The day record above already sums the same
+   * requests, so those rows are redundant.
    */
-  private pruneArchive(): void {
-    this.db.run(
-      `DELETE FROM usage_record_history WHERE rowid NOT IN (
-        SELECT rowid FROM (
-          SELECT rowid, ROW_NUMBER() OVER (
-            PARTITION BY owner, id ORDER BY archived_at DESC, rowid DESC
-          ) AS rank FROM usage_record_history
-        ) WHERE rank <= ?
-      )`,
-      [ARCHIVED_VERSIONS_PER_RECORD]
-    );
+  private compact(): void {
+    const removed = this.statistics.compact();
+    const version = this.setting("storage-compact");
     const freed = Number(this.db.get("PRAGMA freelist_count")?.freelist_count ?? 0);
-    if (freed < 64) return;
+    if (version === "1" && removed === 0 && freed < 64) return;
     try {
-      // Another connection (the background writer) can hold the file; the
-      // deleted rows stay reusable either way.
+      // The writer connection can hold the file between batches; the deletions are
+      // already committed and VACUUM can run on the next launch.
+      this.db.exec("PRAGMA wal_checkpoint(TRUNCATE)");
       this.db.exec("VACUUM");
+      this.setSetting("storage-compact", "1");
     } catch {
-      // Reclaiming space is best effort; the archive is already bounded.
+      // Reclaiming space is best effort; deleted rows still free their pages.
     }
   }
   get owner(): string {
@@ -219,7 +207,6 @@ export class UsageStore {
       record = (source && previewModelRecovery(record, source)) || record;
     }
     const existing = this.get(record.recordId, owner);
-    if (existing && (details !== existing.details || !sameUsage(existing.record, record))) this.archive(existing);
     if (existing && sameUsage(existing.record, record)) {
       if (details !== existing.details || existing.saveError)
         this.db.run("UPDATE usage_record SET details = ?, save_error = NULL WHERE owner = ? AND id = ?", [
@@ -438,22 +425,6 @@ export class UsageStore {
     const previous = local.record.totals, next = incoming.totals;
     if (!previous || !next) return null;
     return (Object.keys(previous) as (keyof typeof previous)[]).every(key => previous[key] === next[key]) ? local.details : null;
-  }
-  private archive(local: LocalRecord): void {
-    const payload = canonicalUsage(local.record);
-    const fingerprint = createHash("sha256").update(payload).update(local.details ?? "").digest("hex");
-    this.db.run("INSERT OR IGNORE INTO usage_record_history VALUES (?,?,?,?,?,?)", [
-      local.owner, local.record.recordId, fingerprint, payload, local.details, new Date().toISOString()
-    ]);
-    // Bound the archive as it is written, not only on the next launch: a session
-    // that keeps collecting must not grow this table without limit.
-    this.db.run(
-      `DELETE FROM usage_record_history WHERE owner = ? AND id = ? AND rowid NOT IN (
-        SELECT rowid FROM usage_record_history WHERE owner = ? AND id = ?
-        ORDER BY archived_at DESC, rowid DESC LIMIT ?
-      )`,
-      [local.owner, local.record.recordId, local.owner, local.record.recordId, ARCHIVED_VERSIONS_PER_RECORD]
-    );
   }
   transaction<T>(operation: () => T): T {
     this.db.exec("BEGIN IMMEDIATE");
