@@ -28,7 +28,7 @@
 
 ## Timeline: 0.4.0 → 0.5.0
 
-![Timeline: 0.4.0 through 0.4.5 shipped, with four 0.5.0 goals in progress](docs/timeline-0.4-0.5.svg)
+![Timeline: 0.4.0 through 0.4.6 shipped, with the ten 0.5.0 outcomes ahead](docs/timeline-0.5.png)
 
 Earlier 0.3.x cards are in the [previous timeline](docs/timeline.svg). A 0.5.0 goal only moves to
 *shipped* when its acceptance test passes in a build published from this repository.
@@ -184,6 +184,29 @@ an older window kept running, the top-bar badge now says **Restart to finish upd
 newer folder. `refresh-install.ps1` keeps the newest build **and its predecessor** (plus the running
 one), so the one-click rollback still has a target after an update. This is the first slice of
 “trusted by construction”; signing, encryption and the SBOM remain open.
+
+### 0.4.6 — quiet in the tray, and a real provider directory
+
+**A hidden window costs nothing that can be seen.** With power saving on, a window that stays in the
+tray for 30 seconds gives its renderer back to the OS: the process, its heap and its compositor are
+gone, and the window is rebuilt at the same route and size when it is shown again. The mini window
+is released the same way. Between hiding and release the renderer stops painting at one frame per
+second and parks every CSS animation. A hidden app now checks usage every **15 minutes** instead of
+three, and **30 minutes** on battery; a visible window keeps the cadence the dashboard advertises.
+
+**Settings → Providers is the catalog, finally usable.** All **285** tools the app knows are
+searchable in one place, with **20** that have a real reader today, the folders found on this
+computer, and real brand marks for the ones that ship one. Filters cover trackable, on, and installed
+providers, and the list is ordered so what is already here comes first. Nothing is turned on by a
+scan: **Enable is the only switch**, and a tool without a reader says so and offers a local probe
+instead of pretending.
+
+**Discovery remembers the route, then keeps looking.** A saved route is no longer trusted because a
+path still resolves: every remembered file is re-probed, the folders that held them are walked again
+for ledgers that appeared later, and sibling folders of the same product are always checked. Results
+are merged per path, so a provider found in two stores is confirmed by both — the screen now reports
+“confirmed by N files” next to the confidence. A route that stops parsing is planned again from
+scratch, and a read-only profile only costs a rescan.
 
 ### Private and unlisted providers
 
@@ -388,35 +411,46 @@ publishes Windows artifacts.
 ## 0.5.0 goals
 
 0.5.0 is the release where the app stops being a tracker and becomes the single source of truth for
-everything a developer spends on AI. Seven hard outcomes, each with an acceptance test:
+everything a developer spends on AI. **Ten hard outcomes**, each one marked shipped only when its
+acceptance test passes in a build published from this repository. The timeline above reads **0 / 10**
+today, and it should stay that way until the evidence exists.
 
-- **Every AI tool, found in 30 seconds.** Type a name, or let the app scan what is installed; it
-  probes the store, proves a first token, and keeps a working route that survives a folder move.
-  Acceptance: **300+ verified providers** in the catalog, **98 % of installed tools detected** on a
-  clean Windows and a clean macOS profile, first token in **under 30 seconds**, and **zero network
-  requests** during discovery.
-- **Bill-exact, to the cent.** Blended and per-model estimates reconcile with real provider bills,
-  including cache reads and writes, service tiers, tax, currency and custom rates. Acceptance:
-  within **±2 %** of the invoice on **five providers for 90 days**, a reconciliation report that
-  names every remaining difference, and a monthly CSV/JSON export that totals to the invoice.
-- **A year in one file, on three machines.** One compact document per provider and day, merged
-  additively, conflict-free across three computers. Acceptance: restore **365 days in under 5
-  seconds**, **zero duplicate tokens** after five interrupted saves, and removing a device without
-  losing that device's history.
-- **Invisible under real load.** Acceptance: **under 200 ms** cold first paint, **under 80 MB**
-  resident after an hour idle, **under 0.1 %** idle CPU, page switches **under 30 ms** at one million
-  stored requests, and **under 2 % battery per hour** on the reference laptop.
-- **Trusted by construction.** Encrypted local vault, signed installer and update feed, automatic
-  rollback, and no stale build left behind. Acceptance: a tampered package is refused, a failed
-  update returns to the previous build in one launch, at most **two** `app-*` folders — the running
-  build and its rollback target — remain, and the release publishes an SBOM and a reproducible build
-  hash.
-- **Fluent for everyone.** Acceptance: **twelve languages** including one right-to-left catalog,
-  **100 % of renderer strings** translated, keyboard-only navigation, a screen-reader pass, and
-  **WCAG 2.2 AA** on every main screen.
-- **A million requests, still instant.** Acceptance: one million stored facts searched and filtered
-  in **under 100 ms**, a twelve-month graph that zooms without a freeze, project and session
-  drill-down at that size, and an export/import round-trip with **zero loss**.
+1. **Any tool, in 30 seconds.** Type a name, or let the app scan what is installed; it proves a first
+   token and keeps a route that survives a folder move. Acceptance: **300+ verified readers**,
+   **98 % of installed tools detected** on a clean Windows and a clean macOS profile, first token in
+   **under 30 seconds**, and **zero network requests** during discovery.
+2. **Bill-exact, to the cent.** Estimates reconcile with the bills providers actually send, including
+   cache reads and writes, service tiers, batch discounts, tax, currency and custom rates.
+   Acceptance: within **±1 %** of **ten real invoices over six months across eight providers**, a
+   reconciliation that names every remaining cent, and a monthly CSV/JSON export that totals to the
+   invoice.
+3. **Five years, three devices.** One compact document per provider and day, merged additively and
+   conflict-free across three computers. Acceptance: **five years restored in under 5 seconds**,
+   **zero duplicate tokens after twenty interrupted saves**, a device removed without losing its
+   history, and a profile moved to a new computer with no rescan.
+4. **Invisible under load.** Acceptance: **under 120 ms** cold first paint, **under 50 MB** resident
+   after an hour hidden, **under 0.05 %** idle CPU, page switches **under 20 ms** at five million
+   stored requests, and **under 1 % battery per hour** on the reference laptop.
+5. **Five million facts, still instant.** Acceptance: five million stored facts searched and
+   filtered in **under 80 ms**, a five-year graph that zooms without a freeze, project and session
+   drill-down at that size, and an export/import round-trip with **zero loss**.
+6. **Trusted by construction.** Signed and notarized installers, an encrypted local vault, automatic
+   rollback and no stale build left behind. Acceptance: a tampered package is refused before it
+   runs, a failed update returns to the previous build in one launch, at most **two** `app-*`
+   folders remain, and every release publishes an SBOM and a reproducible build hash.
+7. **Fluent for everyone.** Acceptance: **fifteen languages including two right-to-left catalogs**,
+   **100 % of renderer strings** translated, keyboard-only navigation, a screen-reader pass,
+   reduced-motion support, and **WCAG 2.2 AA** on every main screen.
+8. **Predict before you spend.** Acceptance: a 30-day forecast that lands within **5 %**, budget
+   guardrails that warn before the overrun, a burn-rate alert that fires during a runaway agent
+   loop, and a weekly digest that explains the largest movers.
+9. **Any model, any price.** A price catalog and an override path that survive real billing:
+   **500+ models**, tiers, cache and batch rates, subscription true-up, and custom or local models.
+   Acceptance: switching a model mid-month still reconciles to the invoice, and every rate used is
+   visible on screen.
+10. **Own every byte.** Acceptance: full-fidelity export and import, a documented local read API
+    and a **reader SDK that adds a new tool in under an hour**, a genuinely offline mode, and **zero
+    telemetry** sent in it.
 
 0.5.0 is a major step: it may change the local schema and the cloud document format. Migration is
 part of the contract, and a 0.4.x profile must open without a rescan, a duplicate token or a lost day.
