@@ -12,7 +12,8 @@ import type { ReportPlan, ReportTarget } from "./report-plans";
  *
  * The hash is implemented here rather than with `node:crypto` so the Attribution
  * preview runs in the renderer and computes exactly the label the engine will
- * upload.
+ * upload. This is used for provenance facts (scans, quotas), which carry no
+ * tokens; token-bearing usage goes through `tokenTarget` instead.
  */
 export function wheelTarget(plan: ReportPlan | null, key: string): ReportTarget | null {
   if (!plan || plan.targets.length === 0) return null;
@@ -25,6 +26,36 @@ export function wheelTarget(plan: ReportPlan | null, key: string): ReportTarget 
     if (bucket < cumulative) return target;
   }
   return plan.targets[plan.targets.length - 1];
+}
+
+/**
+ * Picks the target whose **token** mass is furthest behind the declared share.
+ *
+ * A request-count wheel says 30/20/50 but a 30-request bucket can hold 70 % of
+ * the day's tokens, so the public breakdown never matched the rule. Allocating
+ * tokens instead makes the long-run split equal the shares the user chose: each
+ * new day or request is handed to the provider with the largest deficit.
+ */
+export function tokenTarget(
+  plan: ReportPlan | null,
+  assigned: (target: ReportTarget) => number,
+  tokens: number
+): ReportTarget | null {
+  if (!plan || plan.targets.length === 0 || tokens <= 0) return null;
+  const total = plan.targets.reduce((sum, target) => sum + target.weight, 0);
+  if (total <= 0) return null;
+  const allocated = plan.targets.reduce((sum, target) => sum + Math.max(0, assigned(target)), 0);
+  let best: ReportTarget | null = null;
+  let bestDeficit = Number.NEGATIVE_INFINITY;
+  for (const target of plan.targets) {
+    const expected = (allocated + tokens) * (target.weight / total);
+    const deficit = expected - Math.max(0, assigned(target));
+    if (deficit > bestDeficit) {
+      best = target;
+      bestDeficit = deficit;
+    }
+  }
+  return best;
 }
 
 /** 32 readable bits of FNV-1a with an avalanche step, as a fraction in [0, 1). */
@@ -43,44 +74,26 @@ export function wheelBucket(text: string): number {
 }
 
 export interface TargetPreview extends ReportTarget {
-  /** Share the rule declares, as a fraction. */
+  /** Share of the source's token mass this target receives, as a fraction. */
   declared: number;
-  /** Share measured over the sampled request identities. */
-  sampled: number;
-  requests: number;
 }
 
 export interface PlanPreview {
   source: string;
   targets: TargetPreview[];
-  /** Request identities the sample used, so a test can follow one through. */
-  sampleSize: number;
-  /** Largest distance between a declared share and the sampled one, in points. */
-  driftPoints: number;
+  /** Total weight, so a 3/2/5 plan reads as 100 % just like 30/20/50. */
+  totalWeight: number;
 }
 
-/**
- * Runs the wheel over `sampleSize` request identities. The caller gets the same
- * answer as an upload of that many requests, because both use `wheelTarget`.
- */
-export function previewPlan(plan: ReportPlan, sampleSize = 1_000): PlanPreview {
-  const counts = new Map<ReportTarget, number>(plan.targets.map(target => [target, 0]));
-  for (let index = 0; index < sampleSize; index += 1) {
-    const target = wheelTarget(plan, `preview-${index}`);
-    if (target) counts.set(target, (counts.get(target) ?? 0) + 1);
-  }
-  const total = plan.targets.reduce((sum, target) => sum + target.weight, 0);
-  const targets = plan.targets.map(target => {
-    const declared = total > 0 ? target.weight / total : 0;
-    const requests = counts.get(target) ?? 0;
-    return {
+/** The exact token split the plan will reach over time. */
+export function previewPlan(plan: ReportPlan): PlanPreview {
+  const totalWeight = plan.targets.reduce((sum, target) => sum + target.weight, 0);
+  return {
+    source: plan.source,
+    totalWeight,
+    targets: plan.targets.map(target => ({
       ...target,
-      declared,
-      requests,
-      sampled: sampleSize > 0 ? requests / sampleSize : 0
-    };
-  });
-  const driftPoints = Math.max(0, ...targets.map(target =>
-    Math.abs(target.sampled * 100 - target.declared * 100)));
-  return { source: plan.source, targets, sampleSize, driftPoints };
+      declared: totalWeight > 0 ? target.weight / totalWeight : 0
+    }))
+  };
 }
