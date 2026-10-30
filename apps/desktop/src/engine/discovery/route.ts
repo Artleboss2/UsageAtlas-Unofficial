@@ -95,15 +95,43 @@ export async function discoverProviderUsage(
     : candidateRoots(name, options);
 
   const saved = cacheFile ? await readSavedRoute(cacheFile) : null;
-  if (saved && now.getTime() - saved.resolvedAt < ROUTE_TTL_MS && await routeVerifies(saved, signal)) {
-    return toResult(saved, "cached");
+  if (saved && now.getTime() - saved.resolvedAt < ROUTE_TTL_MS) {
+    const confirmed = await confirmRoute(saved, signal);
+    if (confirmed.length > 0) {
+      // The remembered files still parse. Rather than trusting the first route,
+      // drive the block again: the folders that held those files, then their
+      // neighbours, looking for usage that appeared since the last visit.
+      const hotspots = await scanRoots(hotspotsFor(confirmed), { ...options, maxDepth: 1, maxEntries: 4_000 }, signal);
+      const related = saved.related.length > 0
+        ? saved.related
+        : (await relatedRoots(name, options, signal)).filter((folder) => !roots.includes(folder));
+      const relatedScan = related.length > 0
+        ? await scanRoots(related, { ...options, maxEntries: 6_000 }, signal)
+        : null;
+      const files = mergeFiles([...confirmed, ...hotspots.files, ...(relatedScan?.files ?? [])]);
+      const scanned = unique([...saved.scanned, ...hotspots.scanned, ...(relatedScan?.scanned ?? [])]);
+      const route: SavedRoute = {
+        ...saved,
+        resolvedAt: now.getTime(),
+        related: unique([...saved.related, ...related]),
+        scanned,
+        files
+      };
+      await saveRoute(cacheFile, route);
+      return toResult(route, "cached", {
+        directories: scanned.length,
+        entries: hotspots.entries + (relatedScan?.entries ?? 0)
+      });
+    }
   }
 
   const scan = await scanRoots(roots, options, signal);
-  const related = scan.files.length === 0 ? await relatedRoots(name, options, signal) : [];
-  const relatedScan = related.length === 0 ? null : await scanRoots(related, options, signal);
-  const files = [...scan.files, ...(relatedScan?.files ?? [])].sort(compareFiles);
-  const scanned = [...new Set([...scan.scanned, ...(relatedScan?.scanned ?? [])])];
+  // Finding one ledger is not proof it is the only one: a sibling folder of the
+  // same product can hold a second store, so the neighbours are always checked.
+  const related = (await relatedRoots(name, options, signal)).filter((folder) => !roots.includes(folder));
+  const relatedScan = related.length > 0 ? await scanRoots(related, { ...options, maxEntries: 6_000 }, signal) : null;
+  const files = mergeFiles([...scan.files, ...(relatedScan?.files ?? [])]);
+  const scanned = unique([...scan.scanned, ...(relatedScan?.scanned ?? [])]);
 
   if (files.length > 0) {
     const route: SavedRoute = {
@@ -122,9 +150,10 @@ export async function discoverProviderUsage(
     });
   }
 
-  // Nothing new was found; a saved route that still verifies is better than none.
-  if (saved && await routeVerifies(saved, signal)) {
-    const renewed = { ...saved, resolvedAt: now.getTime() };
+  // Nothing new was found; a saved route whose files still parse is better than none.
+  const remaining = saved ? await confirmRoute(saved, signal) : [];
+  if (saved && remaining.length > 0) {
+    const renewed = { ...saved, resolvedAt: now.getTime(), files: remaining };
     await saveRoute(cacheFile, renewed);
     return toResult(renewed, "cached");
   }
@@ -243,18 +272,59 @@ function compareFiles(left: DiscoveredFile, right: DiscoveredFile): number {
   return right.confidence - left.confidence || right.mtimeMs - left.mtimeMs || left.path.localeCompare(right.path);
 }
 
-async function routeVerifies(route: SavedRoute, signal?: AbortSignal): Promise<boolean> {
-  if (route.files.length === 0) return false;
+/**
+ * Re-reads every remembered file. A file that still exists but no longer holds
+ * token counters (rotated, truncated, replaced by settings) is dropped, so the
+ * route is never trusted just because a path resolves.
+ */
+async function confirmRoute(route: SavedRoute, signal?: AbortSignal): Promise<DiscoveredFile[]> {
+  const confirmed: DiscoveredFile[] = [];
   for (const file of route.files) {
     signal?.throwIfAborted();
+    const probe = await probeFile(file.path, file.kind);
+    if (!probe.usable) continue;
+    let info;
     try {
-      const info = await stat(file.path);
-      if (!info.isFile() || info.size === 0) return false;
+      info = await stat(file.path);
     } catch {
-      return false;
+      continue;
+    }
+    confirmed.push({
+      ...file,
+      size: info.size,
+      mtimeMs: info.mtimeMs,
+      confidence: probe.confidence,
+      matches: probe.matches,
+      shape: probe.shape ?? file.shape,
+      reason: probe.reason
+    });
+  }
+  return mergeFiles(confirmed);
+}
+
+/** The exact folders that held a file: where to look again first. */
+function hotspotsFor(files: DiscoveredFile[]): string[] {
+  const folders = new Set<string>();
+  for (const file of files) folders.add(path.dirname(file.path));
+  return [...folders];
+}
+
+/** One row per path, keeping the most confident and most recent evidence. */
+function mergeFiles(files: DiscoveredFile[]): DiscoveredFile[] {
+  const byPath = new Map<string, DiscoveredFile>();
+  for (const file of files) {
+    const existing = byPath.get(file.path);
+    if (!existing
+      || file.confidence > existing.confidence
+      || (file.confidence === existing.confidence && file.mtimeMs > existing.mtimeMs)) {
+      byPath.set(file.path, file);
     }
   }
-  return true;
+  return [...byPath.values()].sort(compareFiles);
+}
+
+function unique(values: string[]): string[] {
+  return [...new Set(values)];
 }
 
 async function readSavedRoute(cacheFile: string): Promise<SavedRoute | null> {
