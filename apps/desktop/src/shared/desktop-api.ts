@@ -27,8 +27,14 @@ export type UsageAlertPreferences = Record<string, Record<string, UsageAlertRule
  * The typography choices offered in Settings → Appearance. Every family ships as a
  * bundled variable font, so a choice never depends on what the machine has installed.
  */
-export const APPEARANCE_FONTS = ["system", "inter", "manrope", "figtree", "jakarta", "geist"] as const;
+export const APPEARANCE_FONTS = [
+  "system", "inter", "manrope", "figtree", "jakarta", "geist", "outfit", "sora", "newsreader", "fraunces"
+] as const;
 export type AppearanceFont = (typeof APPEARANCE_FONTS)[number];
+
+/** `system` follows the OS, the other two pin the palette regardless of it. */
+export const APPEARANCE_THEMES = ["system", "light", "dark"] as const;
+export type AppearanceTheme = (typeof APPEARANCE_THEMES)[number];
 
 /** Application marks the title bar and the window icon can use. */
 export const APP_MARKS = ["datamosh", "classic", "duotone"] as const;
@@ -82,6 +88,8 @@ export const APPEARANCE_DENSITIES = ["comfortable", "compact"] as const;
 export type AppearanceDensity = (typeof APPEARANCE_DENSITIES)[number];
 
 export interface AppearancePreferences {
+  /** Palette: the OS appearance, or a fixed light/dark theme. */
+  theme: AppearanceTheme;
   font: AppearanceFont;
   /** Root type scale, 0.85–1.3. */
   fontScale: number;
@@ -104,6 +112,7 @@ export interface AppearancePreferences {
 }
 
 export const DEFAULT_APPEARANCE: AppearancePreferences = {
+  theme: "system",
   font: "system",
   fontScale: 1,
   textColor: null,
@@ -119,6 +128,7 @@ export const DEFAULT_APPEARANCE: AppearancePreferences = {
   providerColors: {}
 };
 const appearanceFontSet = new Set<string>(APPEARANCE_FONTS);
+const appearanceThemeSet = new Set<string>(APPEARANCE_THEMES);
 const appMarkSet = new Set<string>(APP_MARKS);
 const numberStyleSet = new Set<string>(NUMBER_STYLES);
 const accentTintSet = new Set<string>(ACCENT_TINTS);
@@ -142,6 +152,10 @@ export function sanitizeProviderColors(value: unknown): Record<string, string> {
 
 export function isAppearanceFont(value: unknown): value is AppearanceFont {
   return typeof value === "string" && appearanceFontSet.has(value);
+}
+
+export function isAppearanceTheme(value: unknown): value is AppearanceTheme {
+  return typeof value === "string" && appearanceThemeSet.has(value);
 }
 
 export function isAppMark(value: unknown): value is AppMark {
@@ -182,6 +196,7 @@ export function sanitizeAppearance(value: unknown): AppearancePreferences {
     ? Math.min(32, Math.max(0, Math.round(record.blur)))
     : DEFAULT_APPEARANCE.blur;
   return {
+    theme: isAppearanceTheme(record.theme) ? record.theme : DEFAULT_APPEARANCE.theme,
     font: isAppearanceFont(record.font) ? record.font : DEFAULT_APPEARANCE.font,
     fontScale: scale,
     textColor,
@@ -206,9 +221,19 @@ export interface WidgetPosition {
   y: number;
 }
 
+/** How much the mini window shows: one figure, the card, or the full panel. */
+export const WIDGET_STYLES = ["minimal", "balanced", "detailed"] as const;
+export type WidgetStyle = (typeof WIDGET_STYLES)[number];
+
+export function isWidgetStyle(value: unknown): value is WidgetStyle {
+  return typeof value === "string" && (WIDGET_STYLES as readonly string[]).includes(value);
+}
+
 export interface WidgetPreferences {
   /** Opens the mini window on launch and keeps it available from the tray. */
   enabled: boolean;
+  /** From the bare token figure to quotas, burn rate and cost. */
+  style: WidgetStyle;
   /** Hide after this many idle seconds; 0 keeps it on screen. */
   autoHideSeconds: number;
   /** Window opacity, 0.7–1. */
@@ -222,6 +247,7 @@ export interface WidgetPreferences {
 
 export const DEFAULT_WIDGET_PREFERENCES: WidgetPreferences = {
   enabled: false,
+  style: "balanced",
   autoHideSeconds: 0,
   opacity: 0.94,
   snapToEdges: true,
@@ -246,6 +272,7 @@ export function sanitizeWidgetPreferences(value: unknown): WidgetPreferences {
   const y = position?.y;
   return {
     enabled: typeof record.enabled === "boolean" ? record.enabled : DEFAULT_WIDGET_PREFERENCES.enabled,
+    style: isWidgetStyle(record.style) ? record.style : DEFAULT_WIDGET_PREFERENCES.style,
     autoHideSeconds: autoHide,
     opacity,
     snapToEdges: typeof record.snapToEdges === "boolean" ? record.snapToEdges : DEFAULT_WIDGET_PREFERENCES.snapToEdges,
@@ -452,7 +479,10 @@ export function sanitizeAdvancedPreferences(value: unknown): AdvancedPreferences
   };
 }
 
-export const BUILT_IN_BACKGROUND_IDS = ["mist", "valley", "anime-calm", "monterey", "big-sur"] as const;
+export const BUILT_IN_BACKGROUND_IDS = [
+  "mist", "valley", "anime-calm", "monterey", "big-sur",
+  "sierra", "aurora", "dunes", "tide", "orchid", "solstice"
+] as const;
 export type BuiltInBackgroundId = (typeof BUILT_IN_BACKGROUND_IDS)[number];
 export type BackgroundImagePreference = BuiltInBackgroundId | "custom";
 export const DEFAULT_BACKGROUND_IMAGE: BuiltInBackgroundId = "mist";
