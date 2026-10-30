@@ -140,6 +140,7 @@ function provider(overrides: Partial<DashboardProvider> = {}): DashboardProvider
 function preferences(): DesktopPreferences {
   return {
     appearance: {
+      theme: "system",
       font: "system",
       fontScale: 1,
       textColor: null,
