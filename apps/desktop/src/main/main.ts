@@ -19,6 +19,7 @@ import {
   nativeTheme,
   net,
   Notification,
+  powerMonitor,
   protocol,
   safeStorage,
   screen,
@@ -73,6 +74,7 @@ import {
 import { UtilityEngineTransport } from "./utility-engine-transport";
 import { WINDOW_ASPECT_RATIO, windowSizeForWorkArea } from "./window-sizing";
 import { DESKTOP_VERSION } from "../shared/version";
+import { rendererReleaseDelay, usageCheckDelay } from "./background-economy";
 
 declare const MAIN_WINDOW_VITE_DEV_SERVER_URL: string | undefined;
 declare const MAIN_WINDOW_VITE_NAME: string;
@@ -126,6 +128,10 @@ let usageCheckTimer: NodeJS.Timeout | null = null;
 let profileCheckTimer: NodeJS.Timeout | null = null;
 let exportTimer: NodeJS.Timeout | null = null;
 let pricingTimer: NodeJS.Timeout | null = null;
+let backgroundReleaseTimer: NodeJS.Timeout | null = null;
+/** The last frame of the main window, so a released window comes back where it was. */
+let lastWindowBounds: Electron.Rectangle | null = null;
+let onBattery = false;
 let profileStatusReported = false;
 let isQuitting = false;
 /** Set by the login item so a sign-in launch can stay in the tray. */
@@ -369,6 +375,15 @@ function createWindow(route: AppRoute = "day", showOnReady = true): BrowserWindo
     }
   });
   window.setAspectRatio(WINDOW_ASPECT_RATIO);
+  // A window released while hidden comes back where the user left it. The
+  // bounds only live for this session: the OS still owns the normal restore.
+  if (lastWindowBounds) window.setBounds(lastWindowBounds);
+  const rememberBounds = (): void => {
+    if (window.isDestroyed() || window.isMinimized() || window.isMaximized()) return;
+    lastWindowBounds = window.getBounds();
+  };
+  window.on("resize", rememberBounds);
+  window.on("move", rememberBounds);
 
   window.webContents.setWindowOpenHandler(({ url }) => {
     if (isAllowedExternal(url)) void shell.openExternal(url);
@@ -405,6 +420,21 @@ function createWindow(route: AppRoute = "day", showOnReady = true): BrowserWindo
   window.on("closed", () => {
     if (mainWindow === window) mainWindow = null;
   });
+  window.on("show", () => {
+    window.webContents.setFrameRate(60);
+    cancelBackgroundRelease();
+  });
+  window.on("restore", cancelBackgroundRelease);
+  // Hidden means hidden: the renderer stops compositing between now and the
+  // release timer, so a tray-bound window costs almost no CPU in the meantime.
+  window.on("hide", () => {
+    window.webContents.setFrameRate(1);
+    scheduleBackgroundRelease();
+  });
+  window.on("minimize", () => {
+    window.webContents.setFrameRate(1);
+    scheduleBackgroundRelease();
+  });
 
   const syncWindowChrome = (): void => {
     window.setBackgroundColor(systemWindowChrome().backgroundColor);
@@ -433,12 +463,65 @@ function createWindow(route: AppRoute = "day", showOnReady = true): BrowserWindo
 }
 
 function showWindow(route: AppRoute = "day"): void {
+  cancelBackgroundRelease();
   if (!mainWindow || mainWindow.isDestroyed()) {
     mainWindow = createWindow(route);
+    mainWindow.setOpacity(preferences.get().appearance.windowOpacity);
   } else {
     mainWindow.show();
     mainWindow.focus();
     mainWindow.webContents.send(IPC.navigate, route);
+  }
+}
+
+/** True while at least one window is actually on screen for the user. */
+function anyWindowVisible(): boolean {
+  const mainVisible = Boolean(mainWindow && !mainWindow.isDestroyed()
+    && mainWindow.isVisible() && !mainWindow.isMinimized());
+  const widgetVisible = Boolean(widgetWindow && !widgetWindow.isDestroyed()
+    && widgetWindow.isVisible() && !widgetWindow.isMinimized());
+  return mainVisible || widgetVisible;
+}
+
+function cancelBackgroundRelease(): void {
+  if (!backgroundReleaseTimer) return;
+  clearTimeout(backgroundReleaseTimer);
+  backgroundReleaseTimer = null;
+}
+
+/**
+ * Arms the release of hidden renderers. With power saving on, a window that
+ * stays in the tray for half a minute gives its process back: on a typical
+ * profile that is the single biggest block of memory the app holds, and none
+ * of it is visible to the user. Showing the window rebuilds it at the last
+ * route and size, so the only cost is a short paint.
+ */
+function scheduleBackgroundRelease(): void {
+  cancelBackgroundRelease();
+  if (isQuitting || !preferences) return;
+  const delay = rendererReleaseDelay({
+    windowVisible: anyWindowVisible(),
+    powerSaving: preferences.get().powerSaving,
+    onBattery
+  });
+  if (delay === null) return;
+  backgroundReleaseTimer = setTimeout(() => {
+    backgroundReleaseTimer = null;
+    releaseBackgroundRenderers();
+  }, delay);
+  backgroundReleaseTimer.unref();
+}
+
+function releaseBackgroundRenderers(): void {
+  if (isQuitting || anyWindowVisible()) return;
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    if (!mainWindow.isMinimized() && !mainWindow.isMaximized()) lastWindowBounds = mainWindow.getBounds();
+    mainWindow.destroy();
+    mainWindow = null;
+  }
+  if (widgetWindow && !widgetWindow.isDestroyed()) {
+    widgetWindow.destroy();
+    widgetWindow = null;
   }
 }
 
@@ -512,8 +595,14 @@ function createWidgetWindow(showOnReady = false, focus = true): BrowserWindow {
   window.on("closed", () => endWidgetResize());
   window.on("moved", scheduleWidgetBoundsSave);
   window.on("resized", scheduleWidgetBoundsSave);
-  window.on("show", () => updateTrayMenu());
-  window.on("hide", () => updateTrayMenu());
+  window.on("show", () => {
+    cancelBackgroundRelease();
+    updateTrayMenu();
+  });
+  window.on("hide", () => {
+    scheduleBackgroundRelease();
+    updateTrayMenu();
+  });
   window.on("closed", () => {
     if (widgetWindow === window) widgetWindow = null;
   });
@@ -540,6 +629,7 @@ function defaultWidgetBounds(width: number, height: number): Electron.Rectangle 
 
 function showWidget(focus = true): void {
   if (!preferences) return;
+  cancelBackgroundRelease();
   if (!widgetWindow || widgetWindow.isDestroyed()) {
     createWidgetWindow(true, focus);
     return;
@@ -839,14 +929,18 @@ function evaluateDeliveryAlerts(snapshot: DashboardSnapshot): void {
 }
 
 async function runBackgroundUsageCheck(): Promise<void> {
-  let nextDelayMs = 60_000;
+  let staleAfterSeconds = 180;
   try {
     const state = await dashboard.get();
-    nextDelayMs = Math.max(30, Math.min(state.snapshot?.staleAfterSeconds ?? 180, 300)) * 1_000;
+    staleAfterSeconds = state.snapshot?.staleAfterSeconds ?? 180;
   } catch {
     // The next scheduled check retries without surfacing provider details in logs.
   } finally {
-    scheduleBackgroundUsageCheck(nextDelayMs);
+    scheduleBackgroundUsageCheck(usageCheckDelay({
+      windowVisible: anyWindowVisible(),
+      powerSaving: preferences.get().powerSaving,
+      onBattery
+    }, staleAfterSeconds));
   }
 }
 
@@ -1206,6 +1300,21 @@ function registerIPC(): void {
     // Folders only: no file contents, no network. A hit still has to be probed.
     return (await scanInstalledTools()).map(({ name, folder, kind }) => ({ name, folder, kind }));
   });
+  ipcMain.handle(IPC.providerDirectory, async (event) => {
+    assertTrustedSender(event);
+    // The directory is passive: it lists what exists and what the app can read.
+    // Nothing is enabled here — turning a tool on stays a deliberate click.
+    const installed = await scanInstalledTools();
+    const folderByName = new Map(installed.map((tool) => [tool.name, tool.folder]));
+    const enabled = preferences.get().providerEnabled;
+    return CATALOG.map((entry) => ({
+      name: entry.name,
+      kind: entry.kind,
+      adapter: entry.adapter ?? null,
+      tracked: entry.adapter ? enabled[entry.adapter] !== false : false,
+      installedFolder: folderByName.get(entry.name) ?? null
+    }));
+  });
   ipcMain.handle(IPC.setReportPlans, async (event, value: unknown) => {
     assertTrustedSender(event);
     const next = preferences.update({ reportPlans: validateReportPlans(value) });
@@ -1251,6 +1360,10 @@ function registerIPC(): void {
       }
     }
     const nextPreferences = preferences.update(patch);
+    if (previous.powerSaving !== nextPreferences.powerSaving) {
+      if (nextPreferences.powerSaving) scheduleBackgroundRelease();
+      else cancelBackgroundRelease();
+    }
     if (previous.anonymousAnalytics !== nextPreferences.anonymousAnalytics) {
       telemetry.setEnabled(nextPreferences.anonymousAnalytics);
     }
@@ -1643,7 +1756,12 @@ app.on("second-instance", (_event, _argv, _workingDirectory, additionalData) => 
       return;
     }
   }
-  if (!mainWindow || mainWindow.isDestroyed()) return;
+  // The window may have been released while the app sat in the tray; launching
+  // the shortcut again should bring it back rather than do nothing.
+  if (!mainWindow || mainWindow.isDestroyed()) {
+    showWindow("day");
+    return;
+  }
   if (mainWindow.isMinimized()) mainWindow.restore();
   mainWindow.show();
   mainWindow.focus();
@@ -1754,6 +1872,12 @@ if (squirrelStartup || !hasSingleInstanceLock) {
       updateTrayMenu();
     }
   });
+  // A hidden app costs what it collects, not what it renders. Battery and tray
+  // state adjust both the release timer and the refresh cadence.
+  onBattery = powerMonitor.isOnBatteryPower();
+  powerMonitor.on("on-battery", () => { onBattery = true; scheduleBackgroundRelease(); });
+  powerMonitor.on("on-ac", () => { onBattery = false; scheduleBackgroundRelease(); });
+  scheduleBackgroundRelease();
   scheduleBackgroundUsageCheck();
   setTimeout(() => void runScheduledExport(), 45_000).unref();
   exportTimer = setInterval(() => void runScheduledExport(), 60 * 60_000);
@@ -1768,6 +1892,7 @@ app.on("will-quit", () => {
 
 app.on("before-quit", () => {
   isQuitting = true;
+  cancelBackgroundRelease();
   if (usageCheckTimer) clearTimeout(usageCheckTimer);
   usageCheckTimer = null;
   if (profileCheckTimer) clearInterval(profileCheckTimer);
