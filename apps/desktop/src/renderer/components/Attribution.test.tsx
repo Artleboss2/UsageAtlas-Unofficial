@@ -65,7 +65,7 @@ describe("Attribution rules", () => {
     expect(html).toContain("30% of freebuff");
     expect(html).toContain("20% of freebuff");
     expect(html).toContain("50% of freebuff");
-    expect(html).toContain('aria-label="Share of requests"');
+    expect(html).toContain('aria-label="Share of tokens"');
     expect(html).toContain("Add target");
   });
 
@@ -82,8 +82,8 @@ describe("Attribution rules", () => {
       }]
     );
 
-    expect(html).toContain("100% of this source&#x27;s requests, spread over 3 targets.");
-    expect(html).toContain("The wheel decides per request");
+    expect(html).toContain("100% of this source&#x27;s tokens, spread over 3 targets.");
+    expect(html).toContain("The wheel weighs tokens");
   });
 
   it("offers the models the reported provider runs instead of a blank field", () => {
@@ -125,7 +125,25 @@ describe("Attribution rules", () => {
     const html = render([]);
 
     expect(html).toContain("this computer keeps counting Freebuff tokens");
-    expect(html).toContain("A target is drawn per request, not in turn");
+    expect(html).toContain("Allocation follows the token deficit, not the request count");
+  });
+
+  it("restates the saved selection above the editors", () => {
+    const html = render(
+      [provider({ id: "freebuff", name: "Freebuff" })],
+      [{
+        source: "freebuff",
+        targets: [
+          { reportAs: "codex", model: "gpt-5.3-codex", weight: 30 },
+          { reportAs: "claude", model: "claude-sonnet-4-6", weight: 70 }
+        ]
+      }]
+    );
+
+    expect(html).toContain("Currently reporting");
+    expect(html).toContain("codex · gpt-5.3-codex");
+    expect(html).toContain("30%");
+    expect(html).toContain("70%");
   });
 });
 
@@ -159,6 +177,7 @@ function provider(overrides: Partial<DashboardProvider> = {}): DashboardProvider
 function preferences(reportPlans: ReportPlan[]): DesktopPreferences {
   return {
     appearance: {
+      theme: "system",
       font: "system",
       fontScale: 1,
       textColor: null,
