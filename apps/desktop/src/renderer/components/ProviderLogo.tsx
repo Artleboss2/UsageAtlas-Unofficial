@@ -32,11 +32,21 @@ export function providerIconFor(name: string): (typeof PROVIDER_ICONS)[string] |
 }
 
 /** The mark shown in the provider directory, before a tool is even added. */
+const DIRECTORY_IMAGES: Record<string, string> = {
+  warp: warpLogo,
+  factory: factoryLogo,
+  "factory droid": factoryLogo,
+  freebuff: freebuffLogo
+};
+
 export function ProviderDirectoryLogo({ name, size = 30 }: { name: string; size?: number }): React.JSX.Element {
   const Icon = providerIconFor(name);
+  const image = DIRECTORY_IMAGES[iconKey(name)];
   return (
     <span aria-hidden="true" className="atlas-provider-logo atlas-provider-logo--directory">
-      {Icon ? createElement(Icon, { size }) : name.trim().slice(0, 1).toUpperCase()}
+      {Icon ? createElement(Icon, { size })
+        : image ? <img alt="" height={size} src={image} width={size} />
+          : name.trim().slice(0, 1).toUpperCase()}
     </span>
   );
 }
