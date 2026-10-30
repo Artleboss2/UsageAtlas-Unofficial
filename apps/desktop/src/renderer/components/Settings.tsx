@@ -31,7 +31,8 @@ import {
   FONT_OPTIONS,
   FONT_STACKS,
   INK_SWATCHES,
-  MARK_OPTIONS
+  MARK_OPTIONS,
+  THEME_OPTIONS
 } from "../appearance";
 import { formatTokens } from "../number-format";
 import type { MessageKey } from "../i18n";
@@ -428,6 +429,41 @@ export function Settings({
           </div>
 
           <div className="mt-8 grid gap-5" hidden={tab !== "appearance"}>
+            <Card variant="transparent">
+              <Card.Header>
+                <Card.Title>{t("settings.theme.title")}</Card.Title>
+                <Card.Description>{t("settings.theme.description")}</Card.Description>
+              </Card.Header>
+              <Card.Content className="mt-2">
+                <div className="atlas-theme-grid" role="radiogroup" aria-label={t("settings.theme.aria")}>
+                  {THEME_OPTIONS.map((option) => (
+                    <button
+                      aria-checked={appearance.theme === option.id}
+                      className="atlas-theme-tile"
+                      data-theme-preview={option.id}
+                      key={option.id}
+                      onClick={() => setAppearance({ theme: option.id })}
+                      role="radio"
+                      type="button"
+                    >
+                      <span aria-hidden="true" className="atlas-theme-tile__swatch" />
+                      <span className="atlas-theme-tile__label">
+                        {t(`option.theme.${option.id}` as MessageKey)}
+                      </span>
+                      <span className="atlas-theme-tile__note">
+                        {t(`option.theme.${option.id}.note` as MessageKey)}
+                      </span>
+                      {appearance.theme === option.id ? (
+                        <span aria-hidden="true" className="atlas-font-tile__check">
+                          <CheckIcon />
+                        </span>
+                      ) : null}
+                    </button>
+                  ))}
+                </div>
+              </Card.Content>
+            </Card>
+
             <Card variant="transparent">
               <Card.Header>
                 <Card.Title>{t("settings.preview.title")}</Card.Title>
