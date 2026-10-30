@@ -7,7 +7,7 @@ UsageAtlas app; see [README.md](README.md) for what it adds and what it is not.
 
 ### Added
 
-- **Settings → Providers.** The whole catalog in one searchable screen: 285 tools, 20 with a real
+- **Settings → Providers.** The whole catalog in one searchable screen: 305 tools, 20 with a real
   reader, real brand marks where a logo exists, filters for trackable / on / installed, and the
   folders found on this computer. Scanning is passive; **Enable** is the only switch, and a tool
   without a reader says so and offers a local probe instead of pretending.
@@ -26,7 +26,7 @@ UsageAtlas app; see [README.md](README.md) for what it adds and what it is not.
   released the same way, and hidden rendering drops to one frame per second until then.
 - **Background checks follow the user.** A visible window keeps the dashboard cadence; a hidden one
   checks every 15 minutes, and 30 minutes on battery. `powerSaving` now actually changes behaviour.
-- **The catalog is curated.** 285 real tools and APIs replace 657 spellings, most of which were
+- **The catalog is curated.** 305 real tools and APIs replace 657 spellings, most of which were
   duplicate `… desktop` variants or non-products. The 0.5.0 target of 300+ verified readers remains
   open.
 
