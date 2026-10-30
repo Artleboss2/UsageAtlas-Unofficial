@@ -585,6 +585,8 @@ export interface ProviderDiscovery {
   related: number;
   entries: number;
   confidence: number;
+  /** Files that independently parse as usage; more than one means a sure route. */
+  confirmedBy: number;
 }
 
 export interface RefreshProgress {
@@ -669,6 +671,8 @@ export interface UsageAtlasDesktopAPI {
   listDiscoverableProviders(): Promise<string[]>;
   /** Catalog names whose folders exist on this computer. Reads no file contents. */
   scanInstalledProviders(): Promise<InstalledProvider[]>;
+  /** Every catalog entry with the reader it has and whether it is tracked. */
+  getProviderDirectory(): Promise<ProviderDirectoryEntry[]>;
   setProviderEnabled(providerID: string, enabled: boolean): Promise<DashboardState>;
   setReportPlans(plans: ReportPlan[]): Promise<DesktopPreferences>;
   getPreferences(): Promise<DesktopPreferences>;
@@ -699,6 +703,18 @@ export interface UsageAtlasDesktopAPI {
   onEngineStatus(listener: (status: EngineStatus) => void): () => void;
   onNavigate(listener: (route: AppRoute) => void): () => void;
   onSnapshot(listener: (state: DashboardState) => void): () => void;
+}
+
+/** One row of Settings → Providers, merged from the catalog and the settings. */
+export interface ProviderDirectoryEntry {
+  name: string;
+  kind: string;
+  /** The engine adapter id, or null when the app cannot read this tool yet. */
+  adapter: string | null;
+  /** True when the adapter is on in the dashboard. */
+  tracked: boolean;
+  /** The data folder found on this computer, if any. */
+  installedFolder: string | null;
 }
 
 /** A catalog entry whose folder was found on this computer. */
@@ -737,6 +753,7 @@ export const IPC = {
   setProviderEnabled: "dashboard:set-provider-enabled",
   discoverProvider: "providers:discover",
   discoverableProviders: "providers:catalog",
+  providerDirectory: "providers:directory",
   scanInstalledProviders: "providers:scan-installed",
   setReportPlans: "settings:set-report-plans",
   getPreferences: "preferences:get",
