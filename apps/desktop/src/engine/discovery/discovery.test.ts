@@ -145,6 +145,38 @@ describe("provider discovery", () => {
     expect(saved.files).toHaveLength(1);
   });
 
+  it("revisits the remembered folder and picks up a ledger that appeared later", async () => {
+    const root = await home();
+    const first = path.join(root, ".config", "codefree", "usage.json");
+    await writeJson(first, { usage: { prompt_tokens: 8, completion_tokens: 2 } });
+    const options = { homeDirectory: root, environment: {} as NodeJS.ProcessEnv, cacheDirectory: path.join(root, "userdata") };
+    expect((await discoverProviderUsage("codefree", now, options)).files).toHaveLength(1);
+
+    const second = path.join(root, ".config", "codefree", "usage-2026.json");
+    await writeJson(second, { usage: { input_tokens: 30, output_tokens: 4 } });
+    const revisited = await discoverProviderUsage("codefree", now, options);
+    expect(revisited.route).toBe("cached");
+    expect(revisited.files.map(file => file.path)).toEqual(expect.arrayContaining([first, second]));
+    expect(revisited.files).toHaveLength(2);
+    const saved = JSON.parse(await readFile(path.join(root, "userdata", "discovered-codefree.json"), "utf8")) as { files: unknown[] };
+    expect(saved.files).toHaveLength(2);
+  });
+
+  it("checks sibling folders even after a ledger was found", async () => {
+    const root = await home();
+    const primary = path.join(root, ".config", "codefree", "usage.json");
+    const sibling = path.join(root, ".config", "CodeFree Studio", "usage.json");
+    await writeJson(primary, { usage: { prompt_tokens: 5, completion_tokens: 5 } });
+    await writeJson(sibling, { usage: { input_tokens: 11, output_tokens: 6 } });
+
+    const result = await discoverProviderUsage("codefree", now, {
+      homeDirectory: root, environment: {} as NodeJS.ProcessEnv, cacheDirectory: null
+    });
+    expect(result.related).toEqual([path.join(root, ".config", "CodeFree Studio")]);
+    expect(result.files.map(file => file.path)).toEqual(expect.arrayContaining([primary, sibling]));
+    expect(result.files).toHaveLength(2);
+  });
+
   it("plans again as soon as the saved route stops verifying", async () => {
     const root = await home();
     const usage = path.join(root, ".config", "codefree", "usage.json");
