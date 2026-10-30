@@ -641,7 +641,7 @@ describe("usage cloud storage", () => {
     await service.restore();
     expect(service.status()).toMatchObject({ busy: false, progress: null, lastCompleted: "restore" });
   });
-  it("ends a save with an error if a cloud response leaves the same record pending", async () => {
+  it("parks a record the server will not move as a conflict and completes the save", async () => {
     const local = store();
     const cloud = remoteCloud();
     const service = sync(local);
@@ -651,9 +651,28 @@ describe("usage cloud storage", () => {
     local.put(day(200));
     const save = vi.fn(async () => [{ record: day(), revision: 1, status: "conflict" as const }]);
     cloud.save = save;
-    await expect(service.save()).rejects.toThrow("Cloud save made no progress");
+    await expect(service.save()).resolves.toBeUndefined();
     expect(save).toHaveBeenCalledTimes(1);
-    expect(service.status()).toMatchObject({ busy: false, progress: null, lastCompleted: null, pending: 1 });
+    expect(local.get(day().recordId)?.conflict?.revision).toBe(1);
+    expect(local.pending()).toEqual([]);
+    expect(service.status()).toMatchObject({ busy: false, progress: null, lastCompleted: "save", error: null });
+    expect(service.status().conflicts).toHaveLength(1);
+  });
+  it("keeps an empty day on this computer instead of uploading it as saved usage", async () => {
+    const local = store();
+    local.selectAccount("a");
+    const empty = day(0);
+    empty.status = "no_data";
+    local.put(empty);
+    const cloud = remoteCloud();
+    const service = sync(local);
+    await service.configure("a", cloud);
+    service.setAutomatic(false);
+    cloud.save = vi.fn(cloud.save);
+    await service.save();
+    expect(cloud.save).not.toHaveBeenCalled();
+    expect(local.pending()).toEqual([]);
+    expect(local.get(empty.recordId)?.record).toMatchObject({ status: "no_data" });
   });
   it("clears progress after a failed request and allows a successful retry", async () => {
     const local = store();
