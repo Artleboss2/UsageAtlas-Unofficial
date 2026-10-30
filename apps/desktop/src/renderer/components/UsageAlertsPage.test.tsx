@@ -63,6 +63,7 @@ describe("UsageAlertsPage", () => {
 
 const preferences: DesktopPreferences = {
   appearance: {
+    theme: "system",
     font: "system",
     fontScale: 1,
     textColor: null,
