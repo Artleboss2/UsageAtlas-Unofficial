@@ -15,9 +15,31 @@ import Qwen from "@lobehub/icons/es/Qwen/components/Color.js";
 import Cline from "@lobehub/icons/es/Cline/components/Mono.js";
 import RooCode from "@lobehub/icons/es/RooCode/components/Mono.js";
 
+import { createElement } from "react";
+import { PROVIDER_ICONS } from "../provider-icons";
+
 const warpLogo = new URL("../assets/providers/warp.svg", import.meta.url).href;
 const factoryLogo = new URL("../assets/providers/factory.svg", import.meta.url).href;
 const freebuffLogo = new URL("../assets/providers/freebuff.svg", import.meta.url).href;
+
+/** Catalog spellings are compared the way the icon generator writes them. */
+function iconKey(value: string): string {
+  return value.trim().toLowerCase().replace(/[^a-z0-9]+/gu, "");
+}
+
+export function providerIconFor(name: string): (typeof PROVIDER_ICONS)[string] | null {
+  return PROVIDER_ICONS[iconKey(name)] ?? null;
+}
+
+/** The mark shown in the provider directory, before a tool is even added. */
+export function ProviderDirectoryLogo({ name, size = 30 }: { name: string; size?: number }): React.JSX.Element {
+  const Icon = providerIconFor(name);
+  return (
+    <span aria-hidden="true" className="atlas-provider-logo atlas-provider-logo--directory">
+      {Icon ? createElement(Icon, { size }) : name.trim().slice(0, 1).toUpperCase()}
+    </span>
+  );
+}
 
 interface ProviderLogoProps {
   providerID: string;
@@ -69,6 +91,9 @@ export function ProviderLogo({
     : providerID === "factory" ? factoryLogo
       : providerID === "freebuff" ? freebuffLogo
         : null;
+  // Newer catalog tools have no hand-written branch above; the generated
+  // registry covers them by product name, then by adapter id.
+  const DirectoryIcon = providerIconFor(providerName) ?? providerIconFor(providerID);
 
   return (
     <span
@@ -76,7 +101,10 @@ export function ProviderLogo({
       className={`atlas-provider-logo ${avatarClassName}`}
       style={{ background: `color-mix(in oklab, var(--atlas-provider-${providerID}, transparent) 12%, transparent)` }}
     >
-      {Icon ? <Icon size={iconSize} /> : image ? <img alt="" height={iconSize} src={image} width={iconSize} /> : providerID === "pi" ? "π" : providerName.slice(0, 1)}
+      {Icon ? <Icon size={iconSize} />
+        : image ? <img alt="" height={iconSize} src={image} width={iconSize} />
+          : DirectoryIcon ? createElement(DirectoryIcon, { size: iconSize })
+            : providerID === "pi" ? "π" : providerName.slice(0, 1)}
     </span>
   );
 }
