@@ -1,4 +1,10 @@
-import type { AccentTint, AppMark, AppearanceFont, AppearancePreferences } from "../shared/desktop-api";
+import type {
+  AccentTint,
+  AppMark,
+  AppearanceFont,
+  AppearancePreferences,
+  AppearanceTheme
+} from "../shared/desktop-api";
 import { setNumberStyle } from "./number-format";
 
 export interface FontOption {
@@ -16,7 +22,17 @@ export const FONT_OPTIONS: FontOption[] = [
   { id: "manrope", label: "Manrope" },
   { id: "figtree", label: "Figtree" },
   { id: "jakarta", label: "Jakarta" },
-  { id: "geist", label: "Geist" }
+  { id: "geist", label: "Geist" },
+  { id: "outfit", label: "Outfit" },
+  { id: "sora", label: "Sora" },
+  { id: "newsreader", label: "Newsreader" },
+  { id: "fraunces", label: "Fraunces" }
+];
+
+export const THEME_OPTIONS: { id: AppearanceTheme; label: string }[] = [
+  { id: "system", label: "System" },
+  { id: "light", label: "Light" },
+  { id: "dark", label: "Dark" }
 ];
 
 /** CSS stacks for the preview tiles, matching the selectors in globals.css. */
@@ -26,8 +42,41 @@ export const FONT_STACKS: Record<AppearanceFont, string> = {
   manrope: "'Manrope Variable', Manrope, sans-serif",
   figtree: "'Figtree Variable', Figtree, sans-serif",
   jakarta: "'Plus Jakarta Sans Variable', 'Plus Jakarta Sans', sans-serif",
-  geist: "'Geist Variable', Geist, sans-serif"
+  geist: "'Geist Variable', Geist, sans-serif",
+  outfit: "'Outfit Variable', Outfit, sans-serif",
+  sora: "'Sora Variable', Sora, sans-serif",
+  newsreader: "'Newsreader Variable', Newsreader, Georgia, serif",
+  fraunces: "'Fraunces Variable', Fraunces, Georgia, serif"
 };
+
+const systemDark = typeof window !== "undefined" && typeof window.matchMedia === "function"
+  ? window.matchMedia("(prefers-color-scheme: dark)")
+  : null;
+let activeTheme: AppearanceTheme = "system";
+
+/**
+ * Pins the palette to the chosen theme. HeroUI reads its own `dark` / `light`
+ * classes, so they are switched here too instead of relying on the stylesheet's
+ * OS media query alone. `system` keeps following the OS while it is selected.
+ */
+export function applyTheme(theme: AppearanceTheme): void {
+  activeTheme = theme;
+  if (typeof document === "undefined") return;
+  const dark = theme === "dark" || (theme === "system" && Boolean(systemDark?.matches));
+  const root = document.documentElement;
+  root.classList.toggle("dark", dark);
+  root.classList.toggle("glass-dark", dark);
+  root.classList.toggle("light", !dark);
+  root.classList.toggle("glass-light", !dark);
+  root.dataset.atlasTheme = dark ? "dark" : "light";
+  root.style.colorScheme = dark ? "dark" : "light";
+}
+
+if (systemDark) {
+  systemDark.addEventListener("change", () => {
+    if (activeTheme === "system") applyTheme("system");
+  });
+}
 
 export const MARK_OPTIONS: { id: AppMark; label: string }[] = [
   { id: "datamosh", label: "Datamosh" },
@@ -68,6 +117,7 @@ export const ACCENT_TINT_VALUES: Record<AccentTint, { accent: string; hover: str
  * render and every change.
  */
 export function applyAppearance(appearance: AppearancePreferences): void {
+  applyTheme(appearance.theme);
   const root = document.documentElement;
   root.dataset.appearanceFont = appearance.font;
   root.dataset.appearanceSurface = appearance.surface;
