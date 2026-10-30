@@ -1,6 +1,8 @@
 import { Button, Card } from "@heroui/react";
 import type { DesktopPreferences } from "../../shared/desktop-api";
-import { useI18n } from "../i18n";
+import { WIDGET_STYLES } from "../../shared/desktop-api";
+import { CheckIcon } from "../icons";
+import { useI18n, type MessageKey } from "../i18n";
 import { SettingRow } from "./Settings";
 
 interface SettingsWidgetProps {
@@ -60,6 +62,43 @@ export function SettingsWidget({
         <>
           <Card variant="transparent">
             <Card.Header>
+              <Card.Title>{t("settings.widget.styleTitle")}</Card.Title>
+              <Card.Description>{t("settings.widget.styleDescription")}</Card.Description>
+            </Card.Header>
+            <Card.Content className="mt-2">
+              <div
+                aria-label={t("settings.widget.styleAria")}
+                className="atlas-font-grid"
+                role="radiogroup"
+              >
+                {WIDGET_STYLES.map((style) => (
+                  <button
+                    aria-checked={widget.style === style}
+                    className="atlas-font-tile"
+                    key={style}
+                    onClick={() => void updateWidget({ style })}
+                    role="radio"
+                    type="button"
+                  >
+                    <span className="atlas-font-tile__label">
+                      {t(`option.widgetStyle.${style}` as MessageKey)}
+                    </span>
+                    <span className="atlas-font-tile__note">
+                      {t(`option.widgetStyle.${style}.note` as MessageKey)}
+                    </span>
+                    {widget.style === style ? (
+                      <span aria-hidden="true" className="atlas-font-tile__check">
+                        <CheckIcon />
+                      </span>
+                    ) : null}
+                  </button>
+                ))}
+              </div>
+            </Card.Content>
+          </Card>
+
+          <Card variant="transparent">
+            <Card.Header>
               <Card.Title>{t("settings.widget.behaviorTitle")}</Card.Title>
               <Card.Description>{t("settings.widget.behaviorDescription")}</Card.Description>
             </Card.Header>
@@ -116,21 +155,51 @@ export function SettingsWidget({
               <Card.Description>{t("settings.widget.previewDescription")}</Card.Description>
             </Card.Header>
             <Card.Content className="mt-2">
-              <div aria-hidden="true" className="atlas-widget-preview">
-                <div className="atlas-widget-preview__header">
-                  <span className="atlas-widget-preview__mark">UA</span>
-                  <div className="atlas-widget-preview__titles">
-                    <strong>{t("settings.widget.previewProvider")}</strong>
-                    <span>claude-sonnet-5</span>
+              <div
+                aria-hidden="true"
+                className="atlas-widget-preview"
+                data-style={widget.style}
+              >
+                {widget.style === "minimal" ? null : (
+                  <div className="atlas-widget-preview__header">
+                    <span className="atlas-widget-preview__mark">UA</span>
+                    <div className="atlas-widget-preview__titles">
+                      <strong>{t("settings.widget.previewProvider")}</strong>
+                      <span>claude-sonnet-5</span>
+                    </div>
                   </div>
-                </div>
+                )}
                 <div className="atlas-widget-preview__tokens">
-                  <span className="atlas-widget-preview__caption">{t("widget.tokensToday")}</span>
+                  {widget.style === "minimal" ? null : (
+                    <span className="atlas-widget-preview__caption">{t("widget.tokensToday")}</span>
+                  )}
                   <div className="atlas-widget-preview__figure">
                     <strong>{t("settings.widget.previewTokens")}</strong>
                     <span>{t("widget.tokens")}</span>
                   </div>
                 </div>
+                {widget.style === "detailed" ? (
+                  <div className="atlas-widget__details">
+                    <div className="atlas-widget__stat">
+                      <span>{t("widget.burnRate")}</span>
+                      <strong>8.7k<small>/min</small></strong>
+                    </div>
+                    <div className="atlas-widget__stat">
+                      <span>{t("widget.sessionCost")}</span>
+                      <strong>$0.86</strong>
+                    </div>
+                    <div className="atlas-widget__quota">
+                      <div className="atlas-widget__quotaHead">
+                        <span>5h</span>
+                        <strong>62% {t("widget.left")}</strong>
+                      </div>
+                      <span aria-hidden="true" className="atlas-widget__quotaTrack">
+                        <span style={{ width: "62%" }} />
+                      </span>
+                      <span className="atlas-widget__reset">{t("widget.reset")} 2h 14m</span>
+                    </div>
+                  </div>
+                ) : null}
               </div>
             </Card.Content>
           </Card>
