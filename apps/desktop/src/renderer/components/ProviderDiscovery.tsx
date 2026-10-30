@@ -138,6 +138,11 @@ export function ProviderDiscovery(): React.JSX.Element {
               <span className="atlas-discovery__confidence">
                 {t("settings.discovery.confidence", { percent: result.confidence })}
               </span>
+              {result.confirmedBy > 0 ? (
+                <span className="atlas-discovery__confidence">
+                  {t("settings.discovery.confirmed", { count: result.confirmedBy })}
+                </span>
+              ) : null}
             </div>
             <p className="atlas-discovery__meta">
               {t("settings.discovery.scanned", { folders: result.folders, entries: result.entries })}
