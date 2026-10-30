@@ -617,12 +617,16 @@ function createWidgetWindow(showOnReady = false, focus = true): BrowserWindow {
   return window;
 }
 
+/**
+ * Windows keeps the tray and the clock at the bottom-right; the bottom-left is
+ * the one corner nothing else occupies, so the card lands there by default.
+ */
 function defaultWidgetBounds(width: number, height: number): Electron.Rectangle {
   const { workArea } = screen.getDisplayNearestPoint(screen.getCursorScreenPoint());
   return {
     width,
     height,
-    x: Math.round(workArea.x + workArea.width - width - 24),
+    x: Math.round(workArea.x + 24),
     y: Math.round(workArea.y + workArea.height - height - 24)
   };
 }
