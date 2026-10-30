@@ -47,6 +47,7 @@ const api: UsageAtlasDesktopAPI = {
   discoverProvider: (name) => ipcRenderer.invoke(IPC.discoverProvider, name),
   listDiscoverableProviders: () => ipcRenderer.invoke(IPC.discoverableProviders),
   scanInstalledProviders: () => ipcRenderer.invoke(IPC.scanInstalledProviders),
+  getProviderDirectory: () => ipcRenderer.invoke(IPC.providerDirectory),
   setReportPlans: (plans) => ipcRenderer.invoke(IPC.setReportPlans, plans),
   getPreferences: () => ipcRenderer.invoke(IPC.getPreferences),
   updatePreferences: (patch) => ipcRenderer.invoke(IPC.updatePreferences, patch),
