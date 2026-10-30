@@ -3,6 +3,37 @@
 All notable UsageAtlas desktop changes are recorded here. This build starts from the open-source
 UsageAtlas app; see [README.md](README.md) for what it adds and what it is not.
 
+## Unreleased — 0.4.7
+
+### Added
+
+- **Light, dark or system.** Settings → Appearance pins the palette instead of following Windows
+  forever; the whole window, the mini window and the native controls switch together.
+- **Four more bundled families.** Outfit, Sora, Newsreader and Fraunces join the font picker, including
+  two editorial serifs for anyone who does not want a geometric sans everywhere.
+- **Six 4K vector wallpapers.** Sierra, Aurora, Dunes, Tide, Orchid and Solstice keep the layered
+  macOS-gradient look, render sharp at any panel size and add a few kilobytes to the installer rather
+  than megabytes.
+- **Three mini-window layouts.** Minimal is the bare token figure, Balanced adds the source, Detailed
+  adds cost, burn rate and the tightest quota with its reset countdown. New windows open in the
+  bottom-left corner, where Windows keeps nothing else.
+
+### Fixed
+
+- **Cloud save no longer reports a false dead end.** A record the server answered about at the same
+  revision was silently ignored, so the next pass found it unchanged and stopped every other upload
+  with `Cloud save made no progress`. That copy now becomes a conflict the user can resolve, and the
+  rest of the save finishes.
+- **Empty days stay on this computer.** A day with no usage was uploaded as a saved day without data,
+  which the public profile reported as incomplete. It is still kept locally as proof the day was
+  checked, but it is never sent.
+- **Closed days are rewritten once a day.** A day first uploaded while it was still open is re-sent
+  with its complete version, so the profile stops calling a finished day incomplete.
+- **The mini window stopped clipping when shrunk.** The main window's 320 px minimum width was
+  inherited by the card, so below that width its content was cut instead of moving the corners.
+- **Attribution follows the chosen percentages.** The wheel now allocates token mass rather than request
+  count, so a few huge requests can no longer drag the profile's tool split away from the rule.
+
 ## 0.4.6 — 2026-10-30
 
 ### Added
