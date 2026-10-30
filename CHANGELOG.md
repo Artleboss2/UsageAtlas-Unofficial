@@ -3,6 +3,33 @@
 All notable UsageAtlas desktop changes are recorded here. This build starts from the open-source
 UsageAtlas app; see [README.md](README.md) for what it adds and what it is not.
 
+## 0.4.6 — 2026-10-30
+
+### Added
+
+- **Settings → Providers.** The whole catalog in one searchable screen: 285 tools, 20 with a real
+  reader, real brand marks where a logo exists, filters for trackable / on / installed, and the
+  folders found on this computer. Scanning is passive; **Enable** is the only switch, and a tool
+  without a reader says so and offers a local probe instead of pretending.
+- **A provider directory with honest states.** Every card states whether the app can read the tool,
+  whether it is already installed, and whether it is on. The catalog was rebuilt without the duplicate
+  "… desktop" spellings and without names that were concepts rather than products.
+- **Discovery remembers the route and keeps looking.** Remembered files are re-probed instead of
+  trusted because a path resolves; the folder that held them is walked again for new ledgers, and
+  sibling folders of the same product are always checked. Results merge per path, so a provider found
+  in two stores is confirmed by both, and the screen reports "confirmed by N files".
+
+### Changed
+
+- **Hidden windows give their renderer back.** With power saving on, a window that stays in the tray
+  for 30 seconds is destroyed and rebuilt at the same route and size when shown. The mini window is
+  released the same way, and hidden rendering drops to one frame per second until then.
+- **Background checks follow the user.** A visible window keeps the dashboard cadence; a hidden one
+  checks every 15 minutes, and 30 minutes on battery. `powerSaving` now actually changes behaviour.
+- **The catalog is curated.** 285 real tools and APIs replace 657 spellings, most of which were
+  duplicate `… desktop` variants or non-products. The 0.5.0 target of 300+ verified readers remains
+  open.
+
 ## 0.4.5 — 2026-10-29
 
 ### Fixed
