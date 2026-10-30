@@ -21,6 +21,7 @@ import {
   type ReportTarget
 } from "../../shared/report-plans";
 import { spinTarget } from "./report-wheel";
+import { tokenTarget } from "../../shared/report-wheel";
 import { identifyFact } from "./statistics-store";
 import { ATTRIBUTION_SEPARATOR, parseAttribution, UsageStore } from "./usage-store";
 
@@ -54,6 +55,8 @@ export class UsageSync {
   private reportPlans: ReportPlan[] = [];
   /** Sources the server does not model and no rule renames, kept on this computer. */
   private heldBack: string[] = [];
+  /** Token mass already reported per source and target, mirrored in settings. */
+  private readonly wheelMass = new Map<string, number>();
   constructor(
     private readonly store: UsageStore,
     private readonly changed: (reason: "account" | "history") => void = () => {},
@@ -170,14 +173,19 @@ export class UsageSync {
    * of one request keeps the same target.
    */
   private renameFact(fact: UsageFact): { fact: UsageFact; localId: string } {
-    const target = this.targetFor(`fact:${fact.id}`, fact.providerId, fact.kind === "usage_event" ? fact.eventId : fact.id);
+    const tokens = fact.kind === "usage_event" ? (fact.totals?.totalTokens ?? 0) : 0;
+    const target = this.targetFor(
+      `fact:${fact.id}`, fact.providerId,
+      fact.kind === "usage_event" ? fact.eventId : fact.id, tokens
+    );
     return target
       ? { fact: identifyFact(applyTargetToFact(fact, target)), localId: fact.id }
       : { fact, localId: fact.id };
   }
   /** Renames one daily record; a day keeps the target it landed on between saves. */
   private renameRecord(row: PendingRecord): PendingRecord {
-    const target = this.targetFor(`record:${row.record.recordId}`, row.record.providerId, row.record.recordId);
+    const tokens = row.record.kind === "usage_day" ? (row.record.totals?.totalTokens ?? 0) : 0;
+    const target = this.targetFor(`record:${row.record.recordId}`, row.record.providerId, row.record.recordId, tokens);
     return target ? { ...row, record: applyTargetToRecord(row.record, target) } : row;
   }
   /**
@@ -186,7 +194,7 @@ export class UsageSync {
    * rejects the same record under another. A target that the current plan no
    * longer offers falls back to a fresh spin.
    */
-  private targetFor(key: string, source: string, spinKey: string): ReportTarget | null {
+  private targetFor(key: string, source: string, spinKey: string, tokens = 0): ReportTarget | null {
     // An unmapped source is reported through the first saved mix. That is the
     // only way the hosted service can accept Freebuff, Cline or Roo records: it
     // validates the provider name against its own catalog.
@@ -204,8 +212,37 @@ export class UsageSync {
         return { reportAs, model: model || fallback, weight: 0 };
       }
     }
-    const target = spinTarget(plan, spinKey);
+    // Token-bearing usage is allocated by mass so the long-run split equals the
+    // chosen shares; scan and quota facts have no tokens and keep the hash wheel.
+    const target = tokens > 0 ? this.allocateTarget(plan, source, key, tokens) : spinTarget(plan, spinKey);
     if (target) this.store.setAttribution(key, `${target.reportAs}${ATTRIBUTION_SEPARATOR}${target.model}`);
+    return target;
+  }
+  /**
+   * Hands one unit of usage to the target furthest behind its declared token
+   * share, then records the mass in settings so the next save (or the next day)
+   * continues from the same balance. Observations and daily records keep
+   * separate ledgers: a day is not the same usage as its individual requests.
+   */
+  private allocateTarget(plan: ReportPlan, source: string, key: string, tokens: number): ReportTarget | null {
+    const bucket = key.slice(0, key.indexOf(":"));
+    const massKey = (target: ReportTarget) =>
+      `wheel:${this.store.owner}:${bucket}:${source}:${target.reportAs}:${target.model}`;
+    const assigned = (target: ReportTarget): number => {
+      const id = massKey(target);
+      const cached = this.wheelMass.get(id);
+      if (cached !== undefined) return cached;
+      const value = Number(this.store.setting(id) ?? 0);
+      const mass = Number.isFinite(value) && value > 0 ? value : 0;
+      this.wheelMass.set(id, mass);
+      return mass;
+    };
+    const target = tokenTarget(plan, assigned, tokens);
+    if (target) {
+      const mass = assigned(target) + tokens;
+      this.wheelMass.set(massKey(target), mass);
+      this.store.setSetting(massKey(target), String(mass));
+    }
     return target;
   }
   setAutomatic(enabled: boolean): void {
@@ -254,6 +291,10 @@ export class UsageSync {
           if (this.closed || this.stopping) return;
         }
         this.store.claimLocal();
+        this.maybeReassertRecentDays();
+        // An empty day is not usage. Uploading it made the server list a saved
+        // day with no data, which the public profile reports as incomplete.
+        this.store.skipEmptyDays();
         // Pruning only shrinks the upload. A stopped history writer must not keep pending facts from saving.
         await this.store.statistics.dropRepricedCopies(() => this.closed || this.stopping).catch(() => undefined);
         if (this.closed || this.stopping) return;
@@ -328,10 +369,22 @@ export class UsageSync {
           const next = this.store.pending(providers);
           // A row the server keeps answering about must change something — its own
           // version, its revision, or the provider it is reported as — or the save
-          // would spin forever. Adopting the server's label and revision counts.
-          if (next.some((row) => sent.get(row.record.recordId) === this.stateOf(row)))
-            throw new Error("Cloud save made no progress. Restore from cloud, then try again.");
-          pending = next;
+          // would spin forever. Parking the server's copy as a conflict keeps the
+          // row out of `pending` and lets every other record finish; failing the
+          // whole save here is what users saw as `Cloud save made no progress`
+          // even though their usage was already on the server.
+          const stalled = next.filter((row) =>
+            sent.has(row.record.recordId) && sent.get(row.record.recordId) === this.stateOf(row));
+          if (stalled.length) {
+            for (const row of stalled) {
+              const answer = results.find((result) => result.record.recordId === row.record.recordId);
+              if (answer) this.store.hold(row.record.recordId, answer);
+            }
+            const stuck = this.store.pending(providers)
+              .filter((row) => sent.get(row.record.recordId) === this.stateOf(row));
+            if (stuck.length) break;
+          }
+          pending = this.store.pending(providers);
           const remaining = this.store.counts();
           this.progress.total = this.progress.completed + remaining.pending - remaining.conflicts - remaining.invalid;
         }
@@ -353,6 +406,17 @@ export class UsageSync {
         this.schedule();
       });
     return this.running;
+  }
+  /**
+   * Once a day, rewrites the copy of the last closed days so a record first
+   * uploaded while still open is replaced by its complete version.
+   */
+  private maybeReassertRecentDays(): void {
+    const today = new Date().toISOString().slice(0, 10);
+    const key = `cloud:reassert:${this.store.owner}:${today}`;
+    if (this.store.setting(key) === "1") return;
+    this.store.reassertRecentDays(today);
+    this.store.setSetting(key, "1");
   }
   /** What one pending row looks like to the server, for progress checks. */
   private stateOf(row: PendingRecord): string {
