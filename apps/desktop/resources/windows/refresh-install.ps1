@@ -56,7 +56,22 @@ if (Test-Path -LiteralPath $icon) {
   try { Copy-Item -LiteralPath $icon -Destination $stableIcon -Force } catch { }
 }
 
+# A development launch drops an `Electron.lnk` in the Start Menu pointing at the
+# raw Electron binary. Nothing ever removes it, and its atom artwork is part of
+# what the shell resolved for this app before the brand mark existed.
+foreach ($stray in @("$env:APPDATA\Microsoft\Windows\Start Menu\Programs\Electron.lnk")) {
+  if (Test-Path -LiteralPath $stray) { Remove-Item -LiteralPath $stray -Force }
+}
+
 # Explorer caches icons per AppUserModelID. `-show` rewrites the cache files and
 # asks the shell to re-read them; without it an update can keep the previous
 # build's artwork for a while even though the file on disk is correct.
 try { ie4uinit.exe -show } catch { }
+
+# Installers send SHCNE_ASSOCCHANGED once they have written new artwork. It is
+# what makes the shell drop the icon it resolved for an app identity earlier in
+# the session, which `ie4uinit -show` alone does not always do.
+try {
+  Add-Type -Namespace Shell32 -Name Native -MemberDefinition '[DllImport("shell32.dll")] public static extern void SHChangeNotify(int eventId, uint flags, System.IntPtr item1, System.IntPtr item2);' -ErrorAction Stop
+  [Shell32.Native]::SHChangeNotify(0x08000000, 0x1000, [System.IntPtr]::Zero, [System.IntPtr]::Zero)
+} catch { }
