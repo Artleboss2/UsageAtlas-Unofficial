@@ -194,7 +194,7 @@ is released the same way. Between hiding and release the renderer stops painting
 second and parks every CSS animation. A hidden app now checks usage every **15 minutes** instead of
 three, and **30 minutes** on battery; a visible window keeps the cadence the dashboard advertises.
 
-**Settings → Providers is the catalog, finally usable.** All **285** tools the app knows are
+**Settings → Providers is the catalog, finally usable.** All **305** tools the app knows are
 searchable in one place, with **20** that have a real reader today, the folders found on this
 computer, and real brand marks for the ones that ship one. Filters cover trackable, on, and installed
 providers, and the list is ordered so what is already here comes first. Nothing is turned on by a
