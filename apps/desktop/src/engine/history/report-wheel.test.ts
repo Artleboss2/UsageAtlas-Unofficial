@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { ReportPlan } from "../../shared/report-plans";
 import { spinTarget } from "./report-wheel";
-import { previewPlan } from "../../shared/report-wheel";
+import { previewPlan, tokenTarget } from "../../shared/report-wheel";
 
 const wheel: ReportPlan = {
   source: "freebuff" as ReportPlan["source"],
@@ -55,12 +55,34 @@ describe("report wheel", () => {
     expect(here).not.toEqual(there);
   });
 
-  it("previews the shares a save will produce within two points", () => {
-    const preview = previewPlan(wheel, 1_000);
-    expect(preview.targets.reduce((sum, target) => sum + target.requests, 0)).toBe(1_000);
-    expect(preview.driftPoints).toBeLessThanOrEqual(2);
-    // The preview is the upload: the first sampled request takes the same label.
-    expect(previewPlan(wheel, 1).targets.find(target => target.requests === 1)).toBeDefined();
+  it("previews the exact token split", () => {
+    const preview = previewPlan(wheel);
+
+    expect(preview.targets.map((target) => Math.round(target.declared * 100))).toEqual([30, 20, 50]);
+    expect(preview.totalWeight).toBe(100);
+  });
+
+  it("splits token mass, not request count", () => {
+    const assigned = new Map<string, number>();
+    const pick = (tokens: number) => {
+      const target = tokenTarget(wheel, (entry) => assigned.get(entry.reportAs) ?? 0, tokens)!;
+      assigned.set(target.reportAs, (assigned.get(target.reportAs) ?? 0) + tokens);
+      return target.reportAs;
+    };
+    // Requests of very different sizes: a per-request wheel would keep counting
+    // them evenly, while mass allocation sends each one where the deficit is.
+    const sizes = [1, 2, 3, 5, 8, 13, 21, 34, 55, 89, 144, 233].map((size) => size * 1_000_000);
+    for (let round = 0; round < 8; round += 1) {
+      for (const size of sizes) pick(size);
+    }
+
+    const total = [...assigned.values()].reduce((sum, tokens) => sum + tokens, 0);
+    for (const [provider, share] of [
+      ["codex", 0.3], ["claude", 0.2], ["cursor", 0.5]
+    ] as const) {
+      const actual = (assigned.get(provider) ?? 0) / total;
+      expect(Math.abs(actual - share), provider).toBeLessThanOrEqual(0.03);
+    }
   });
 
   it("reports nothing without a plan or with no weight", () => {
