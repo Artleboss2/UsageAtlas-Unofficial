@@ -5,6 +5,7 @@ import { UsageStore } from "./usage-store";
 import { identifyFact } from "./statistics-store";
 import type { UsageEventFact } from "@usageatlas/contracts/statistics";
 import { validateUsageRecord, type UsageDay } from "@usageatlas/contracts/usage";
+import { deflateRawSync } from "node:zlib";
 import fixtures from "@usageatlas/contracts/fixtures/usage-record-v1.json";
 
 const opened: { close(): Promise<void> }[] = [];
@@ -77,7 +78,7 @@ describe("compact local ledger", () => {
     expect(rows).toEqual([{ occurred_at: "2026-09-23T11:00:00Z" }]);
   });
 
-  it("compresses a day's display detail and returns it unchanged", () => {
+  it("stores a day's display detail as plain JSON, the format the user asked to keep", () => {
     const db = database();
     const store = new UsageStore(db);
     const details = JSON.stringify({
@@ -103,10 +104,23 @@ describe("compact local ledger", () => {
     const stored = store.put(day, details);
 
     const raw = String(db.get("SELECT details FROM usage_record WHERE id = ?", [day.recordId])?.details);
-    expect(raw.startsWith("z1:")).toBe(true);
-    expect(raw.length).toBeLessThan(details.length / 3);
+    expect(raw).toBe(details);
+    expect(raw.startsWith("z1:")).toBe(false);
     expect(store.get(day.recordId)?.details).toBe(details);
     expect(stored.details).toBe(details);
+  });
+
+  it("expands a detail compressed by 0.4.1 on the next launch", () => {
+    const db = database();
+    const store = new UsageStore(db);
+    const record = validateUsageRecord(structuredClone(fixtures[0])) as UsageDay;
+    store.put(record, JSON.stringify({ totals: record.totals }));
+    const details = JSON.stringify({ models: Array.from({ length: 80 }, (_, index) => ({ id: `model-${index}`, totalTokens: index })) });
+    const compressed = `z1:${deflateRawSync(details, { level: 9 }).toString("base64")}`;
+    db.run("UPDATE usage_record SET details = ? WHERE id = ?", [compressed, record.recordId]);
+
+    new UsageStore(db);
+    expect(String(db.get("SELECT details FROM usage_record WHERE id = ?", [record.recordId])?.details)).toBe(details);
   });
 
   it("reprices stored days and their details to a blended rate", () => {

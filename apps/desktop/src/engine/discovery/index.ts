@@ -10,3 +10,4 @@ export {
   type DiscoveryResult
 } from "./route";
 export { CATALOG, catalogLead, type CatalogEntry } from "./catalog";
+export { scanInstalledTools, type InstalledTool } from "./installed";

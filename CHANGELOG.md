@@ -3,6 +3,38 @@
 All notable UsageAtlas desktop changes are recorded here. This build starts from the open-source
 UsageAtlas app; see [README.md](README.md) for what it adds and what it is not.
 
+## 0.4.5 — 2026-10-29
+
+### Fixed
+
+- **The mini window stopped showing the page behind it.** The card was painted at 78 % opacity over a
+  28 px backdrop blur, so whatever sat under the window — Settings, another app, the desktop — read
+  through the glass as ghost rows. It is a near-opaque surface now, and only the 8 px inset around it
+  is transparent, so the corners stay round without a square edge.
+- **The mini window can actually be resized.** Windows gives a transparent frameless window no resize
+  border, which is why dragging its edge did nothing. The card draws eight handles and the main
+  process follows the real cursor: 180 × 104 up to 640 × 400, always inside the display, remembered
+  between launches.
+- **The cloud copy is the day itself.** A record whose model names are already public is uploaded
+  unchanged — same totals, same hours, same model rows. Only a private model name (`m-…`) is reported
+  under the plan's public model, because the server validates every model key against its catalog.
+- **A source without its own rule is uploaded through the first saved mix** instead of staying on the
+  computer, so Freebuff, Cline or Roo history reaches the cloud as soon as one plan exists.
+- **Day details are plain JSON again.** 0.4.1 deflated them to save space; the next launch rewrites
+  every deflated row back to readable JSON, which is the shape the old database and outside readers
+  expect, and no new row is compressed.
+- **One stable icon path.** `app.ico` beside the `app-<version>` folders is refreshed on every launch
+  and by `refresh-install.ps1`. A shortcut can no longer point into a build folder that an update is
+  about to delete, and Explorer is asked to drop its icon cache after every install.
+
+### Added
+
+- **Installed tools, found without reading a file.** Settings → Find a provider scans each data folder
+  once, lists the catalog tools that actually have one, and probes the one you pick in a single click.
+  First slice of the 0.5.0 discovery goal.
+- **A hidden window does no work.** The mini window stops its 30 s snapshot poll and the renderer parks
+  every animation while the window is hidden or minimized. First slice of the 0.5.0 idle goal.
+
 ## 0.4.4 — 2026-10-29
 
 ### Added

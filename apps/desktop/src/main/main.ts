@@ -1,11 +1,11 @@
 import { CloudAccount, type KnownProfileStatus } from "./cloud-account";
-import { CATALOG, discoverProviderUsage } from "../engine/discovery";
+import { CATALOG, discoverProviderUsage, scanInstalledTools } from "../engine/discovery";
 import { summarizeDiscovery } from "./provider-discovery";
 import { ProviderCredentialStore, configureProviderCredentials } from "./provider-credentials";
 import { isQuotaProvider, validateProviderCredential } from "../shared/quota-providers";
 import { validateReportPlans } from "../shared/report-plans";
 import type { DashboardSnapshot } from "@usageatlas/contracts";
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { createCipheriv, createDecipheriv, randomBytes } from "node:crypto";
 import {
   app,
@@ -35,7 +35,7 @@ import { tmpdir } from "node:os";
 import { pathToFileURL } from "node:url";
 import { isLimitKey } from "../shared/capacity-model";
 import { DashboardSession } from "./dashboard-session";
-import type { AppMark, AppRoute, DesktopPreferences } from "../shared/desktop-api";
+import type { AppMark, AppRoute, DesktopPreferences, WidgetResizeEdge } from "../shared/desktop-api";
 import {
   IPC,
   isAccentTint,
@@ -47,6 +47,7 @@ import {
   isNumberStyle,
   isUpdateChannel,
   isUpdateRepository,
+  isWidgetResizeEdge,
   sanitizeTokenAlerts
 } from "../shared/desktop-api";
 import { isLanguage } from "../shared/languages";
@@ -57,6 +58,7 @@ import { PreferenceStore } from "./preferences";
 import { PublicLeaderboard } from "./public-leaderboard";
 import { DesktopTelemetry } from "./telemetry";
 import { trayLimitLabels } from "./tray-limits";
+import { resizeWidgetBounds } from "./widget-bounds";
 import { configureAutoUpdates, type DesktopUpdater } from "./updates";
 import { compareVersions, newerInstalledVersion, resolveUpdateSource } from "./update-feed";
 import {
@@ -107,6 +109,7 @@ if (process.platform === "win32") app.setAppUserModelId(appUserModelId);
 let mainWindow: BrowserWindow | null = null;
 let widgetWindow: BrowserWindow | null = null;
 let widgetMoveTimer: NodeJS.Timeout | null = null;
+let widgetResize: { edge: WidgetResizeEdge; origin: Electron.Point; bounds: Electron.Rectangle; timer: NodeJS.Timeout } | null = null;
 let widgetSnapping = false;
 let registeredHotkey: string | null = null;
 let tray: Tray | null = null;
@@ -164,6 +167,33 @@ const appMarkFiles: Record<AppMark, { png: string; ico: string }> = {
  */
 function appMarkPath(mark: AppMark, format: "png" | "ico" = "png"): string {
   return path.join(runtimeIconDirectory, appMarkFiles[mark][format]);
+}
+
+/**
+ * The file Explorer reads for the taskbar button, the toast identity and every
+ * shortcut. It lives beside the `app-<version>` folders, not inside one: an
+ * update deletes the previous build, which used to leave shortcuts pointing at a
+ * missing ICO, and the shell then drew the stock Electron atom until the app had
+ * started once. `refresh-install.ps1` refreshes this copy after an update too, so
+ * even the Squirrel stub's shortcut is right before the new build launches.
+ */
+function stableAppMarkPath(): string {
+  return app.isPackaged
+    ? path.resolve(process.execPath, "..", "..", "app.ico")
+    : path.join(app.getPath("userData"), "app.ico");
+}
+
+/** Copies the chosen mark to that stable path and returns it. */
+function installAppMark(mark: AppMark): string {
+  const target = stableAppMarkPath();
+  try {
+    mkdirSync(path.dirname(target), { recursive: true });
+    copyFileSync(appMarkPath(mark, "ico"), target);
+    return target;
+  } catch {
+    // A locked file still leaves the packaged copy usable.
+    return appMarkPath(mark, "ico");
+  }
 }
 
 function loadAppMark(mark: AppMark, format: "png" | "ico" = "png"): Electron.NativeImage {
@@ -227,6 +257,7 @@ function applyShortcutMark(mark: AppMark): void {
   const shortcuts = app.isPackaged ? applicationShortcutPaths() : [devShortcutPath()];
   const stub = path.resolve(process.execPath, "..", "..", "UsageAtlas.exe");
   const target = app.isPackaged && existsSync(stub) ? stub : process.execPath;
+  const icon = installAppMark(mark);
   for (const shortcut of shortcuts) {
     try {
       shell.writeShortcutLink(shortcut, existsSync(shortcut) ? "update" : "create", {
@@ -234,7 +265,7 @@ function applyShortcutMark(mark: AppMark): void {
         cwd: path.dirname(process.execPath),
         // A development shortcut must relaunch the same app, not an empty Electron.
         args: app.isPackaged ? undefined : app.getAppPath(),
-        icon: appMarkPath(mark, "ico"),
+        icon,
         iconIndex: 0,
         appUserModelId: app.isPackaged ? APP_USER_MODEL_ID : APP_DEV_USER_MODEL_ID,
         description: "UsageAtlas"
@@ -262,7 +293,7 @@ function applyAppMark(mark: AppMark): void {
         // only setIcon; this is what makes the picker visible in the taskbar.
         mainWindow.setAppDetails({
           appId: appUserModelId,
-          appIconPath: appMarkPath(mark, "ico"),
+          appIconPath: installAppMark(mark),
           appIconIndex: 0,
           // Relaunching this exact build keeps the icon and the version in step;
           // the Squirrel stub only forwards to it and can carry stale artwork.
@@ -344,7 +375,7 @@ function createWindow(route: AppRoute = "day", showOnReady = true): BrowserWindo
       try {
         window.setAppDetails({
           appId: appUserModelId,
-          appIconPath: appMarkPath(preferences.get().appearance.mark, "ico"),
+          appIconPath: installAppMark(preferences.get().appearance.mark),
           appIconIndex: 0,
           relaunchCommand: `"${process.execPath}"`,
           relaunchDisplayName: "UsageAtlas"
@@ -462,10 +493,12 @@ function createWidgetWindow(showOnReady = false, focus = true): BrowserWindow {
     else window.showInactive();
   });
   window.on("close", (event) => {
+    endWidgetResize();
     if (isQuitting) return;
     event.preventDefault();
     window.hide();
   });
+  window.on("closed", () => endWidgetResize());
   window.on("moved", scheduleWidgetBoundsSave);
   window.on("resized", scheduleWidgetBoundsSave);
   window.on("show", () => updateTrayMenu());
@@ -511,6 +544,7 @@ function showWidget(focus = true): void {
 }
 
 function hideWidget(): void {
+  endWidgetResize();
   if (widgetWindow && !widgetWindow.isDestroyed()) widgetWindow.hide();
 }
 
@@ -526,6 +560,42 @@ function expandWidget(): void {
     mainWindow.show();
     mainWindow.focus();
   }
+}
+
+/**
+ * Windows gives a transparent frameless window no resize border, so the card's
+ * own handles drive this loop from the real cursor position. Polling the OS
+ * cursor keeps the drag alive when it leaves the window.
+ */
+function beginWidgetResize(edge: WidgetResizeEdge): void {
+  if (!widgetWindow || widgetWindow.isDestroyed()) return;
+  endWidgetResize();
+  const origin = screen.getCursorScreenPoint();
+  const bounds = widgetWindow.getBounds();
+  const timer = setInterval(() => {
+    if (!widgetWindow || widgetWindow.isDestroyed() || !widgetResize) {
+      endWidgetResize();
+      return;
+    }
+    const point = screen.getCursorScreenPoint();
+    const display = screen.getDisplayNearestPoint(point);
+    const next = resizeWidgetBounds(
+      widgetResize.bounds,
+      widgetResize.edge,
+      point.x - widgetResize.origin.x,
+      point.y - widgetResize.origin.y,
+      display.workArea
+    );
+    widgetWindow.setBounds(next);
+  }, 16);
+  widgetResize = { edge, origin, bounds, timer };
+}
+
+function endWidgetResize(): void {
+  if (!widgetResize) return;
+  clearInterval(widgetResize.timer);
+  widgetResize = null;
+  if (widgetWindow && !widgetWindow.isDestroyed()) persistWidgetBounds();
 }
 
 /**
@@ -1120,6 +1190,11 @@ function registerIPC(): void {
     assertTrustedSender(event);
     return CATALOG.map((entry) => entry.name);
   });
+  ipcMain.handle(IPC.scanInstalledProviders, async (event) => {
+    assertTrustedSender(event);
+    // Folders only: no file contents, no network. A hit still has to be probed.
+    return (await scanInstalledTools()).map(({ name, folder, kind }) => ({ name, folder, kind }));
+  });
   ipcMain.handle(IPC.setReportPlans, async (event, value: unknown) => {
     assertTrustedSender(event);
     const next = preferences.update({ reportPlans: validateReportPlans(value) });
@@ -1220,6 +1295,15 @@ function registerIPC(): void {
   ipcMain.handle(IPC.expandWidget, (event) => {
     assertTrustedSender(event);
     expandWidget();
+  });
+  ipcMain.handle(IPC.beginWidgetResize, (event, edge: WidgetResizeEdge) => {
+    assertTrustedSender(event);
+    if (!isWidgetResizeEdge(edge)) return;
+    beginWidgetResize(edge);
+  });
+  ipcMain.handle(IPC.endWidgetResize, (event) => {
+    assertTrustedSender(event);
+    endWidgetResize();
   });
   ipcMain.handle(IPC.restartApp, (event) => {
     assertTrustedSender(event);

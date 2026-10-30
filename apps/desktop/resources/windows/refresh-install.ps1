@@ -46,9 +46,17 @@ foreach ($build in $builds) {
   Remove-Item -LiteralPath $build.FullName -Recurse -Force
 }
 
-# The taskbar button reads the ICO from disk; Explorer caches it per
-# AppUserModelID, so ask the shell to re-read icons after the swap. The
-# shortcuts themselves are rewritten by the main process, which can preserve
-# their AppUserModelID (WScript.Shell would drop it).
+# Every shortcut and the taskbar button read one stable ICO beside the build
+# folders. Refresh it from the build that is about to start, so the shell shows
+# the new artwork even before the app rewrites its shortcuts, and a shortcut can
+# never point into an `app-<version>` folder this script is about to delete.
 $icon = Join-Path $newest.FullName "resources\icons\usageatlas.ico"
-if (Test-Path -LiteralPath $icon) { ie4uinit.exe -show }
+$stableIcon = Join-Path $InstallRoot "app.ico"
+if (Test-Path -LiteralPath $icon) {
+  try { Copy-Item -LiteralPath $icon -Destination $stableIcon -Force } catch { }
+}
+
+# Explorer caches icons per AppUserModelID. `-show` rewrites the cache files and
+# asks the shell to re-read them; without it an update can keep the previous
+# build's artwork for a while even though the file on disk is correct.
+try { ie4uinit.exe -show } catch { }

@@ -148,6 +148,12 @@ export function isAppMark(value: unknown): value is AppMark {
   return typeof value === "string" && appMarkSet.has(value);
 }
 
+const WIDGET_RESIZE_EDGES = new Set<string>(["n", "s", "e", "w", "ne", "nw", "se", "sw"]);
+
+export function isWidgetResizeEdge(value: unknown): value is WidgetResizeEdge {
+  return typeof value === "string" && WIDGET_RESIZE_EDGES.has(value);
+}
+
 export function isNumberStyle(value: unknown): value is NumberStyle {
   return typeof value === "string" && numberStyleSet.has(value);
 }
@@ -661,6 +667,8 @@ export interface UsageAtlasDesktopAPI {
   discoverProvider(name: string): Promise<ProviderDiscovery>;
   /** Seed names offered by the discovery field. */
   listDiscoverableProviders(): Promise<string[]>;
+  /** Catalog names whose folders exist on this computer. Reads no file contents. */
+  scanInstalledProviders(): Promise<InstalledProvider[]>;
   setProviderEnabled(providerID: string, enabled: boolean): Promise<DashboardState>;
   setReportPlans(plans: ReportPlan[]): Promise<DesktopPreferences>;
   getPreferences(): Promise<DesktopPreferences>;
@@ -670,6 +678,13 @@ export interface UsageAtlasDesktopAPI {
   hideWidget(): Promise<void>;
   toggleWidget(): Promise<void>;
   expandWidget(): Promise<void>;
+  /**
+   * Starts a pointer-driven resize of the mini window. The window is transparent,
+   * and Windows does not give one a native resize border, so the card draws its
+   * own handles and the main process follows the cursor until `endWidgetResize`.
+   */
+  beginWidgetResize(edge: WidgetResizeEdge): Promise<void>;
+  endWidgetResize(): Promise<void>;
   /** Writes every setting to a JSON file, optionally encrypted. */
   exportSettings(): Promise<boolean>;
   importSettings(): Promise<DesktopPreferences | null>;
@@ -685,6 +700,16 @@ export interface UsageAtlasDesktopAPI {
   onNavigate(listener: (route: AppRoute) => void): () => void;
   onSnapshot(listener: (state: DashboardState) => void): () => void;
 }
+
+/** A catalog entry whose folder was found on this computer. */
+export interface InstalledProvider {
+  name: string;
+  folder: string;
+  kind?: string;
+}
+
+/** Which side of the mini window a drag grabs. */
+export type WidgetResizeEdge = "n" | "s" | "e" | "w" | "ne" | "nw" | "se" | "sw";
 
 export const IPC = {
   getAppMarks: "app:marks",
@@ -712,6 +737,7 @@ export const IPC = {
   setProviderEnabled: "dashboard:set-provider-enabled",
   discoverProvider: "providers:discover",
   discoverableProviders: "providers:catalog",
+  scanInstalledProviders: "providers:scan-installed",
   setReportPlans: "settings:set-report-plans",
   getPreferences: "preferences:get",
   updatePreferences: "preferences:update",
@@ -719,6 +745,8 @@ export const IPC = {
   hideWidget: "widget:hide",
   toggleWidget: "widget:toggle",
   expandWidget: "widget:expand",
+  beginWidgetResize: "widget:resize-start",
+  endWidgetResize: "widget:resize-end",
   exportSettings: "settings:export",
   importSettings: "settings:import",
   chooseFolder: "settings:choose-folder",

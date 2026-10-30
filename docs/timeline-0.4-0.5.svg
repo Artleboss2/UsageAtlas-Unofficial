@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1240" height="980" viewBox="0 0 1240 980" role="img" aria-labelledby="title desc">
-  <title id="title">UsageAtlas timeline: 0.4.0 through 0.4.4 shipped, 0.5.0 is the next major contract</title>
-  <desc id="desc">0.4.0 shipped real provider labels, a ledger at 18.6 percent of its previous size and a 63-provider discovery seed catalog. 0.4.1 added twenty-eight settings controls and restored attribution. 0.4.2 made updates hand over to the newest build and repaired the widget and provider-colour settings. 0.4.3 introduced a blended 0.54 dollar per million token estimate and active tool capacity. 0.4.4 rebuilt the mini window around one token count, wired discovery into Settings, and keeps the previous build for rollback with a restart badge. 0.5.0 has seven major outcomes; discovery and the trusted build now have their first slice in 0.4.4.</desc>
+  <title id="title">UsageAtlas timeline: 0.4.0 through 0.4.5 shipped, 0.5.0 is the next major contract</title>
+  <desc id="desc">0.4.0 shipped real provider labels, a ledger at 18.6 percent of its previous size and a 63-provider discovery seed catalog. 0.4.1 added twenty-eight settings controls and restored attribution. 0.4.2 made updates hand over to the newest build and repaired the widget and provider-colour settings. 0.4.3 introduced a blended 0.54 dollar per million token estimate and active tool capacity. 0.4.4 rebuilt the mini window around one token count and wired discovery into Settings; 0.4.5 closes its two window bugs and the cloud, JSON and icon problems, and adds installed-tool discovery plus an idle window that does no work. 0.5.0 has seven major outcomes; discovery, the trusted build and the invisible-load goal now have a first slice.</desc>
   <defs>
     <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
       <stop offset="0" stop-color="#0b0b0d"/>
@@ -20,10 +20,10 @@
   <circle cx="120" cy="930" r="220" fill="#30d158" opacity="0.04"/>
 
   <text x="64" y="58" font-family="Inter, 'Segoe UI', sans-serif" font-size="11" font-weight="700" fill="#30d158" letter-spacing="1.8">USAGEATLAS · RELEASE TIMELINE</text>
-  <text x="64" y="92" font-family="Inter, 'Segoe UI', sans-serif" font-size="25" font-weight="650" fill="#f5f5f7">0.4.0 → 0.4.4 shipped. 0.5.0 is the next major contract.</text>
-  <text x="64" y="116" font-family="Inter, 'Segoe UI', sans-serif" font-size="12" fill="#a1a1a6">Each 0.5.0 card names the number it has to hit before it counts as shipped. Two cards now have a first slice.</text>
+  <text x="64" y="92" font-family="Inter, 'Segoe UI', sans-serif" font-size="25" font-weight="650" fill="#f5f5f7">0.4.0 → 0.4.5 shipped. 0.5.0 is the next major contract.</text>
+  <text x="64" y="116" font-family="Inter, 'Segoe UI', sans-serif" font-size="12" fill="#a1a1a6">Each 0.5.0 card names the number it has to hit before it counts as shipped. Three cards now have a first slice.</text>
 
-  <text x="64" y="164" font-family="Inter, 'Segoe UI', sans-serif" font-size="11" font-weight="700" fill="#30d158" letter-spacing="1.6">SHIPPED · 0.4.0 → 0.4.4</text>
+  <text x="64" y="164" font-family="Inter, 'Segoe UI', sans-serif" font-size="11" font-weight="700" fill="#30d158" letter-spacing="1.6">SHIPPED · 0.4.0 → 0.4.5</text>
   <rect x="64" y="184" width="1112" height="2" rx="1" fill="#30d158" opacity="0.35"/>
 
   <g font-family="Inter, 'Segoe UI', sans-serif">
@@ -79,10 +79,10 @@
     <text x="980" y="258" font-size="13" font-weight="650" fill="#f5f5f7">Small window, real search</text>
     <g font-size="10" fill="#a1a1a6">
       <text x="980" y="284">Token-only mini window.</text>
-      <text x="980" y="304">Reflows to 12.4M when small.</text>
-      <text x="980" y="324">Rounded glass, no square edge.</text>
-      <text x="980" y="344">Discovery in Settings.</text>
-      <text x="980" y="364">Restart badge, rollback kept.</text>
+      <text x="980" y="304">Discovery in Settings.</text>
+      <text x="980" y="324" fill="#f5f5f7" font-weight="650">Closed in 0.4.5:</text>
+      <text x="980" y="344">opaque card + 8 resize handles,</text>
+      <text x="980" y="360">cloud day, plain JSON, one icon.</text>
     </g>
   </g>
 
@@ -159,7 +159,11 @@
     <g>
       <rect x="200" y="506" width="106" height="18" rx="9" fill="#30d158" fill-opacity="0.16"/>
       <text x="209" y="519" font-size="8.5" font-weight="700" fill="#30d158" letter-spacing="0.6">IN PROGRESS</text>
-      <text x="82" y="638" font-size="9.5" fill="#30d158">First slice in 0.4.4: the in-app scan.</text>
+      <text x="82" y="638" font-size="9.5" fill="#30d158">0.4.4 the in-app scan · 0.4.5 installed tools.</text>
+
+      <rect x="932" y="616" width="106" height="18" rx="9" fill="#30d158" fill-opacity="0.16"/>
+      <text x="941" y="629" font-size="8.5" font-weight="700" fill="#30d158" letter-spacing="0.6">IN PROGRESS</text>
+      <text x="934" y="650" font-size="9.5" fill="#30d158">0.4.5: a hidden window stops polling.</text>
 
       <rect x="302" y="712" width="106" height="18" rx="9" fill="#30d158" fill-opacity="0.16"/>
       <text x="311" y="725" font-size="8.5" font-weight="700" fill="#30d158" letter-spacing="0.6">IN PROGRESS</text>

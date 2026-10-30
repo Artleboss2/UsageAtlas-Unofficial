@@ -173,7 +173,7 @@ html[data-appearance-font="geist"] {
   }
 
   html {
-    background: var(--background);
+    background: transparent;
     font-family: var(--font-sans);
     /* Settings → Appearance scales every rem-based size from here. */
     font-size: calc(16px * var(--atlas-font-scale, 1));
@@ -189,13 +189,38 @@ html[data-appearance-font="geist"] {
     min-height: 100vh;
     margin: 0;
     overflow: hidden;
+    background: transparent;
+    color: var(--foreground);
+    user-select: none;
+  }
+
+  /* The window itself is transparent so the mini window can paint a rounded
+     card on a see-through surface. The main window gets its wallpaper from a
+     layer behind the app instead of the body, which keeps the first paint of
+     the widget transparent on Windows. */
+  body::before {
+    position: fixed;
+    z-index: -1;
+    inset: 0;
+    content: "";
     background-color: var(--background);
     background-image: var(--atlas-wallpaper-overlay), var(--atlas-wallpaper-image, url("./assets/wallpaper-mist.jpg"));
     background-position: center;
     background-size: cover;
     background-attachment: fixed;
-    color: var(--foreground);
-    user-select: none;
+    pointer-events: none;
+  }
+
+  html[data-surface="widget"] body::before {
+    display: none;
+  }
+
+  /* A hidden or minimized window should cost the timer floor, not a repaint per
+     frame. The renderer parks the document as soon as it is not visible. */
+  html[data-window-hidden="true"] *,
+  html[data-window-hidden="true"] *::before,
+  html[data-window-hidden="true"] *::after {
+    animation-play-state: paused !important;
   }
 
   body[data-wallpaper="valley"] {
@@ -4072,50 +4097,95 @@ html[data-surface="widget"] body {
   font-size: calc(13px * var(--atlas-font-scale, 1));
 }
 
-/* The native window is transparent. The inset keeps the card's rounded edge and
-   its shadow away from the window rectangle, so no square corner can show. */
+/* The native window is transparent. The inset keeps the card's rounded edge
+   away from the window rectangle, so no square corner can show. */
 html[data-surface="widget"] #root {
   height: 100vh;
-  padding: 6px;
+  padding: 8px;
   background: transparent;
   overflow: hidden;
 }
 
+/* The card used to sit at 78 % opacity over a 28 px backdrop blur, so the window
+   behind it — Settings, the desktop, another app — showed through the glass as
+   ghost rows. It is a floating surface, not a lens: near-opaque, no blur, and
+   only the inset highlights keep the depth. */
 .atlas-widget {
+  position: relative;
   display: flex;
   height: 100%;
   flex-direction: column;
   gap: 8px;
   padding: 10px 12px 12px;
-  border-radius: 22px;
+  border-radius: 20px;
   background:
-    linear-gradient(150deg, rgba(255, 255, 255, 0.34), rgba(255, 255, 255, 0.06) 45%, transparent 75%),
-    color-mix(in oklab, var(--background) 78%, transparent);
+    linear-gradient(150deg, rgba(255, 255, 255, 0.5), rgba(255, 255, 255, 0.08) 46%, transparent 78%),
+    color-mix(in oklab, var(--background) 97%, transparent);
   box-shadow:
-    inset 0 0 0 0.5px rgba(255, 255, 255, 0.5),
-    inset 0 1px 0 rgba(255, 255, 255, 0.55),
-    0 14px 34px -16px rgba(0, 0, 0, 0.45);
-  -webkit-backdrop-filter: blur(28px) saturate(170%);
-  backdrop-filter: blur(28px) saturate(170%);
+    inset 0 0 0 0.5px rgba(255, 255, 255, 0.55),
+    inset 0 1px 0 rgba(255, 255, 255, 0.6);
   color: var(--foreground);
 }
 
 @media (prefers-color-scheme: dark) {
   .atlas-widget {
     background:
-      linear-gradient(150deg, rgba(255, 255, 255, 0.14), rgba(255, 255, 255, 0.03) 45%, transparent 75%),
-      color-mix(in oklab, #1b1b1d 78%, transparent);
+      linear-gradient(150deg, rgba(255, 255, 255, 0.16), rgba(255, 255, 255, 0.04) 46%, transparent 78%),
+      color-mix(in oklab, #1b1b1d 97%, transparent);
     box-shadow:
-      inset 0 0 0 0.5px rgba(255, 255, 255, 0.16),
-      inset 0 1px 0 rgba(255, 255, 255, 0.2),
-      0 14px 34px -16px rgba(0, 0, 0, 0.7);
+      inset 0 0 0 0.5px rgba(255, 255, 255, 0.18),
+      inset 0 1px 0 rgba(255, 255, 255, 0.22);
   }
 }
+
+/* Windows does not give a transparent frameless window a resize border, so the
+   card carries its own eight handles. They are invisible until the pointer is
+   over an edge, and their cursors match the direction of the drag. */
+.atlas-widget__resize {
+  position: absolute;
+  z-index: 2;
+  -webkit-app-region: no-drag;
+}
+
+.atlas-widget__resize[data-edge="n"],
+.atlas-widget__resize[data-edge="s"] {
+  left: 18px;
+  right: 18px;
+  height: 7px;
+  cursor: ns-resize;
+}
+
+.atlas-widget__resize[data-edge="n"] { top: 0; }
+.atlas-widget__resize[data-edge="s"] { bottom: 0; }
+
+.atlas-widget__resize[data-edge="e"],
+.atlas-widget__resize[data-edge="w"] {
+  top: 18px;
+  bottom: 18px;
+  width: 7px;
+  cursor: ew-resize;
+}
+
+.atlas-widget__resize[data-edge="e"] { right: 0; }
+.atlas-widget__resize[data-edge="w"] { left: 0; }
+
+.atlas-widget__resize[data-edge="ne"],
+.atlas-widget__resize[data-edge="nw"],
+.atlas-widget__resize[data-edge="se"],
+.atlas-widget__resize[data-edge="sw"] {
+  width: 18px;
+  height: 18px;
+}
+
+.atlas-widget__resize[data-edge="ne"] { top: 0; right: 0; cursor: nesw-resize; }
+.atlas-widget__resize[data-edge="nw"] { top: 0; left: 0; cursor: nwse-resize; }
+.atlas-widget__resize[data-edge="se"] { bottom: 0; right: 0; cursor: nwse-resize; }
+.atlas-widget__resize[data-edge="sw"] { bottom: 0; left: 0; cursor: nesw-resize; }
 
 .atlas-widget[data-compact="true"] {
   gap: 4px;
   padding: 8px 10px 10px;
-  border-radius: 18px;
+  border-radius: 16px;
 }
 
 .atlas-widget__header {
@@ -4756,6 +4826,44 @@ html[data-appearance-density="compact"] .atlas-settings-tabs {
 
 .atlas-discovery__empty {
   margin: 10px 0 0;
+}
+
+/* What the folder scan found. A chip is the whole interaction: it fills the
+   field and probes, so a hit becomes a route in one click. */
+.atlas-discovery__installed {
+  margin: 0 4px 10px;
+  padding: 2px 0 0;
+}
+
+.atlas-discovery__chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 9px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.atlas-discovery__chip {
+  padding: 4px 11px;
+  border-radius: 999px;
+  background: color-mix(in oklab, var(--foreground) 7%, transparent);
+  color: var(--foreground);
+  font-size: 0.72rem;
+  font-weight: 550;
+  transition: background 160ms ease, transform 160ms ease;
+}
+
+.atlas-discovery__chip:hover {
+  background: color-mix(in oklab, var(--foreground) 12%, transparent);
+}
+
+.atlas-discovery__chip:active {
+  transform: scale(0.96);
+}
+
+.atlas-discovery__chip:disabled {
+  opacity: 0.5;
 }
 
 .atlas-discovery__files {

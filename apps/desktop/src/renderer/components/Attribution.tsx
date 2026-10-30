@@ -135,7 +135,8 @@ export function Attribution({ providers, preferences, saving, onSave }: Attribut
         <h1 className="atlas-page-title">Attribution</h1>
         <p className="mt-2 max-w-2xl text-sm text-muted">
           Choose how a source is reported to your account. Every source stays counted under its
-          real name on this computer; only the copy saved to the cloud is relabelled.
+          real name on this computer; only the copy saved to the cloud is relabelled. A source
+          without its own rule follows the first mix on this page, so its usage can still be saved.
         </p>
       </header>
 
@@ -150,7 +151,10 @@ export function Attribution({ providers, preferences, saving, onSave }: Attribut
         </Card.Header>
         <Card.Content className="mt-3 space-y-4">
           {draft.length === 0 ? (
-            <p className="text-sm text-muted">No rule yet. Every source is saved under its own name.</p>
+            <p className="text-sm text-muted">
+              No rule yet. Official sources save under their own name; a private source stays on this
+              computer until you add a mix here.
+            </p>
           ) : (
             draft.map((plan, planIndex) => (
               <div className="atlas-plan" key={`${plan.source}-${planIndex}`}>

@@ -28,7 +28,7 @@
 
 ## Timeline: 0.4.0 → 0.5.0
 
-![Timeline: 0.4.0 through 0.4.4 shipped, with two 0.5.0 goals in progress](docs/timeline-0.4-0.5.svg)
+![Timeline: 0.4.0 through 0.4.5 shipped, with four 0.5.0 goals in progress](docs/timeline-0.4-0.5.svg)
 
 Earlier 0.3.x cards are in the [previous timeline](docs/timeline.svg). A 0.5.0 goal only moves to
 *shipped* when its acceptance test passes in a build published from this repository.
@@ -146,6 +146,37 @@ request. The result names the route (found or remembered), a confidence score, t
 entries scanned, and each matching file with its store (`json · usage.total_tokens`) and fields
 (`input_tokens, output_tokens`). This is the first slice of the 0.5.0 “any tool, 30 s” goal; the
 300+ verified catalog and the 98 % detection figure remain open.
+
+### 0.4.5 — the four fixes, and two more 0.5.0 slices
+
+Four problems mattered more than any new screen. Two were introduced by 0.4.4, two go back further;
+all four are closed here.
+
+| Problem | Where it came from | Fixed in |
+| --- | --- | --- |
+| Saving said **error**, then the panel read **0 pending** | 0.4.4 held back every source the server does not model, so Freebuff, Cline and Roo history never left the computer | **0.4.5** |
+| Day details were **deflated**, unreadable to the old database | 0.4.1 compressed each day's JSON to save space | **0.4.5** |
+| The mini window showed the **page behind it** and would not resize | 0.4.4 shipped a 78 %-opaque card with no resize handles | **0.4.5** |
+| The taskbar fell back to **stock Electron artwork** after an update | 0.4.2 deleted old `app-*` folders while shortcuts still pointed inside them | **0.4.5** |
+
+**The mini window is a real surface.** It is near-opaque, so nothing behind it reads through the
+glass; the eight handles drive a native resize loop from the real cursor, between 180 × 104 and
+640 × 400, and the size is remembered. Windows never gives a transparent frameless window a resize
+border, which is why the edge used to do nothing.
+
+**The cloud receives the day it measured.** A record whose models are all public is uploaded
+unchanged — totals, hours and model rows included. Only a private name such as `m-094859` is reported
+under the plan's public model, because the server validates every key against its catalog. A source
+with no rule of its own now follows the first saved mix, and day details are plain JSON again.
+
+**The icon is installed by the update itself.** The chosen mark is copied to one stable `app.ico`
+beside the build folders on every launch, and `refresh-install.ps1` refreshes it plus the Explorer
+icon cache after an install, so a shortcut never points into a folder the update deletes.
+
+**Two 0.5.0 slices.** Settings → Find a provider now scans each data folder once and lists the tools
+that are actually installed, one click from a probe, without reading a single file — the “every AI
+tool” goal. A hidden window now does no work: the mini window stops polling and the renderer parks
+its animations until it is visible — the “invisible under real load” goal.
 
 **Updates tell the truth before a restart.** When Squirrel has unpacked a newer `app-<version>` while
 an older window kept running, the top-bar badge now says **Restart to finish update** instead of

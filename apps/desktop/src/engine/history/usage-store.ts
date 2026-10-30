@@ -1,4 +1,4 @@
-import { deflateRawSync, inflateRawSync } from "node:zlib";
+import { inflateRawSync } from "node:zlib";
 import { StatisticsStore } from "./statistics-store";
 import { readHistoryDayPayload } from "./payload";
 import { previewModelRecovery } from "./usage-payload";
@@ -71,13 +71,13 @@ export class UsageStore {
    */
   private compact(): void {
     const removed = this.statistics.compact();
-    this.compressStoredDetails();
+    this.restoreStoredDetails();
     this.migrateAttributionLabels();
     const version = this.setting("storage-compact");
     const freed = Number(this.db.get("PRAGMA freelist_count")?.freelist_count ?? 0);
     // Bump when a build frees pages without removing rows (dropped indexes,
     // labels moved onto their rows), so the file is rewritten once on upgrade.
-    const CODE_LAYOUT = "2";
+    const CODE_LAYOUT = "3";
     if (version === CODE_LAYOUT && removed === 0 && freed < 64) return;
     try {
       // The writer connection can hold the file between batches; the deletions are
@@ -108,20 +108,28 @@ export class UsageStore {
     this.setSetting("attribution-columns", "1");
   }
 
-  /** Rewrites detail rows written by older builds, which stored raw JSON. */
-  private compressStoredDetails(): void {
-    const rows = this.db.all(
-      "SELECT owner, id, details FROM usage_record WHERE details IS NOT NULL AND length(details) >= 160 AND substr(details, 1, 3) <> ? LIMIT 500",
-      [DETAILS_PREFIX]
-    );
-    for (const row of rows) {
-      const encoded = encodeDetails(String(row.details));
-      if (encoded === row.details) continue;
-      this.db.run("UPDATE usage_record SET details = ? WHERE owner = ? AND id = ?", [
-        encoded,
-        String(row.owner),
-        String(row.id)
-      ]);
+  /**
+   * 0.4.1 deflated a day's display detail to save space. A later build writes
+   * the plain JSON again, because a compressed blob is opaque to every outside
+   * reader and the user asked for the old, readable format back. Existing rows
+   * are rewritten once on the next launch.
+   */
+  private restoreStoredDetails(): void {
+    for (;;) {
+      const rows = this.db.all(
+        "SELECT owner, id, details FROM usage_record WHERE details LIKE ? LIMIT 500",
+        [`${DETAILS_PREFIX}%`]
+      );
+      if (!rows.length) return;
+      for (const row of rows) {
+        const decoded = decodeDetails(row.details);
+        if (decoded === null) continue;
+        this.db.run("UPDATE usage_record SET details = ? WHERE owner = ? AND id = ?", [
+          decoded,
+          String(row.owner),
+          String(row.id)
+        ]);
+      }
     }
   }
   get owner(): string {
@@ -312,7 +320,7 @@ export class UsageStore {
     if (existing && sameUsage(existing.record, record)) {
       if (details !== existing.details || existing.saveError)
         this.db.run("UPDATE usage_record SET details = ?, save_error = NULL WHERE owner = ? AND id = ?", [
-          encodeDetails(details),
+          details,
           owner,
           record.recordId
         ]);
@@ -327,7 +335,7 @@ export class UsageStore {
         record.providerId,
         record.kind === "usage_day" ? record.localDay : null,
         canonicalUsage(record),
-        encodeDetails(details),
+        details,
         existing?.conflict ? JSON.stringify(existing.conflict) : null
       ]
     );
@@ -565,17 +573,10 @@ export function parseAttribution(value: string): { reportAs: string; model: stri
     : { reportAs: value.slice(0, cut), model: value.slice(cut + 1) };
 }
 /**
- * A day's display detail is a large JSON object read only when the day is shown.
- * It is stored deflated so a long history keeps its breakdowns without paying for
- * pretty-printed JSON on disk. Existing plain rows still read.
+ * The marker 0.4.1 wrote in front of a deflated day detail. New rows are plain
+ * JSON; this remains so an upgrade can find and expand the old ones.
  */
 const DETAILS_PREFIX = "z1:";
-
-function encodeDetails(value: string | null): string | null {
-  if (value === null || value.length < 160 || value.startsWith(DETAILS_PREFIX)) return value;
-  const compressed = `${DETAILS_PREFIX}${deflateRawSync(value, { level: 9 }).toString("base64")}`;
-  return compressed.length < value.length ? compressed : value;
-}
 
 function decodeDetails(value: unknown): string | null {
   if (value === null || value === undefined) return null;

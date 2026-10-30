@@ -1,6 +1,6 @@
 import type { DashboardProvider, DashboardSnapshot } from "@usageatlas/contracts";
 import { useEffect, useState } from "react";
-import type { DesktopPreferences } from "../shared/desktop-api";
+import type { DesktopPreferences, WidgetResizeEdge } from "../shared/desktop-api";
 import { DEFAULT_WIDGET_PREFERENCES } from "../shared/desktop-api";
 import { applyAppearance } from "./appearance";
 import { ProviderLogo } from "./components/ProviderLogo";
@@ -28,18 +28,13 @@ export function CompactWidget(): React.JSX.Element {
         setSnapshot(state.snapshot);
       })
       .catch(() => undefined);
-    // The engine serves its cached snapshot, so this stays cheap.
-    const timer = setInterval(() => {
-      void window.usageAtlas.getSnapshot().then((state) => {
-        if (active) setSnapshot(state.snapshot);
-      }).catch(() => undefined);
-    }, 30_000);
     return () => {
       active = false;
       remove();
-      clearInterval(timer);
     };
   }, []);
+
+  useSnapshotRefresh(setSnapshot);
 
   const appearance = preferences?.appearance;
   useEffect(() => {
@@ -56,8 +51,47 @@ export function CompactWidget(): React.JSX.Element {
   );
 }
 
+/**
+ * The engine serves its cached snapshot, so a refresh is cheap — but a window
+ * nobody can see should cost nothing at all. Browsers pause timers of a hidden
+ * page only after a while, so this stops its own interval on `visibilitychange`
+ * and reads once when the card comes back.
+ */
+function useSnapshotRefresh(setSnapshot: (snapshot: DashboardSnapshot | null) => void): void {
+  useEffect(() => {
+    let timer: ReturnType<typeof setInterval> | null = null;
+    const read = (): void => {
+      void window.usageAtlas.getSnapshot()
+        .then((state) => setSnapshot(state.snapshot))
+        .catch(() => undefined);
+    };
+    const start = (): void => {
+      if (timer) return;
+      read();
+      timer = setInterval(read, 30_000);
+    };
+    const stop = (): void => {
+      if (!timer) return;
+      clearInterval(timer);
+      timer = null;
+    };
+    const sync = (): void => {
+      if (document.visibilityState === "visible") start();
+      else stop();
+    };
+    sync();
+    document.addEventListener("visibilitychange", sync);
+    return () => {
+      stop();
+      document.removeEventListener("visibilitychange", sync);
+    };
+  }, [setSnapshot]);
+}
+
 /** Below this width the exact figure would wrap, so it becomes `12.4M`. */
 const COMPACT_WIDTH = 300;
+
+const RESIZE_EDGES: WidgetResizeEdge[] = ["n", "s", "e", "w", "ne", "nw", "se", "sw"];
 
 function WidgetBody({
   snapshot,
@@ -78,6 +112,20 @@ function WidgetBody({
     resize();
     window.addEventListener("resize", resize);
     return () => window.removeEventListener("resize", resize);
+  }, []);
+
+  // A drag can end outside the window; releasing the pointer anywhere still
+  // stops the main process loop.
+  useEffect(() => {
+    const stop = (): void => void window.usageAtlas.endWidgetResize();
+    window.addEventListener("pointerup", stop);
+    window.addEventListener("pointercancel", stop);
+    window.addEventListener("blur", stop);
+    return () => {
+      window.removeEventListener("pointerup", stop);
+      window.removeEventListener("pointercancel", stop);
+      window.removeEventListener("blur", stop);
+    };
   }, []);
 
   useAutoHide(widget.autoHideSeconds);
@@ -145,6 +193,19 @@ function WidgetBody({
           <span>{t("widget.tokens")}</span>
         </div>
       </div>
+
+      {RESIZE_EDGES.map((edge) => (
+        <span
+          aria-hidden="true"
+          className="atlas-widget__resize"
+          data-edge={edge}
+          key={edge}
+          onPointerDown={(event) => {
+            event.preventDefault();
+            void window.usageAtlas.beginWidgetResize(edge);
+          }}
+        />
+      ))}
     </div>
   );
 }

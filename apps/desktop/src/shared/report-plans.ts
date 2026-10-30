@@ -3,6 +3,7 @@ import type {
   UsageProvider,
   UsageRecord
 } from "@usageatlas/contracts/usage";
+import { PUBLIC_MODELS } from "@usageatlas/contracts/usage";
 import type { UsageFact } from "@usageatlas/contracts/statistics";
 
 /**
@@ -57,6 +58,9 @@ const ALL_PROVIDERS = new Set<string>([
   "cline",
   "roo"
 ]);
+
+/** Every source this build can collect, including the ones the server does not model. */
+export const KNOWN_PROVIDERS = [...ALL_PROVIDERS] as const;
 
 export const MAX_PLAN_TARGETS = 12;
 const MAX_MODEL_LENGTH = 80;
@@ -144,6 +148,14 @@ export function applyTargetToRecord(record: UsageRecord, target: ReportTarget): 
   if (record.kind !== "usage_day" || !record.models || record.models.length === 0) {
     return { ...record, providerId: target.reportAs };
   }
+  // The uploaded copy is the day this computer already holds: same totals, same
+  // hours, same model rows. Only a private model name has to be reported under
+  // the plan's public one, because the server validates every model key against
+  // its catalog and refuses the whole day for one unknown name. Collapsing a
+  // day whose models are all public threw away a breakdown the server stores.
+  if (record.models.every(model => isPublicModel(model.modelKey))) {
+    return { ...record, providerId: target.reportAs };
+  }
   return {
     ...record,
     providerId: target.reportAs,
@@ -178,6 +190,10 @@ export function planFromLegacyAliases(value: unknown): ReportPlan[] {
     const record = item as Record<string, unknown>;
     return { source: record.source, targets: [{ reportAs: record.reportAs, model: record.model, weight: 100 }] };
   }).filter(Boolean));
+}
+
+function isPublicModel(modelKey: string): boolean {
+  return PUBLIC_MODELS.has(modelKey);
 }
 
 function sumTotals(rows: StoredTotals[]): StoredTotals {

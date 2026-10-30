@@ -10,6 +10,7 @@ import {
 } from "@usageatlas/contracts/usage";
 import type { CloudProgress } from "../../shared/desktop-api";
 import {
+  KNOWN_PROVIDERS,
   OFFICIAL_PROVIDERS,
   applyTargetToFact,
   applyTargetToRecord,
@@ -126,9 +127,11 @@ export class UsageSync {
   }
   /**
    * Providers this server accepts: the ones it models, plus the sources a saved
-   * rule renames. Anything else stays local until the user adds a rule.
+   * rule renames. A source without a rule of its own follows the first saved
+   * mix, so it is uploadable too; with no mix at all it stays local.
    */
   private uploadableProviders(): string[] {
+    if (this.reportPlans.length > 0) return [...KNOWN_PROVIDERS];
     const providers = new Set<string>(OFFICIAL_PROVIDERS);
     for (const plan of this.reportPlans) providers.add(plan.source);
     return [...providers];
@@ -184,7 +187,11 @@ export class UsageSync {
    * longer offers falls back to a fresh spin.
    */
   private targetFor(key: string, source: string, spinKey: string): ReportTarget | null {
-    const plan = planFor(this.reportPlans, source);
+    // An unmapped source is reported through the first saved mix. That is the
+    // only way the hosted service can accept Freebuff, Cline or Roo records: it
+    // validates the provider name against its own catalog.
+    const plan = planFor(this.reportPlans, source)
+      ?? (isOfficialProvider(source) ? null : this.reportPlans[0]);
     if (!plan) return null;
     const stored = this.store.attribution(key);
     if (stored) {

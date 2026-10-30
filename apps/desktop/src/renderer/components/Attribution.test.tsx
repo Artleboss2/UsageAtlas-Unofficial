@@ -27,7 +27,7 @@ describe("Attribution rules", () => {
   it("says nothing is relabelled until a rule exists", () => {
     const html = render([provider({ id: "freebuff", name: "Freebuff" })]);
 
-    expect(html).toContain("No rule yet. Every source is saved under its own name.");
+    expect(html).toContain("No rule yet. Official sources save under their own name; a private source stays on this computer until you add a mix here.");
     expect(html).toContain("Add rule");
     expect(html).not.toContain('value="gpt-5.3-codex"');
   });

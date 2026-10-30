@@ -26,6 +26,16 @@ function applySystemTheme(): void {
 applySystemTheme();
 systemDark.addEventListener("change", applySystemTheme);
 
+// A window hidden in the tray or minimized still paints its gradients, sweeps
+// and shimmer while the compositor keeps the page alive. Marking the document
+// lets the stylesheet park every animation until it is back on screen.
+function applyWindowVisibility(): void {
+  document.documentElement.dataset.windowHidden = document.visibilityState === "visible" ? "false" : "true";
+}
+
+applyWindowVisibility();
+document.addEventListener("visibilitychange", applyWindowVisibility);
+
 const root = document.getElementById("root");
 if (!root) throw new Error("Missing renderer root");
 const widgetMode = location.hash.replace(/^#/, "") === "widget";

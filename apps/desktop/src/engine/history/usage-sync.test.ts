@@ -447,6 +447,41 @@ describe("usage cloud storage", () => {
     expect(service.status().heldBackCount).toBe(2);
   });
 
+  it("reports a source without its own rule through the first saved mix", async () => {
+    const local = store();
+    local.statistics.collect("freebuff", "local", "replica", analytics());
+    const own = day();
+    own.providerId = "codex";
+    local.put(own);
+    const cloud = remoteCloud();
+    const facts: { providerId: string; modelKey?: string }[] = [];
+    cloud.saveFacts = async values => {
+      for (const fact of values) facts.push({
+        providerId: fact.providerId,
+        modelKey: fact.kind === "usage_event" ? fact.modelKey : undefined
+      });
+      return values.map(fact => fact.id);
+    };
+    const service = sync(local);
+    await service.configure("a", cloud);
+    service.setAutomatic(false);
+    service.setReportPlans([{
+      source: "codex",
+      targets: [{ reportAs: "claude", model: "claude-opus-5", weight: 100 }]
+    }]);
+    await service.save();
+
+    // Freebuff has no rule of its own; it follows Codex's first mix instead of
+    // waiting for a provider the server validates by name.
+    expect(facts.every(fact => fact.providerId === "claude")).toBe(true);
+    expect(facts.every(fact => fact.modelKey === undefined || fact.modelKey === "claude-opus-5")).toBe(true);
+    expect(cloud.rows.size).toBe(1);
+    expect(service.status().heldBack).toEqual([]);
+    expect(service.status().heldBackCount).toBe(0);
+    expect(local.statistics.pendingCount()).toBe(0);
+    expect(local.pendingCount(["codex", "freebuff"])).toBe(0);
+  });
+
   it("keeps the automatic timer idle while only unmapped sources are pending", async () => {
     vi.useFakeTimers();
     const local = store();
@@ -634,6 +669,46 @@ describe("usage cloud storage", () => {
     await service.save();
     expect(service.status()).toMatchObject({ busy: false, progress: null, lastCompleted: "save", error: null });
   });
+  it("keeps every public model row on the uploaded copy", () => {
+    const record = day(300);
+    record.breakdownCoverage = { hourly: "unknown", models: "complete" };
+    record.models = [
+      { modelKey: "claude-opus-5", totals: { ...record.totals!, inputTokens: 100, totalTokens: 100, requests: 1, unpricedTokens: 100 } },
+      { modelKey: "claude-sonnet-4-6", totals: { ...record.totals!, inputTokens: 200, totalTokens: 200, requests: 0, unpricedTokens: 200 } }
+    ];
+    const uploaded = applyTargetToRecord(validateUsageRecord(record), {
+      reportAs: "claude",
+      model: "claude-opus-5",
+      weight: 100
+    }) as UsageDay;
+    // The old, complete document goes up: the server stores the model split.
+    expect(uploaded.models?.map((row) => row.modelKey)).toEqual(["claude-opus-5", "claude-sonnet-4-6"]);
+    expect(uploaded.totals).toEqual(record.totals);
+    expect(validateUsageRecord(uploaded)).toBeTruthy();
+  });
+
+  it("saves an unmapped source under the plan without touching its day", async () => {
+    const local = store();
+    local.selectAccount("a");
+    const record = day(420);
+    record.providerId = "freebuff";
+    // A private model name is exactly why the plan exists.
+    record.models = [{ modelKey: "m-094859", totals: record.totals! }];
+    local.put(record);
+    const cloud = remoteCloud();
+    const service = sync(local);
+    await service.configure("a", cloud);
+    service.setAutomatic(false);
+    service.setReportPlans([{ source: "freebuff", targets: [{ reportAs: "codex", model: "gpt-5.6-sol", weight: 100 }] }]);
+    await service.save();
+    const saved = [...cloud.rows.values()][0].record as UsageDay;
+    expect(saved.providerId).toBe("codex");
+    expect(saved.models).toEqual([{ modelKey: "gpt-5.6-sol", totals: record.totals }]);
+    expect(saved.totals).toEqual(record.totals);
+    expect(local.pending()).toEqual([]);
+    expect(local.get(record.recordId)?.record.providerId).toBe("freebuff");
+  });
+
   it("rejects private fields, invalid totals, and duplicate breakdowns", () => {
     expect(() => validateUsageRecord({ ...day(), path: "/private" })).toThrow();
     expect(() => validateUsageRecord({ ...day(), status: "no_data" })).toThrow();

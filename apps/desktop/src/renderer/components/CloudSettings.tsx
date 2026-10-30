@@ -83,7 +83,8 @@ export function CloudSettings(): React.JSX.Element {
         <Card.Title>Cloud save</Card.Title>
         <Card.Description>
           No account is needed to track usage. Create a free account to save
-          your usage history and restore it on another computer.
+          your usage history and restore it on another computer. A source without
+          its own attribution rule is saved through your first reporting mix.
         </Card.Description>
       </Card.Header>
       <Card.Content className="mt-2 space-y-4">
@@ -164,8 +165,8 @@ export function CloudSettings(): React.JSX.Element {
                     ? `${status.heldBackCount.toLocaleString()} ${status.heldBackCount === 1 ? "change" : "changes"} from `
                     : ""}
                   {heldBack.join(", ")} {heldBack.length === 1 ? "stays" : "stay"} on this
-                  computer: the server does not model {heldBack.length === 1 ? "that source" : "those sources"} yet.
-                  Add a rule on the Attribution page to report them under a provider it accepts.
+                  computer: the server does not model {heldBack.length === 1 ? "that source" : "those sources"} yet,
+                  and no reporting mix exists to relabel them. Add a first rule on the Attribution page.
                 </p>
               )}
             </div>

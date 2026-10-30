@@ -1,6 +1,6 @@
 import { Button, Card } from "@heroui/react";
 import { useEffect, useId, useState } from "react";
-import type { ProviderDiscovery as Discovery } from "../../shared/desktop-api";
+import type { InstalledProvider, ProviderDiscovery as Discovery } from "../../shared/desktop-api";
 import { useI18n } from "../i18n";
 import { RefreshIcon } from "../icons";
 
@@ -17,6 +17,8 @@ export function ProviderDiscovery(): React.JSX.Element {
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<Discovery | null>(null);
   const [error, setError] = useState(false);
+  const [installed, setInstalled] = useState<InstalledProvider[] | null>(null);
+  const [scanning, setScanning] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -32,8 +34,12 @@ export function ProviderDiscovery(): React.JSX.Element {
 
   async function submit(event: React.FormEvent<HTMLFormElement>): Promise<void> {
     event.preventDefault();
-    const provider = name.trim();
+    await probe(name.trim());
+  }
+
+  async function probe(provider: string): Promise<void> {
     if (!provider || busy) return;
+    setName(provider);
     setBusy(true);
     setError(false);
     try {
@@ -43,6 +49,18 @@ export function ProviderDiscovery(): React.JSX.Element {
       setError(true);
     } finally {
       setBusy(false);
+    }
+  }
+
+  async function scan(): Promise<void> {
+    if (scanning) return;
+    setScanning(true);
+    try {
+      setInstalled(await window.usageAtlas.scanInstalledProviders());
+    } catch {
+      setInstalled([]);
+    } finally {
+      setScanning(false);
     }
   }
 
@@ -71,7 +89,40 @@ export function ProviderDiscovery(): React.JSX.Element {
             {busy ? <RefreshIcon className="size-4 animate-spin" /> : null}
             <span>{t(busy ? "settings.discovery.searching" : "settings.discovery.search")}</span>
           </Button>
+          <Button isDisabled={scanning} onPress={() => void scan()} variant="outline">
+            {scanning ? <RefreshIcon className="size-4 animate-spin" /> : null}
+            <span>{t(scanning ? "settings.discovery.scanning" : "settings.discovery.scan")}</span>
+          </Button>
         </form>
+
+        {installed ? (
+          <div className="atlas-discovery__installed" role="status">
+            {installed.length === 0 ? (
+              <p className="atlas-discovery__empty">{t("settings.discovery.installedNone")}</p>
+            ) : (
+              <>
+                <p className="atlas-discovery__meta">
+                  {t("settings.discovery.installed", { count: installed.length })}
+                </p>
+                <ul className="atlas-discovery__chips">
+                  {installed.map((tool) => (
+                    <li key={tool.name}>
+                      <button
+                        className="atlas-discovery__chip"
+                        disabled={busy}
+                        onClick={() => void probe(tool.name)}
+                        title={tool.folder}
+                        type="button"
+                      >
+                        {tool.name}
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              </>
+            )}
+          </div>
+        ) : null}
 
         {error ? (
           <p className="atlas-discovery__error" role="alert">{t("settings.discovery.error")}</p>
