@@ -95,8 +95,16 @@ if (process.env.USAGEATLAS_SMOKE_TEST === "1") {
       freebuff: false, warp: false, kimi: false, kilo: false, copilot: false, factory: false, amp: false, qoder: false, zai: false }
   }));
 }
-/** The id Squirrel registers the Start Menu shortcut and toasts under. */
-const APP_USER_MODEL_ID = "com.squirrel.UsageAtlas.UsageAtlas";
+/**
+ * The id Windows groups the window, its shortcuts and its toasts under. It is
+ * deliberately not Squirrel's `com.squirrel.UsageAtlas.UsageAtlas`: the shell
+ * caches the artwork of an AppUserModelID the first time it resolves one, and
+ * every build installed under that id kept drawing the stock Electron atom in
+ * the taskbar even with the right ICO on the executable, the shortcut and the
+ * window itself. A brand id, written on the shortcut the app installs on every
+ * launch, resolves to the app's own mark.
+ */
+const APP_USER_MODEL_ID = "com.usageatlas.desktop";
 
 /**
  * The id Windows uses to group windows, shortcuts and toasts. A development run
@@ -260,7 +268,10 @@ function applyShortcutMark(mark: AppMark): void {
   const icon = installAppMark(mark);
   for (const shortcut of shortcuts) {
     try {
-      shell.writeShortcutLink(shortcut, existsSync(shortcut) ? "update" : "create", {
+      // Always a fresh write: an older build's shortcut carries the Squirrel
+      // AppUserModelID, and updating a shortcut in place can leave that identity
+      // (with the atom Explorer cached for it) behind.
+      shell.writeShortcutLink(shortcut, "create", {
         target,
         cwd: path.dirname(process.execPath),
         // A development shortcut must relaunch the same app, not an empty Electron.
