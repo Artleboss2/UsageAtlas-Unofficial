@@ -6,25 +6,18 @@ import "@fontsource-variable/manrope";
 import "@fontsource-variable/figtree";
 import "@fontsource-variable/plus-jakarta-sans";
 import "@fontsource-variable/geist";
+import "@fontsource-variable/outfit";
+import "@fontsource-variable/sora";
+import "@fontsource-variable/newsreader";
+import "@fontsource-variable/fraunces";
 import "./globals.css";
 import { App } from "./App";
 import { CompactWidget } from "./CompactWidget";
+import { applyTheme } from "./appearance";
 
-// Keep the component and glass themes aligned with the OS appearance.
-const systemDark = matchMedia("(prefers-color-scheme: dark)");
-
-function applySystemTheme(): void {
-  const dark = systemDark.matches;
-  const rootElement = document.documentElement;
-  rootElement.classList.toggle("dark", dark);
-  rootElement.classList.toggle("glass-dark", dark);
-  rootElement.classList.toggle("light", !dark);
-  rootElement.classList.toggle("glass-light", !dark);
-  rootElement.dataset.theme = dark ? "glass-dark" : "glass-light";
-}
-
-applySystemTheme();
-systemDark.addEventListener("change", applySystemTheme);
+// Paint the OS palette before preferences load; applyAppearance replaces it with
+// the user's choice (System, Light or Dark) as soon as they are available.
+applyTheme("system");
 
 // A window hidden in the tray or minimized still paints its gradients, sweeps
 // and shimmer while the compositor keeps the page alive. Marking the document
