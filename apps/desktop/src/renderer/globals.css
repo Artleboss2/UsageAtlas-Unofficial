@@ -4902,3 +4902,197 @@ html[data-appearance-density="compact"] .atlas-settings-tabs {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+/* Settings → Providers. A searchable wall of real brand marks; the card states
+   plainly whether the app can read the tool and whether it is on. */
+.atlas-providers__toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+}
+
+.atlas-providers__search {
+  flex: 1 1 260px;
+  min-width: 0;
+}
+
+.atlas-providers__filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding: 3px;
+  border-radius: 999px;
+  background: color-mix(in oklch, var(--surface-secondary) 82%, transparent);
+  box-shadow: var(--atlas-ring);
+}
+
+.atlas-providers__chip {
+  min-height: 30px;
+  padding-inline: 13px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 0.75rem;
+  font-weight: 550;
+  cursor: pointer;
+  transition:
+    background 220ms cubic-bezier(0.22, 1, 0.36, 1),
+    color 220ms cubic-bezier(0.22, 1, 0.36, 1),
+    transform 320ms cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.atlas-providers__chip:hover {
+  color: var(--foreground);
+  transform: scale(1.04);
+}
+
+.atlas-providers__chip[aria-pressed="true"] {
+  background: var(--surface);
+  color: var(--foreground);
+  box-shadow:
+    inset 0 0 0 0.5px rgba(0, 0, 0, 0.06),
+    0 2px 6px -2px rgba(0, 0, 0, 0.16);
+}
+
+.atlas-providers__count {
+  margin-top: 12px;
+  color: var(--muted);
+  font-size: 0.75rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.atlas-providers__loading {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  padding: 26px 4px;
+  color: var(--muted);
+  font-size: 0.8125rem;
+}
+
+.atlas-providers__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(212px, 1fr));
+  gap: 10px;
+  margin-top: 12px;
+  padding: 0;
+  list-style: none;
+}
+
+.atlas-provider-card {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 13px;
+  border-radius: 18px;
+  background: color-mix(in oklab, var(--surface) 62%, transparent);
+  box-shadow: inset 0 0 0 0.5px var(--separator);
+  transition:
+    transform 320ms cubic-bezier(0.34, 1.56, 0.64, 1),
+    box-shadow 320ms ease,
+    background 320ms ease;
+}
+
+.atlas-provider-card:hover {
+  transform: translateY(-2px) scale(1.012);
+  background: color-mix(in oklab, var(--surface) 80%, transparent);
+  box-shadow:
+    inset 0 0 0 0.5px var(--separator),
+    0 14px 30px -22px rgba(0, 0, 0, 0.5);
+}
+
+.atlas-provider-card__head {
+  display: flex;
+  min-width: 0;
+  gap: 10px;
+  align-items: center;
+}
+
+.atlas-provider-card__title {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.atlas-provider-card__title strong {
+  overflow: hidden;
+  color: var(--foreground);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  letter-spacing: -0.012em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.atlas-provider-card__title span {
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 0.66rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.atlas-provider-card__badge {
+  flex: none;
+  padding: 3px 7px;
+  border-radius: 999px;
+  background: color-mix(in oklab, var(--accent) 10%, transparent);
+  color: var(--accent);
+  font-size: 0.58rem;
+  font-weight: 650;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
+.atlas-provider-card__action {
+  min-height: 32px;
+  font-size: 0.75rem;
+}
+
+.atlas-provider-card__unsupported {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  align-items: flex-start;
+}
+
+.atlas-provider-card__note {
+  color: var(--muted);
+  font-size: 0.66rem;
+  line-height: 1.35;
+}
+
+.atlas-providers__note {
+  margin-top: 16px;
+  color: var(--muted);
+  font-size: 0.7rem;
+  line-height: 1.5;
+}
+
+.atlas-provider-logo--directory {
+  width: 38px;
+  height: 38px;
+  border-radius: 11px;
+  background: color-mix(in oklab, var(--foreground) 6%, transparent);
+  box-shadow: inset 0 0 0 0.5px var(--separator);
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .atlas-provider-card,
+  .atlas-providers__chip {
+    transition: none;
+  }
+
+  .atlas-provider-card:hover,
+  .atlas-providers__chip:hover {
+    transform: none;
+  }
+}
