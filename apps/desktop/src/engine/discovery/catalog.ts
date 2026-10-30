@@ -1,190 +1,343 @@
 /**
- * Names worth pointing the discovery engine at. This is a seed list, not a
- * whitelist: `discoverProviderUsage` works on any string, and a name that does
- * not exist on disk simply scans nothing. `aliases` are the other names the same
- * product ships under, so a folder named after the old brand is still found.
+ * The provider directory behind Settings → Providers.
+ *
+ * Every entry is a product a developer can actually install, with the folder
+ * names its installer writes. `adapter` is set only when the engine has a reader
+ * for that tool: those are the entries the app can turn on. The rest are still
+ * worth listing, because discovery can prove whether they keep local usage and
+ * say so honestly instead of pretending a reader exists.
  */
+export type ProviderKind =
+  | "editor"
+  | "cli-agent"
+  | "api"
+  | "local"
+  | "builder"
+  | "observability"
+  | "assistant";
+
 export interface CatalogEntry {
   /** Primary product name, as users write it. */
   name: string;
   /** Other names, folder spellings, or renames of the same product. */
   aliases?: string[];
-  /** What kind of tool it is, used for grouping in reports. */
-  kind?: "editor" | "cli-agent" | "gateway" | "desktop" | "observability" | "assistant";
+  kind: ProviderKind;
+  /** The engine adapter that reads this tool, when one exists. */
+  adapter?: string;
 }
 
 export const CATALOG: CatalogEntry[] = [
-  { name: "freebuff", aliases: ["manicode", "freebuff-desktop"], kind: "desktop" },
-  { name: "codebuff", aliases: ["codefree", "codebuff-cli"], kind: "cli-agent" },
-  { name: "zed", aliases: ["zed-industries"], kind: "editor" },
-  { name: "cursor", aliases: ["cursor-agent"], kind: "editor" },
-  { name: "windsurf", aliases: ["codeium"], kind: "editor" },
-  { name: "cline", aliases: ["claude-dev"], kind: "editor" },
-  { name: "roo code", aliases: ["roo-code", "roocode"], kind: "editor" },
-  { name: "continue", aliases: ["continue-dev"], kind: "editor" },
-  { name: "aider", aliases: ["aider-chat"], kind: "cli-agent" },
-  { name: "opencode", aliases: ["open-code", "opencode-ai"], kind: "cli-agent" },
-  { name: "claude code", aliases: ["claude", "claude-code", "anthropic"], kind: "cli-agent" },
-  { name: "codex", aliases: ["openai-codex", "codex-cli"], kind: "cli-agent" },
-  { name: "gemini", aliases: ["gemini-cli", "google-gemini"], kind: "cli-agent" },
-  { name: "qwen code", aliases: ["qwen", "qwen-code", "qwen-cli"], kind: "cli-agent" },
-  { name: "kimi", aliases: ["kimi-cli", "moonshot"], kind: "cli-agent" },
-  { name: "kilo", aliases: ["kilo-code"], kind: "editor" },
-  { name: "amp", aliases: ["sourcegraph-amp"], kind: "cli-agent" },
-  { name: "copilot", aliases: ["github-copilot"], kind: "assistant" },
-  { name: "factory", aliases: ["factory-ai", "droid"], kind: "cli-agent" },
-  { name: "qoder", aliases: ["qoder-ai"], kind: "editor" },
-  { name: "warp", aliases: ["warp-terminal"], kind: "cli-agent" },
-  { name: "antigravity", aliases: ["google-antigravity"], kind: "editor" },
-  { name: "muse", aliases: ["muse-ai"], kind: "cli-agent" },
-  { name: "pi", aliases: ["pi-ai", "pi-cli"], kind: "cli-agent" },
-  { name: "z.ai", aliases: ["zai", "glm", "zhipu", "bigmodel"], kind: "gateway" },
-  { name: "openrouter", aliases: ["open-router"], kind: "gateway" },
-  { name: "together", aliases: ["together-ai"], kind: "gateway" },
-  { name: "groq", aliases: ["groq-cloud"], kind: "gateway" },
-  { name: "mistral", aliases: ["mistral-ai"], kind: "gateway" },
-  { name: "deepseek", aliases: ["deep-seek"], kind: "gateway" },
-  { name: "perplexity", aliases: ["pplx"], kind: "gateway" },
-  { name: "fireworks", aliases: ["fireworks-ai"], kind: "gateway" },
-  { name: "deepinfra", aliases: ["deep-infra"], kind: "gateway" },
-  { name: "replicate", aliases: [], kind: "gateway" },
-  { name: "huggingface", aliases: ["hugging-face", "hf"], kind: "gateway" },
-  { name: "ollama", aliases: [], kind: "gateway" },
-  { name: "lm studio", aliases: ["lm-studio", "lmstudio"], kind: "desktop" },
-  { name: "jan", aliases: ["jan-ai"], kind: "desktop" },
-  { name: "gpt4all", aliases: ["gpt-4-all"], kind: "desktop" },
-  { name: "vllm", aliases: ["v-llm"], kind: "gateway" },
-  { name: "litellm", aliases: ["lite-llm"], kind: "gateway" },
-  { name: "portkey", aliases: ["portkey-ai"], kind: "gateway" },
-  { name: "one api", aliases: ["one-api", "oneapi"], kind: "gateway" },
-  { name: "new api", aliases: ["new-api", "newapi"], kind: "gateway" },
-  { name: "langfuse", aliases: ["lang-fuse"], kind: "observability" },
-  { name: "helicone", aliases: ["heli-cone"], kind: "observability" },
-  { name: "braintrust", aliases: ["brain-trust"], kind: "observability" },
-  { name: "phoenix", aliases: ["arize-phoenix"], kind: "observability" },
-  { name: "opik", aliases: ["comet-opik"], kind: "observability" },
-  { name: "chatbox", aliases: ["chat-box"], kind: "desktop" },
-  { name: "open webui", aliases: ["open-webui", "openwebui"], kind: "desktop" },
-  { name: "librechat", aliases: ["libre-chat"], kind: "desktop" },
-  { name: "lobechat", aliases: ["lobe-chat"], kind: "desktop" },
-  { name: "anythingllm", aliases: ["anything-llm"], kind: "desktop" },
-  { name: "cherry studio", aliases: ["cherry-studio"], kind: "desktop" },
-  { name: "msty", aliases: ["msty-app"], kind: "desktop" },
-  { name: "typingmind", aliases: ["typing-mind"], kind: "assistant" },
-  { name: "openhands", aliases: ["open-hands"], kind: "cli-agent" },
-  { name: "goose", aliases: ["block-goose"], kind: "cli-agent" },
-  { name: "plandex", aliases: ["plan-dex"], kind: "cli-agent" },
-  { name: "mentat", aliases: [], kind: "cli-agent" },
-  { name: "sweep", aliases: ["sweep-ai"], kind: "cli-agent" },
-  { name: "devin", aliases: ["cognition-devin"], kind: "cli-agent" },
-  ...additionalNames(`
-    codeium|tabnine|supermaven|sourcegraph cody|augment code|jetbrains ai|junie|amazon q|aws bedrock|azure openai|
-    vertex ai|google ai studio|google ai|openai|anthropic|cohere|ai21 labs|anyscale|perplexity lab|xai|
-    meta llama|nvidia nim|cerebras|sambanova|graphcore|tenstorrent|etched|groq cloud|novita ai|nebius ai|
-    scaleway ai|ovhcloud ai|cloudflare workers ai|replicate|baseten|modal labs|runpod|lambda labs|vast ai|
-    fal ai|octoai|hyperbolic|deepinfra|fireworks ai|together ai|openrouter|portkey ai|litellm|one api|
-    new api|kong ai|cloudflare ai gateway|martian|not diamond|openpipe|unify ai|keywords ai|langsmith|
-    wandb weave|promptlayer|humanloop|vellum|promptfoo|langwatch|agenta|flowise|dify|n8n|activepieces|
-    relevance ai|crewai|autogen|langgraph|semantic kernel|haystack|llamaindex|dspy|instructor|outlines|
-    guidance|marvin|mirascope|magentic|pydantic ai|smolagents|openai agents sdk|google adk|strands agents|
-    mastra|vercel ai sdk|genkit|copilotkit|assistant ui|big agi|chatall|nextchat|betterchatgpt|hollama|
-    page assist|open interpreter|localai|text generation webui|koboldcpp|sillytavern|aphrodite|sglang|
-    text generation inference|lmdeploy|exllama|llama cpp|mlx lm|llamafile|cortex|ramalama|docker model runner|
-    podman ai lab|triton inference|torchserve|kserve|bentoml|ray serve|replit agent|replit|lovable|bolt new|
-    v0 by vercel|firebase studio|project idx|trae|kiro|void editor|theia ai|twinny|tabby|continue dev|
-    cody|codegen|graphite diamond|greptile|coderabbit|ellipsis|sourcery|codiga|deepsource|qodo|refact ai|
-    bite|pieces for developers|aide|melty|mutable ai|codegpt|codeium windsurf|aws codewhisperer|google cloud code|
-    gemini code assist|visual studio intellicode|jetbrains fleet|zed ai|neovim avante|copilot chat|codex cloud|
-    claude computer use|openai operator|manus|genspark|perplexity|you com|phind|andisearch|kagi assistant|
-    poe|character ai|pi ai|inflection|hume|elevenlabs|assemblyai|deepgram|whisper api|groq whisper|
-    runway|pika|luma ai|stability ai|midjourney|dall e|ideogram|leonardo ai|playground ai|krea ai|
-    hedra|heygen|synthesia|descript|otter ai|fireflies ai|granola|rewind ai|limitless|notion ai|mem ai|
-    reflect notes|obsidian copilot|logseq ai|roam smart blocks|craft ai|bear ai|ulysses ai|ia writer|
-    lex|sudowrite|jasper|copy ai|writesonic|rytr|grammarly go|deepl write|quillbot|wordtune|
-    n8n cloud|zapier ai|make ai|retool ai|appsmith ai|budibase ai|tooljet ai|metabase ai|superset ai|preset ai|
-    hex magic|mode ai|sigma ai|databricks assistant|snowflake cortex|bigquery gemini|redshift q|athena ai|
-    dbt copilot|monte carlo ai|anomalo ai|great expectations ai|sifflet ai|atlan ai|collibra ai|alation ai|
-    langfuse cloud|arize ai|fiddler ai|whyLabs|evidently ai|galileo ai|patronus ai|guardrails ai|lakera|
-    robust intelligence|hiddenlayer|protect ai|calypso ai|prompt security|pangea ai|indirect prompt injection|
-    modal|beam cloud|fly io gpu|coreweave|paperspace|jarvislabs|genesis cloud|nscale|fluidstack|
-    crusoe energy|voltage park|massed compute|prime intellect|vast ai cloud|runpod serverless|replicate cog|
-    hugging face inference|inference endpoints|sagemaker|vertex model garden|azure ai foundry|bedrock agents|
-    openai assistants|anthropic mcp|model context protocol|openrouter fusion|requesty|helicone gateway|
-    llm gateway|ai gateway|truefoundry|traceloop|openllmetry|phoenix arize|langtrace|braintrust proxy|
-    opik comet|weights biases|neptune ai|comet ml|mlflow ai|kubeflow ai|bento ai|dvc ai|clearml|
-    arize ax|fiddler|superwise|monita ai|vijil|robustness gym|inspect ai|inspect|eval harness|
-    lm evaluation harness|helm|openai evals|braintrust evals|freeplay|humanloop evals|langsmith evals|
-    promptfoo eval|deepeval|ragas|truera|arize eval|galileo evaluate|patronus evaluate|guardrails eval|
-    codefree|freebuff cli|codebuff cli|charm crush|crush|opencode zen|zed agent|warp agent|amazon kiro|
-    cody desktop|sourcegraph amp|amp cli|factory droid|qoder cli|antigravity cli|muse cli|pi cli|
-    kimi cli|qwen cli|gemini cli|codex cli|claude cli|cursor cli|windsurf cli|junie cli|tabnine cli|
-    copilot cli|devin cli|openhands cli|goose cli|plandex cli|mentat cli|sweep cli|aider cli|
-    cline cli|roo cli|kilo cli|continue cli|kilocode|roocode|claude-dev|saoudrizwan|rooveterinaryinc|
-    opencode ai|sst opencode|charmbracelet crush|block goose|all hands openhands|cognition windsurf|
-    magic dev|magic ai|refact|supermaven cli|codeium cli|tabby cli|twinny cli|void cli|zed cli|
-    amazon codewhisperer|google code assist|jetbrains ai assistant|visual studio copilot|eclipse copilot|
-    xcode copilot|android studio gemini|intellij ai|webstorm ai|pycharm ai|rider ai|goland ai|
-    clion ai|phpstorm ai|rubymine ai|datagrip ai|fleet ai|aqua ai|rustrover ai|writer side ai|
-    devin desktop|codex desktop|claude desktop|gemini desktop|copilot desktop|perplexity desktop|
-    chatgpt desktop|poe desktop|lm studio cli|jan desktop|anythingllm desktop|msty desktop|
-    cherry studio desktop|chatbox desktop|open webui desktop|librechat desktop|lobe chat desktop|
-    big agi desktop|nextchat desktop|chatall desktop|betterchatgpt desktop|hollama desktop|
-    page assist browser|sider ai|monica ai|maxai|harpa ai|merlin ai|bing copilot|edge copilot|
-    arc max|brave leo|opera aria|vivaldi ai|sigma ai browser|perplexity browser|comet browser|
-    dia browser|atlas browser|chatgpt atlas|notion ai desktop|craft ai desktop|obsidian copilot desktop|
-    logseq ai desktop|reflect ai desktop|mem ai desktop|rewind desktop|limitless desktop|granola desktop|
-    otter desktop|fireflies desktop|descript desktop|synthesia desktop|heygen desktop|hedra desktop|
-    runway desktop|pika desktop|luma desktop|stability desktop|midjourney desktop|leonardo desktop|
-    ideogram desktop|krea desktop|playground desktop|fal desktop|replicate desktop|baseten desktop|
-    modal desktop|runpod desktop|lambda desktop|vast desktop|coreweave desktop|paperspace desktop|
-    nscale desktop|fluidstack desktop|crusoe desktop|voltage park desktop|prime intellect desktop|
-    sagemaker studio|vertex workbench|azure ml studio|databricks notebook|snowflake copilot|
-    bigquery studio|redshift query editor|athena console|dbt cloud|monte carlo desktop|
-    langfuse desktop|arize desktop|fiddler desktop|evidently desktop|galileo desktop|patronus desktop|
-    guardrails desktop|lakera desktop|hiddenlayer desktop|protect ai desktop|calypso desktop|
-    pangea desktop|traceloop desktop|openllmetry desktop|langtrace desktop|braintrust desktop|
-    opik desktop|neptune desktop|comet desktop|mlflow desktop|kubeflow desktop|clearml desktop|
-    superwise desktop|monita desktop|vijil desktop|inspect desktop|helm desktop|freeplay desktop|
-    humanloop desktop|promptfoo desktop|deepeval desktop|ragas desktop|truera desktop|
-    codefree desktop|freebuff desktop|codebuff desktop|crush desktop|opencode desktop|
-    cline desktop|roo desktop|kilo desktop|continue desktop|tabby desktop|twinny desktop|
-    void desktop|theia desktop|zed desktop|cursor desktop|windsurf desktop|trae desktop|
-    kiro desktop|firebase studio desktop|project idx desktop|replit desktop|lovable desktop|
-    bolt desktop|v0 desktop|augment desktop|supermaven desktop|tabnine desktop|codeium desktop|
-    amazon q desktop|jetbrains desktop|sourcegraph desktop|cody desktop|amp desktop|factory desktop|
-    qoder desktop|antigravity desktop|muse desktop|pi desktop|kimi desktop|qwen desktop|gemini desktop|
-    codex desktop|claude desktop|copilot desktop|perplexity desktop|chatgpt desktop|poe desktop|
-    manus desktop|genspark desktop|you desktop|phind desktop|kagi desktop|bing desktop|brave desktop|
-    arc desktop|opera desktop|vivaldi desktop|sigma desktop|comet desktop|dia desktop|atlas desktop|
-    notion desktop|craft desktop|obsidian desktop|logseq desktop|reflect desktop|mem desktop|rewind desktop|
-    limitless desktop|granola desktop|otter desktop|fireflies desktop|descript desktop|synthesia desktop|
-    heygen desktop|hedra desktop|runway desktop|pika desktop|luma desktop|stability desktop|midjourney desktop|
-    leonardo desktop|ideogram desktop|krea desktop|playground desktop|fal desktop|replicate desktop|
-    baseten desktop|modal desktop|runpod desktop|lambda desktop|vast desktop|coreweave desktop|
-    paperspace desktop|nscale desktop|fluidstack desktop|crusoe desktop|voltage desktop|prime desktop|
-    sagemaker desktop|vertex desktop|azureml desktop|databricks desktop|snowflake desktop|
-    bigquery desktop|redshift desktop|athena desktop|dbt desktop|monte desktop|langfuse desktop|
-    arize desktop|fiddler desktop|evidently desktop|galileo desktop|patronus desktop|guardrails desktop|
-    lakera desktop|hiddenlayer desktop|protect desktop|calypso desktop|pangea desktop|traceloop desktop|
-    openllmetry desktop|langtrace desktop|braintrust desktop|opik desktop|neptune desktop|comet desktop|
-    mlflow desktop|kubeflow desktop|clearml desktop|superwise desktop|monita desktop|vijil desktop|
-    inspect desktop|helm desktop|freeplay desktop|humanloop desktop|promptfoo desktop|deepeval desktop|
-    ragas desktop|truera desktop
-  `)
-];
+  // Coding agents that run in a terminal.
+  { name: "Claude Code", aliases: ["claude", "anthropic cli"], kind: "cli-agent", adapter: "claude" },
+  { name: "Codex", aliases: ["openai codex", "codex cli"], kind: "cli-agent", adapter: "codex" },
+  { name: "Gemini CLI", aliases: ["gemini"], kind: "cli-agent", adapter: "gemini" },
+  { name: "Qwen Code", aliases: ["qwen", "qwen cli"], kind: "cli-agent", adapter: "qwen" },
+  { name: "Kimi CLI", aliases: ["kimi", "moonshot"], kind: "cli-agent", adapter: "kimi" },
+  { name: "OpenCode", aliases: ["opencode ai", "sst opencode"], kind: "cli-agent", adapter: "opencode" },
+  { name: "Crush", aliases: ["charm crush", "charmbracelet crush"], kind: "cli-agent" },
+  { name: "Aider", aliases: ["aider chat"], kind: "cli-agent" },
+  { name: "Goose", aliases: ["block goose"], kind: "cli-agent" },
+  { name: "OpenHands", aliases: ["open hands", "all hands openhands"], kind: "cli-agent" },
+  { name: "Plandex", aliases: ["plan dex"], kind: "cli-agent" },
+  { name: "Mentat", kind: "cli-agent" },
+  { name: "Sweep", aliases: ["sweep ai"], kind: "cli-agent" },
+  { name: "Devin", aliases: ["cognition devin"], kind: "cli-agent" },
+  { name: "Amp", aliases: ["sourcegraph amp", "amp cli"], kind: "cli-agent", adapter: "amp" },
+  { name: "Factory Droid", aliases: ["factory", "factory ai", "droid"], kind: "cli-agent", adapter: "factory" },
+  { name: "Warp", aliases: ["warp terminal"], kind: "cli-agent", adapter: "warp" },
+  { name: "Cursor Agent", aliases: ["cursor cli", "cursor agent cli"], kind: "cli-agent" },
+  { name: "Copilot CLI", aliases: ["github copilot cli"], kind: "cli-agent" },
+  { name: "Kilo Code", aliases: ["kilo", "kilocode"], kind: "cli-agent", adapter: "kilo" },
+  { name: "Cline", aliases: ["claude dev"], kind: "cli-agent", adapter: "cline" },
+  { name: "Roo Code", aliases: ["roocode", "roo"], kind: "cli-agent", adapter: "roo" },
+  { name: "Continue", aliases: ["continue dev"], kind: "cli-agent" },
+  { name: "Qoder", aliases: ["qoder ai", "qoder cli"], kind: "cli-agent", adapter: "qoder" },
+  { name: "Muse", aliases: ["muse ai"], kind: "cli-agent", adapter: "muse" },
+  { name: "Pi", aliases: ["pi ai", "pi cli"], kind: "cli-agent", adapter: "pi" },
+  { name: "Antigravity", aliases: ["google antigravity"], kind: "cli-agent", adapter: "antigravity" },
+  { name: "Freebuff", aliases: ["manicode", "freebuff desktop"], kind: "cli-agent", adapter: "freebuff" },
+  { name: "Codebuff", aliases: ["codefree", "codebuff cli", "codefree cli"], kind: "cli-agent" },
+  { name: "Z.ai", aliases: ["zai", "glm", "zhipu", "bigmodel"], kind: "cli-agent", adapter: "zai" },
+  { name: "Open Interpreter", kind: "cli-agent" },
+  { name: "RA.Aid", aliases: ["ra aid"], kind: "cli-agent" },
+  { name: "GPT Engineer", aliases: ["gpt-engineer"], kind: "cli-agent" },
+  { name: "Smol Developer", aliases: ["smol-developer"], kind: "cli-agent" },
+  { name: "AutoCodeRover", aliases: ["auto code rover"], kind: "cli-agent" },
+  { name: "SWE-agent", aliases: ["swe agent"], kind: "cli-agent" },
+  { name: "MCP Agent", aliases: ["mcp-agent"], kind: "cli-agent" },
+  { name: "Buttercup", kind: "cli-agent" },
+  { name: "Tenere", kind: "cli-agent" },
+  { name: "Potpie", kind: "cli-agent" },
+  { name: "Codex Cloud", aliases: ["openai codex cloud"], kind: "cli-agent" },
+  { name: "Claude Computer Use", kind: "cli-agent" },
+  { name: "OpenAI Operator", kind: "cli-agent" },
 
-/**
- * The long tail of the catalog. Names only: discovery derives folder spellings
- * and probes what exists, so a name that is not installed costs one failed
- * readdir per data root and never a network call.
- */
-function additionalNames(names: string): CatalogEntry[] {
-  return names.split("|").map(name => name.trim().replace(/\s+/g, " "))
-    .filter(name => name.length >= 2)
-    .map(name => ({ name, kind: "gateway" as const }));
-}
+  // Editors, extensions and IDE assistants.
+  { name: "Cursor", kind: "editor", adapter: "cursor" },
+  { name: "Windsurf", aliases: ["codeium windsurf"], kind: "editor" },
+  { name: "Zed", aliases: ["zed ai", "zed industries"], kind: "editor" },
+  { name: "Void", aliases: ["void editor"], kind: "editor" },
+  { name: "PearAI", aliases: ["pear ai"], kind: "editor" },
+  { name: "Trae", kind: "editor" },
+  { name: "Kiro", aliases: ["amazon kiro"], kind: "editor" },
+  { name: "Theia AI", aliases: ["theia"], kind: "editor" },
+  { name: "VS Code", aliases: ["visual studio code", "vscode"], kind: "editor" },
+  { name: "GitHub Copilot", aliases: ["copilot"], kind: "editor", adapter: "copilot" },
+  { name: "JetBrains AI", aliases: ["jetbrains ai assistant"], kind: "editor" },
+  { name: "Junie", aliases: ["jetbrains junie"], kind: "editor" },
+  { name: "Fleet", aliases: ["jetbrains fleet"], kind: "editor" },
+  { name: "Visual Studio IntelliCode", aliases: ["intellicode"], kind: "editor" },
+  { name: "Amazon Q", aliases: ["amazon q developer"], kind: "editor" },
+  { name: "CodeWhisperer", aliases: ["aws codewhisperer"], kind: "editor" },
+  { name: "Google Cloud Code", aliases: ["cloud code"], kind: "editor" },
+  { name: "Gemini Code Assist", kind: "editor" },
+  { name: "Xcode Copilot", kind: "editor" },
+  { name: "Android Studio Gemini", kind: "editor" },
+  { name: "Neovim Avante", aliases: ["avante"], kind: "editor" },
+  { name: "Tabby", kind: "editor" },
+  { name: "Twinny", kind: "editor" },
+  { name: "Supermaven", kind: "editor" },
+  { name: "Tabnine", kind: "editor" },
+  { name: "Sourcegraph Cody", aliases: ["cody"], kind: "editor" },
+  { name: "Augment Code", aliases: ["augment"], kind: "editor" },
+  { name: "Qodo", aliases: ["codium"], kind: "editor" },
+  { name: "CodeRabbit", kind: "editor" },
+  { name: "Greptile", kind: "editor" },
+  { name: "Graphite Diamond", kind: "editor" },
+  { name: "Ellipsis", kind: "editor" },
+  { name: "Sourcery", kind: "editor" },
+  { name: "Codiga", kind: "editor" },
+  { name: "DeepSource", kind: "editor" },
+  { name: "Refact", aliases: ["refact ai"], kind: "editor" },
+  { name: "Bito", kind: "editor" },
+  { name: "Pieces", aliases: ["pieces for developers"], kind: "editor" },
+  { name: "Aide", kind: "editor" },
+  { name: "Melty", kind: "editor" },
+  { name: "Mutable AI", kind: "editor" },
+  { name: "CodeGPT", kind: "editor" },
+  { name: "Magic Dev", aliases: ["magic ai"], kind: "editor" },
+  { name: "Codeium", kind: "editor" },
+  { name: "Eclipse Copilot", kind: "editor" },
+  { name: "Rider AI", kind: "editor" },
+  { name: "PyCharm AI", kind: "editor" },
+  { name: "WebStorm AI", kind: "editor" },
+  { name: "IntelliJ AI", kind: "editor" },
+
+  // Model and API providers.
+  { name: "OpenAI", kind: "api" },
+  { name: "Anthropic", kind: "api" },
+  { name: "Google AI Studio", aliases: ["google ai", "ai studio"], kind: "api" },
+  { name: "Vertex AI", aliases: ["google vertex"], kind: "api" },
+  { name: "Azure OpenAI", aliases: ["azure ai"], kind: "api" },
+  { name: "AWS Bedrock", aliases: ["bedrock"], kind: "api" },
+  { name: "Mistral", aliases: ["mistral ai"], kind: "api" },
+  { name: "Cohere", kind: "api" },
+  { name: "AI21 Labs", aliases: ["ai21"], kind: "api" },
+  { name: "xAI", aliases: ["grok"], kind: "api" },
+  { name: "DeepSeek", aliases: ["deep seek"], kind: "api" },
+  { name: "Groq", aliases: ["groq cloud"], kind: "api" },
+  { name: "Together AI", aliases: ["together"], kind: "api" },
+  { name: "Fireworks AI", aliases: ["fireworks"], kind: "api" },
+  { name: "DeepInfra", kind: "api" },
+  { name: "Replicate", kind: "api" },
+  { name: "Hugging Face", aliases: ["huggingface", "hf"], kind: "api" },
+  { name: "Perplexity", aliases: ["pplx"], kind: "api" },
+  { name: "Cerebras", kind: "api" },
+  { name: "SambaNova", kind: "api" },
+  { name: "Nebius AI", aliases: ["nebius"], kind: "api" },
+  { name: "Novita AI", aliases: ["novita"], kind: "api" },
+  { name: "Baseten", kind: "api" },
+  { name: "Lambda", aliases: ["lambda labs"], kind: "api" },
+  { name: "Modal", aliases: ["modal labs"], kind: "api" },
+  { name: "RunPod", aliases: ["runpod serverless"], kind: "api" },
+  { name: "Vast.ai", aliases: ["vast"], kind: "api" },
+  { name: "Fal AI", aliases: ["fal"], kind: "api" },
+  { name: "Hyperbolic", kind: "api" },
+  { name: "OpenRouter", aliases: ["open router"], kind: "api" },
+  { name: "Portkey", aliases: ["portkey ai"], kind: "api" },
+  { name: "LiteLLM", kind: "api" },
+  { name: "One API", aliases: ["oneapi"], kind: "api" },
+  { name: "New API", aliases: ["newapi"], kind: "api" },
+  { name: "Cloudflare Workers AI", aliases: ["workers ai"], kind: "api" },
+  { name: "Cloudflare AI Gateway", aliases: ["ai gateway"], kind: "api" },
+  { name: "Kong AI", aliases: ["kong ai gateway"], kind: "api" },
+  { name: "Requesty", kind: "api" },
+  { name: "TrueFoundry", kind: "api" },
+  { name: "Martian", kind: "api" },
+  { name: "Not Diamond", kind: "api" },
+  { name: "Unify AI", aliases: ["unify"], kind: "api" },
+  { name: "Keywords AI", kind: "api" },
+  { name: "OpenPipe", kind: "api" },
+  { name: "Anspire", kind: "api" },
+  { name: "AI302", kind: "api" },
+  { name: "AI360", kind: "api" },
+  { name: "Aleph Alpha", kind: "api" },
+  { name: "Anyscale", kind: "api" },
+  { name: "Arcee", kind: "api" },
+  { name: "Aya", kind: "api" },
+  { name: "Baichuan", kind: "api" },
+  { name: "Baidu", kind: "api" },
+  { name: "NVIDIA NIM", aliases: ["nvidia"], kind: "api" },
+  { name: "Scaleway AI", kind: "api" },
+  { name: "OVHcloud AI", kind: "api" },
+  { name: "CoreWeave", kind: "api" },
+  { name: "Crusoe Energy", kind: "api" },
+  { name: "Paperspace", kind: "api" },
+  { name: "Prime Intellect", kind: "api" },
+  { name: "TensorDock", kind: "api" },
+  { name: "Hyperstack", kind: "api" },
+  { name: "Genesis Cloud", kind: "api" },
+  { name: "Nscale", kind: "api" },
+  { name: "Fluidstack", kind: "api" },
+  { name: "Beam Cloud", kind: "api" },
+  { name: "Fly.io GPU", kind: "api" },
+  { name: "SageMaker", kind: "api" },
+  { name: "Azure AI Foundry", kind: "api" },
+  { name: "Vertex Model Garden", kind: "api" },
+  { name: "Inference Endpoints", kind: "api" },
+
+  // Local runtimes and self-hosted front ends.
+  { name: "Ollama", kind: "local" },
+  { name: "LM Studio", aliases: ["lmstudio"], kind: "local" },
+  { name: "Jan", aliases: ["jan ai"], kind: "local" },
+  { name: "GPT4All", aliases: ["gpt 4 all"], kind: "local" },
+  { name: "vLLM", kind: "local" },
+  { name: "llama.cpp", aliases: ["llama cpp"], kind: "local" },
+  { name: "LocalAI", kind: "local" },
+  { name: "Text Generation WebUI", aliases: ["oobabooga"], kind: "local" },
+  { name: "KoboldCpp", kind: "local" },
+  { name: "SillyTavern", kind: "local" },
+  { name: "Aphrodite", kind: "local" },
+  { name: "SGLang", kind: "local" },
+  { name: "Text Generation Inference", aliases: ["tgi"], kind: "local" },
+  { name: "LMDeploy", kind: "local" },
+  { name: "ExLlama", kind: "local" },
+  { name: "MLX LM", kind: "local" },
+  { name: "Llamafile", kind: "local" },
+  { name: "Cortex", kind: "local" },
+  { name: "RamaLama", kind: "local" },
+  { name: "Docker Model Runner", kind: "local" },
+  { name: "Podman AI Lab", kind: "local" },
+  { name: "Triton Inference", kind: "local" },
+  { name: "TorchServe", kind: "local" },
+  { name: "KServe", kind: "local" },
+  { name: "BentoML", kind: "local" },
+  { name: "Ray Serve", kind: "local" },
+  { name: "Open WebUI", aliases: ["openwebui"], kind: "local" },
+  { name: "LibreChat", kind: "local" },
+  { name: "LobeChat", aliases: ["lobe chat"], kind: "local" },
+  { name: "AnythingLLM", aliases: ["anything llm"], kind: "local" },
+  { name: "Cherry Studio", kind: "local" },
+  { name: "Msty", kind: "local" },
+  { name: "Chatbox", kind: "local" },
+  { name: "Big-AGI", aliases: ["big agi"], kind: "local" },
+  { name: "NextChat", kind: "local" },
+  { name: "ChatALL", kind: "local" },
+  { name: "Hollama", kind: "local" },
+  { name: "Page Assist", kind: "local" },
+
+  // Builders and browser agents.
+  { name: "v0", aliases: ["v0 by vercel"], kind: "builder" },
+  { name: "Bolt", aliases: ["bolt new"], kind: "builder" },
+  { name: "Lovable", kind: "builder" },
+  { name: "Replit", aliases: ["replit agent"], kind: "builder" },
+  { name: "Firebase Studio", kind: "builder" },
+  { name: "Project IDX", aliases: ["idx"], kind: "builder" },
+  { name: "Genspark", kind: "builder" },
+  { name: "Same Dev", kind: "builder" },
+  { name: "Tempo Labs", kind: "builder" },
+  { name: "WebSim", kind: "builder" },
+  { name: "Manus", kind: "builder" },
+
+  // Observability, evaluation and agent frameworks.
+  { name: "Langfuse", kind: "observability" },
+  { name: "Helicone", kind: "observability" },
+  { name: "Braintrust", kind: "observability" },
+  { name: "Arize Phoenix", aliases: ["phoenix"], kind: "observability" },
+  { name: "Opik", aliases: ["comet opik"], kind: "observability" },
+  { name: "LangSmith", kind: "observability" },
+  { name: "W&B Weave", aliases: ["wandb weave", "weights biases"], kind: "observability" },
+  { name: "PromptLayer", kind: "observability" },
+  { name: "Humanloop", kind: "observability" },
+  { name: "Vellum", kind: "observability" },
+  { name: "Promptfoo", kind: "observability" },
+  { name: "LangWatch", kind: "observability" },
+  { name: "Agenta", kind: "observability" },
+  { name: "Flowise", kind: "observability" },
+  { name: "Dify", kind: "observability" },
+  { name: "n8n", kind: "observability" },
+  { name: "Activepieces", kind: "observability" },
+  { name: "Relevance AI", kind: "observability" },
+  { name: "CrewAI", kind: "observability" },
+  { name: "AutoGen", kind: "observability" },
+  { name: "LangGraph", kind: "observability" },
+  { name: "Semantic Kernel", kind: "observability" },
+  { name: "Haystack", kind: "observability" },
+  { name: "LlamaIndex", kind: "observability" },
+  { name: "DSPy", kind: "observability" },
+  { name: "Instructor", kind: "observability" },
+  { name: "Outlines", kind: "observability" },
+  { name: "Guidance", kind: "observability" },
+  { name: "Marvin", kind: "observability" },
+  { name: "Mirascope", kind: "observability" },
+  { name: "Magentic", kind: "observability" },
+  { name: "Pydantic AI", kind: "observability" },
+  { name: "Smolagents", kind: "observability" },
+  { name: "OpenAI Agents SDK", kind: "observability" },
+  { name: "Google ADK", kind: "observability" },
+  { name: "Strands Agents", kind: "observability" },
+  { name: "Mastra", kind: "observability" },
+  { name: "Vercel AI SDK", kind: "observability" },
+  { name: "GenKit", kind: "observability" },
+  { name: "CopilotKit", kind: "observability" },
+  { name: "Assistant UI", kind: "observability" },
+  { name: "DeepEval", kind: "observability" },
+  { name: "Ragas", kind: "observability" },
+  { name: "Inspect AI", kind: "observability" },
+  { name: "LM Eval Harness", kind: "observability" },
+  { name: "HELM", kind: "observability" },
+  { name: "Freeplay", kind: "observability" },
+  { name: "Comet ML", kind: "observability" },
+  { name: "MLflow", kind: "observability" },
+  { name: "Neptune AI", kind: "observability" },
+  { name: "ClearML", kind: "observability" },
+
+  // Chat assistants and browsers.
+  { name: "ChatGPT", aliases: ["chatgpt desktop"], kind: "assistant" },
+  { name: "Claude Desktop", kind: "assistant" },
+  { name: "Gemini", aliases: ["gemini desktop"], kind: "assistant" },
+  { name: "Copilot", aliases: ["microsoft copilot"], kind: "assistant" },
+  { name: "Poe", kind: "assistant" },
+  { name: "You.com", aliases: ["you com"], kind: "assistant" },
+  { name: "Phind", kind: "assistant" },
+  { name: "Kagi Assistant", kind: "assistant" },
+  { name: "Sider", kind: "assistant" },
+  { name: "Monica", kind: "assistant" },
+  { name: "MaxAI", kind: "assistant" },
+  { name: "Harpa AI", kind: "assistant" },
+  { name: "Merlin", kind: "assistant" },
+  { name: "Bing Copilot", kind: "assistant" },
+  { name: "Arc Max", kind: "assistant" },
+  { name: "Brave Leo", kind: "assistant" },
+  { name: "Opera Aria", kind: "assistant" },
+  { name: "Notion AI", kind: "assistant" },
+  { name: "Obsidian Copilot", kind: "assistant" },
+  { name: "Granola", kind: "assistant" },
+  { name: "Otter AI", kind: "assistant" },
+  { name: "Fireflies AI", kind: "assistant" }
+];
 
 /** Primary name plus aliases, deduplicated, for scanning a whole entry. */
 export function catalogLead(entry: CatalogEntry): string[] {
   return [entry.name, ...(entry.aliases ?? [])];
+}
+
+/** Looks a tool up by any spelling a user or a folder might use. */
+export function catalogEntryFor(name: string): CatalogEntry | null {
+  const wanted = compact(name);
+  return CATALOG.find(entry => catalogLead(entry).some(lead => compact(lead) === wanted)) ?? null;
+}
+
+function compact(value: string): string {
+  return value.trim().toLowerCase().replace(/[^a-z0-9]+/g, "");
 }
