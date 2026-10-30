@@ -455,6 +455,75 @@ export class UsageStore {
     );
     return { pending: Number(row?.pending) + this.statistics.pendingCount(), conflicts: Number(row?.conflicts), invalid: Number(row?.invalid) };
   }
+  /**
+   * Parks a pending row as a conflict with the copy the server answered about.
+   * Used when a save acknowledgement leaves the row exactly as it was: the user
+   * gets the local/cloud choice instead of a save that can never finish.
+   */
+  hold(id: string, remote: CloudRecord): void {
+    validateUsageRecord(remote.record);
+    this.db.run(
+      "UPDATE usage_record SET conflict = ? WHERE owner = ? AND id = ? AND local_version > saved_version AND conflict IS NULL",
+      [JSON.stringify(remote), this.owner, id]
+    );
+    this.onChange?.();
+  }
+  /**
+   * Days with no usage at all do not belong on the server: they read as saved
+   * days without data and made the public profile call the whole month
+   * incomplete. Locally they stay, because they still prove a day was checked.
+   */
+  skipEmptyDays(): number {
+    const before = Number(this.db.get(
+      "SELECT COUNT(*) AS count FROM usage_record WHERE owner = ? AND local_version > saved_version AND conflict IS NULL AND save_error IS NULL",
+      [this.owner]
+    )?.count ?? 0);
+    this.db.run(
+      `UPDATE usage_record SET saved_version = local_version
+       WHERE owner = ? AND local_version > saved_version AND conflict IS NULL AND save_error IS NULL
+       AND CASE WHEN json_valid(payload) THEN
+         json_extract(payload, '$.kind') = 'usage_day'
+         AND (json_extract(payload, '$.status') = 'no_data'
+           OR COALESCE(json_extract(payload, '$.totals.totalTokens'), 0) = 0)
+       ELSE 0 END`,
+      [this.owner]
+    );
+    const after = Number(this.db.get(
+      "SELECT COUNT(*) AS count FROM usage_record WHERE owner = ? AND local_version > saved_version AND conflict IS NULL AND save_error IS NULL",
+      [this.owner]
+    )?.count ?? 0);
+    return before - after;
+  }
+  /**
+   * Re-sends the last closed days once per calendar day. A day first uploaded
+   * while it was still open keeps that `open` copy on the server unless a later
+   * save rewrites it, which is what the public profile reports as an incomplete
+   * saved day even though the local history is complete.
+   */
+  reassertRecentDays(today: string, days = 2): number {
+    const cutoff = new Date(`${today}T00:00:00Z`);
+    cutoff.setUTCDate(cutoff.getUTCDate() - days);
+    const from = cutoff.toISOString().slice(0, 10);
+    const before = Number(this.db.get(
+      "SELECT COUNT(*) AS count FROM usage_record WHERE owner = ? AND local_version > saved_version",
+      [this.owner]
+    )?.count ?? 0);
+    this.db.run(
+      `UPDATE usage_record SET local_version = local_version + 1
+       WHERE owner = ? AND conflict IS NULL AND save_error IS NULL AND local_version = saved_version
+       AND json_extract(payload, '$.kind') = 'usage_day'
+       AND json_extract(payload, '$.dayState') = 'complete'
+       AND json_extract(payload, '$.status') = 'available'
+       AND COALESCE(json_extract(payload, '$.totals.totalTokens'), 0) > 0
+       AND day >= ?`,
+      [this.owner, from]
+    );
+    const after = Number(this.db.get(
+      "SELECT COUNT(*) AS count FROM usage_record WHERE owner = ? AND local_version > saved_version",
+      [this.owner]
+    )?.count ?? 0);
+    return after - before;
+  }
   acknowledge(sent: PendingRecord, remote: CloudRecord): void {
     this.db.run(
       `UPDATE usage_record SET saved_version = MAX(saved_version, ?), cloud_revision = ?, conflict = NULL
@@ -490,7 +559,7 @@ export class UsageStore {
       } else if (local.localVersion === local.savedVersion) {
         const updated = this.put(incoming, this.compatibleDetails(local, incoming));
         this.acknowledge(updated, remote);
-      } else if (this.reportedAs(remote.record, local.record)) {
+      } else if (this.reportedAs(remote.record, local.record) && remote.revision > local.revision) {
         // Same day, same attribution, newer local usage: this machine is simply
         // ahead of its own earlier upload. Continue from the revision the server
         // holds instead of leaving the record pending forever.
@@ -499,7 +568,10 @@ export class UsageStore {
           this.owner,
           local.record.recordId
         ]);
-      } else if (remote.revision !== local.revision) {
+      } else {
+        // The server holds another copy at this revision. Offering the choice is
+        // the only honest move: quietly skipping it left the row pending forever,
+        // and every later save stopped with `Cloud save made no progress`.
         this.db.run("UPDATE usage_record SET conflict = ? WHERE owner = ? AND id = ?", [
           JSON.stringify({ ...remote, record: incoming }),
           this.owner,
