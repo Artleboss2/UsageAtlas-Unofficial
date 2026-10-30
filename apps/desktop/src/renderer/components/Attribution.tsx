@@ -11,7 +11,7 @@ import {
   type ReportTarget
 } from "../../shared/report-plans";
 import { defaultReportedModel, modelOptions } from "../../shared/report-models";
-import { previewPlan, wheelTarget } from "../../shared/report-wheel";
+import { previewPlan } from "../../shared/report-wheel";
 
 interface AttributionProps {
   providers: DashboardProvider[];
@@ -42,8 +42,9 @@ export function Attribution({ providers, preferences, saving, onSave }: Attribut
   const available = sources.filter(source => !used.has(source.id));
   const invalid = draft.some(plan => !plan.targets.length || duplicateTarget(plan)
     || plan.targets.some(target => !target.model.trim() || !(target.weight >= 1 && target.weight <= MAX_WEIGHT)));
-  // Same wheel, same keys: this is the distribution the next save will produce.
+  // The token split each saved rule will reach, shown even before a save.
   const previews = useMemo(() => draft.map(plan => previewPlan(plan)), [draft]);
+  const sourcesByID = new Map(sources.map(source => [source.id, source.name]));
 
   function edit(next: ReportPlan[]): void {
     setEdited(next);
@@ -145,11 +146,28 @@ export function Attribution({ providers, preferences, saving, onSave }: Attribut
           <Card.Title>Report as</Card.Title>
           <Card.Description>
             A source the server does not know yet can be saved under official providers, with a share
-            for each. The wheel decides per request, so a 30/20/50 split can land on Codex four times in
-            a row — over a day it comes out close to the shares you set.
+            for each. The wheel weighs tokens, so a 30/20/50 split converges on those percentages over
+            the days you track instead of following the number of requests.
           </Card.Description>
         </Card.Header>
         <Card.Content className="mt-3 space-y-4">
+          {draft.length > 0 ? (
+            <div className="atlas-plan-summary" aria-label="Saved attribution">
+              <p className="text-xs text-muted">Currently reporting</p>
+              {draft.map((plan) => (
+                <p className="atlas-plan-summary__row" key={`summary-${plan.source}`}>
+                  <strong>{sourcesByID.get(plan.source) ?? plan.source}</strong>
+                  <span aria-hidden="true">→</span>
+                  {plan.targets.map((target, targetIndex) => (
+                    <span className="atlas-plan-summary__chip" key={`${target.reportAs}-${target.model}-${targetIndex}`}>
+                      {target.reportAs} · {target.model}{" "}
+                      <b>{Math.round(share(plan, target) * 100)}%</b>
+                    </span>
+                  ))}
+                </p>
+              ))}
+            </div>
+          ) : null}
           {draft.length === 0 ? (
             <p className="text-sm text-muted">
               No rule yet. Official sources save under their own name; a private source stays on this
@@ -172,7 +190,7 @@ export function Attribution({ providers, preferences, saving, onSave }: Attribut
                     </select>
                   </label>
                   <p className="atlas-plan__summary text-xs text-muted">
-                    {planWeight(plan)}% of this source&apos;s requests, spread over {plan.targets.length}{" "}
+                    {planWeight(plan)}% of this source&apos;s tokens, spread over {plan.targets.length}{" "}
                     {plan.targets.length === 1 ? "target" : "targets"}.
                   </p>
                   <Button
@@ -219,7 +237,7 @@ export function Attribution({ providers, preferences, saving, onSave }: Attribut
                       <span>Share</span>
                       <span className="atlas-weight-input">
                         <input
-                          aria-label="Share of requests"
+                          aria-label="Share of tokens"
                           max={MAX_WEIGHT}
                           min={1}
                           onChange={(event) =>
@@ -247,10 +265,11 @@ export function Attribution({ providers, preferences, saving, onSave }: Attribut
                   </div>
                 ))}
 
-                <div className="atlas-plan-preview" data-drift={previews[planIndex].driftPoints > 2 || undefined}>
+                <div className="atlas-plan-preview">
                   <p className="text-xs text-muted">
-                    Over {previews[planIndex].sampleSize.toLocaleString()} sample requests, the wheel lands
-                    within {previews[planIndex].driftPoints.toFixed(2)} points of the shares above.
+                    These shares apply to token mass: each completed day or request is handed
+                    to the provider furthest behind its percentage, so the profile&apos;s tool
+                    totals end up at the split above — not at a count of requests.
                   </p>
                   <ul className="atlas-plan-preview__rows">
                     {previews[planIndex].targets.map((target) => (
@@ -258,21 +277,17 @@ export function Attribution({ providers, preferences, saving, onSave }: Attribut
                         <span
                           aria-hidden="true"
                           className="atlas-plan-preview__bar"
-                          style={{ width: `${Math.max(2, target.sampled * 100)}%` }}
+                          style={{ width: `${Math.max(2, target.declared * 100)}%` }}
                         />
                         <span className="atlas-plan-preview__label">
                           {target.reportAs} · {target.model}
                         </span>
                         <span className="atlas-plan-preview__value">
-                          {(target.sampled * 100).toFixed(1)}% ({target.requests})
+                          {(target.declared * 100).toFixed(0)}% of tokens
                         </span>
                       </li>
                     ))}
                   </ul>
-                  <p className="atlas-plan-preview__sample text-xs text-muted">
-                    First upload in the sample: {wheelTarget(plan, "preview-0")?.reportAs ?? "none"} ·{" "}
-                    {wheelTarget(plan, "preview-0")?.model ?? "none"}
-                  </p>
                 </div>
 
                 <Button
@@ -316,15 +331,15 @@ export function Attribution({ providers, preferences, saving, onSave }: Attribut
         </Card.Header>
         <Card.Content className="mt-2 space-y-2 text-sm text-muted">
           <p>
-            With a wheel of <strong>Freebuff → codex (gpt-5.3-codex) 30 %</strong>,{" "}
-            <strong>chatgpt-style (gpt-5.5) 20 %</strong> and <strong>claude (claude-sonnet-4-6) 50 %</strong>,
-            this computer keeps counting Freebuff tokens, while each uploaded request arrives as one of
-            those three.
+            With a rule of <strong>Freebuff → codex (gpt-5.3-codex) 30 %</strong> and{" "}
+            <strong>claude (claude-sonnet-4-6) 70 %</strong>, this computer keeps counting Freebuff
+            tokens, while the uploaded copies carry 30 % of the token mass under Codex and 70 % under
+            Claude.
           </p>
           <p>
-            A target is drawn per request, not in turn: three requests in ten land on Codex on average, and
-            the same request keeps its target when a save is retried — its identity is fixed, so interrupted
-            uploads never rename it.
+            Allocation follows the token deficit, not the request count: a day or request goes to the
+            provider that is furthest behind its share, so a few huge requests cannot drag the
+            breakdown away from the percentages above. A unit keeps its target when a save is retried.
           </p>
           <p>
             Restoring that account on another computer brings back what the server stored, so the relabelled
