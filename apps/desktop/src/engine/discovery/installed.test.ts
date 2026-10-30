@@ -26,8 +26,8 @@ describe("scanInstalledTools", () => {
     const directory = await home();
     await mkdir(path.join(directory, ".config", "aider"), { recursive: true });
     const found = await scanInstalledTools(options(directory));
-    expect(found.map((tool) => tool.name)).toContain("aider");
-    expect(found.find((tool) => tool.name === "aider")?.folder)
+    expect(found.map((tool) => tool.name)).toContain("Aider");
+    expect(found.find((tool) => tool.name === "Aider")?.folder)
       .toBe(path.join(directory, ".config", "aider"));
   });
 
@@ -35,7 +35,7 @@ describe("scanInstalledTools", () => {
     const directory = await home();
     await mkdir(path.join(directory, ".config", "claude"), { recursive: true });
     const found = await scanInstalledTools(options(directory));
-    expect(found.map((tool) => tool.name)).toContain("claude code");
+    expect(found.map((tool) => tool.name)).toContain("Claude Code");
   });
 
   it("does not report a file as an installed tool", async () => {
@@ -43,7 +43,7 @@ describe("scanInstalledTools", () => {
     await mkdir(path.join(directory, ".config"), { recursive: true });
     await writeFile(path.join(directory, ".config", "cursor"), "not a folder");
     const found = await scanInstalledTools(options(directory));
-    expect(found.map((tool) => tool.name)).not.toContain("cursor");
+    expect(found.map((tool) => tool.name)).not.toContain("Cursor");
   });
 
   it("comes back empty on a profile with no tool folders", async () => {
