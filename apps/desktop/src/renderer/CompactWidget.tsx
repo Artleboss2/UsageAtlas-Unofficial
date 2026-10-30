@@ -202,6 +202,9 @@ function WidgetBody({
           key={edge}
           onPointerDown={(event) => {
             event.preventDefault();
+            // Without capture the pointerup lands outside the window and the
+            // main process would keep following the cursor after the drag ends.
+            event.currentTarget.setPointerCapture(event.pointerId);
             void window.usageAtlas.beginWidgetResize(edge);
           }}
         />
