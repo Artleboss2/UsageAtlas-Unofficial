@@ -40,6 +40,7 @@ import { BUILT_IN_WALLPAPERS } from "../wallpapers";
 import { ProviderLogo } from "./ProviderLogo";
 import { ProviderCredentialForm } from "./ProviderCredentialForm";
 import { ProviderDiscovery } from "./ProviderDiscovery";
+import { SettingsProviders } from "./SettingsProviders";
 import { useI18n } from "../i18n";
 import { isQuotaProvider } from "../../shared/quota-providers";
 import { LANGUAGES, LANGUAGE_LABELS } from "../../shared/languages";
@@ -73,7 +74,7 @@ interface SettingsProps {
   onRestartApp(): Promise<void>;
 }
 
-type SettingsTab = "general" | "appearance" | "widget" | "data";
+type SettingsTab = "general" | "providers" | "appearance" | "widget" | "data";
 
 export function Settings({
   updateState,
@@ -172,6 +173,15 @@ export function Settings({
           {t("settings.generalTab")}
         </button>
         <button
+          aria-selected={tab === "providers"}
+          className="atlas-settings-tabs__tab"
+          onClick={() => setTab("providers")}
+          role="tab"
+          type="button"
+        >
+          {t("settings.providersTab")}
+        </button>
+        <button
           aria-selected={tab === "appearance"}
           className="atlas-settings-tabs__tab"
           onClick={() => setTab("appearance")}
@@ -206,6 +216,10 @@ export function Settings({
         </Card>
       ) : (
         <>
+          <div className="mt-8 grid gap-5" hidden={tab !== "providers"}>
+            <SettingsProviders onSetProviderEnabled={onSetProviderEnabled} />
+          </div>
+
           <div className="mt-8 grid gap-5" hidden={tab !== "general"}>
             <CloudSettings />
             <Card variant="transparent">
