@@ -26,6 +26,7 @@ export function summarizeDiscovery(result: DiscoveryResult): ProviderDiscovery {
     folders: result.scanned.length,
     related: result.related.length,
     entries: result.entries,
-    confidence: files[0]?.confidence ?? 0
+    confidence: files[0]?.confidence ?? 0,
+    confirmedBy: result.files.length
   };
 }
